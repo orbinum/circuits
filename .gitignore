@@ -1,0 +1,49 @@
+# Build artifacts
+build/
+keys/
+ptau/
+
+# Compiled outputs
+*.wtns
+*.r1cs
+*.sym
+*.zkey
+*.ark
+dist/
+
+# Proof artifacts
+proof.json
+public.json
+input.json
+verification_key.json
+verifier.sol
+
+# Dependencies
+node_modules/
+
+# Release artifacts
+release/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
