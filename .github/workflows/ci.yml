@@ -119,5 +119,6 @@ jobs:
       uses: trufflesecurity/trufflehog@main
       with:
         path: ./
-        base: ${{ github.event.repository.default_branch }}
+        base: ${{ github.event.before }}
         head: HEAD
+        extra_args: --only-verified
