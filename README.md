@@ -24,6 +24,111 @@ This automatically:
 - `keys/disclosure_pk.zkey` (689KB) - Proving key
 - `build/verification_key_disclosure.json` (3.4KB) - Verifying key
 
+## Using with Rust/Substrate
+
+The circuits can be used in Rust/Substrate projects in two ways:
+
+### Option 1: .ark file (Optimized, Recommended)
+
+Download the pre-built `.ark` file from releases. This is a serialized arkworks `ProvingKey` that loads 2-3x faster than parsing `.zkey` files.
+
+**Setup:**
+
+```toml
+[dependencies]
+ark-bn254 = "0.5.0"
+ark-groth16 = "0.5.0"
+ark-serialize = "0.5.0"
+```
+
+**Usage:**
+
+```rust
+use ark_bn254::Bn254;
+use ark_groth16::{Groth16, ProvingKey};
+use ark_serialize::CanonicalDeserialize;
+use std::fs::File;
+
+// Load .ark file (fast)
+let mut ark_file = File::open("keys/disclosure_pk.ark")?;
+let proving_key = ProvingKey::<Bn254>::deserialize_compressed(&mut ark_file)?;
+
+// Generate proof
+let proof = Groth16::<Bn254>::prove(&proving_key, circuit, &mut rng)?;
+```
+
+### Option 2: .zkey file (Direct, with ark-circom)
+
+The `.zkey` files work directly with the [ark-circom](https://github.com/arkworks-rs/circom-compat) library - no conversion needed.
+
+**Setup:**
+
+```toml
+[dependencies]
+ark-circom = "0.5.0"
+ark-bn254 = "0.5.0"
+ark-groth16 = "0.5.0"
+```
+
+**Usage:**
+
+```rust
+use ark_circom::{read_zkey, CircomConfig, CircomBuilder};
+use ark_bn254::Bn254;
+use ark_groth16::Groth16;
+use std::fs::File;
+
+// Read .zkey file directly
+let mut zkey_file = File::open("keys/disclosure_pk.zkey")?;
+let (proving_key, matrices) = read_zkey(&mut zkey_file)?;
+
+// Configure circuit with WASM
+let cfg = CircomConfig::<Bn254>::new(
+    "build/disclosure_js/disclosure.wasm",
+    "build/disclosure.r1cs"
+)?;
+
+// Build circuit with inputs
+let mut builder = CircomBuilder::new(cfg);
+builder.push_input("note_value", 1000);
+builder.push_input("note_asset_id", 42);
+// ... add more inputs
+
+// Generate proof
+let circom = builder.build()?;
+let proof = Groth16::<Bn254>::prove(&proving_key, circom, &mut rng)?;
+```
+
+### Convert .zkey to .ark locally
+
+If you need to generate the `.ark` file yourself:
+
+```bash
+# Using the Rust script
+cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
+  keys/disclosure_pk.zkey \
+  keys/disclosure_pk.ark
+
+# Or via npm
+npm run convert:disclosure
+```
+
+### Download Release Artifacts
+
+Get pre-built circuits from [GitHub Releases](../../releases):
+
+```bash
+# Download latest release
+wget https://github.com/orb-labs/circuits/releases/latest/download/disclosure-circuit-v*.tar.gz
+
+# Extract files
+tar -xzf disclosure-circuit-v*.tar.gz
+
+# Use in your Rust project
+cp keys/disclosure_pk.zkey /path/to/your/rust/project/
+cp build/disclosure_js/disclosure.wasm /path/to/your/rust/project/
+```
+
 ## Testing
 
 ### Run All Tests
