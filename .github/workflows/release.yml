@@ -134,31 +134,24 @@ jobs:
         sha256sum verification_key_unshield.json >> ../release/checksums.txt
         
         cd ../keys
-         for all circuits..."
         
-        # Disclosure
-        cp build/disclosure_js/disclosure.wasm release/individual/disclosure-${VERSION}.wasm
-        cp keys/disclosure_pk.zkey release/individual/disclosure_pk-${VERSION}.zkey
-        cp keys/disclosure_pk.ark release/individual/disclosure_pk-${VERSION}.ark
-        cp build/verification_key_disclosure.json release/individual/verification_key_disclosure-${VERSION}.json
+        # All zkey and ark files
+        sha256sum disclosure_pk.zkey >> ../release/checksums.txt
+        sha256sum disclosure_pk.ark >> ../release/checksums.txt
+        sha256sum transfer_pk.zkey >> ../release/checksums.txt
+        sha256sum transfer_pk.ark >> ../release/checksums.txt
+        sha256sum unshield_pk.zkey >> ../release/checksums.txt
+        sha256sum unshield_pk.ark >> ../release/checksums.txt
         
-        # Transfer
-        cp build/transfer_js/transfer.wasm release/individual/transfer-${VERSION}.wasm
-        cp keys/transfer_pk.zkey release/individual/transfer_pk-${VERSION}.zkey
-        cp keys/transfer_pk.ark release/individual/transfer_pk-${VERSION}.ark
-        cp build/verification_key_transfer.json release/individual/verification_key_transfer-${VERSION}.json
-        
-        # Unshield
-        cp build/unshield_js/unshield.wasm release/individual/unshield-${VERSION}.wasm
-        cp keys/unshield_pk.zkey release/individual/unshield_pk-${VERSION}.zkey
-        cp keys/unshield_pk.ark release/individual/unshield_pk-${VERSION}.ark
-        cp build/verification_key_unshield.json release/individual/verification_key_unshield-${VERSION}.json
-        
-        # Checksums
-        cp release/checksums.txt release/individual/checksums-${VERSION}.txt
+        cd ../release
+        echo "Generated checksums for all 12 files:"
+        cat checksums.txt
+    
+    - name: Package artifacts
+      run: |
+        VERSION=${{ github.ref_name }}
         
         # Create complete bundle with all circuits
-        echo ""
         echo "Creating complete circuits bundle..."
         tar -czf release/orbinum-circuits-${VERSION}.tar.gz \
           build/disclosure_js/disclosure.wasm \
@@ -176,30 +169,8 @@ jobs:
           release/checksums.txt
         
         echo ""
-        echo "✓ Created 13 individual assets (12 circuit files + checksums):"
-        ls -lh release/individual/
-        echo ""
         echo "✓ Created complete bundle: orbinum-circuits-${VERSION}.tar.gz"
-        ls -lh release/orbinum-circuits.wasm release/individual/disclosure-${VERSION}.wasm
-        cp keys/disclosure_pk.zkey release/individual/disclosure_pk-${VERSION}.zkey
-        cp keys/disclosure_pk.ark release/individual/disclosure_pk-${VERSION}.ark
-        cp build/verification_key_disclosure.json release/individual/verification_key_disclosure-${VERSION}.json
-        cp release/checksums.txt release/individual/checksums-${VERSION}.txt
-        
-        # Also create the full bundle for convenience
-        echo "Creating complete circuit bundle..."
-        tar -czf release/disclosure-circuit-${VERSION}.tar.gz \
-          build/disclosure_js/disclosure.wasm \
-          keys/disclosure_pk.zkey \
-          keys/disclosure_pk.ark \
-          build/verification_key_disclosure.json \
-          release/checksums.txt
-        
-        echo "✓ Created individual assets:"
-        ls -lh release/individual/
-        echo ""
-        echo "✓ Created bundle: disclosure-circuit-${VERSION}.tar.gz"
-        ls -lh release/disclosure-circuit-${VERSION}.tar.gz
+        ls -lh release/orbinum-circuits-${VERSION}.tar.gz
     
     - name: Create release notes
       id: release_notes
