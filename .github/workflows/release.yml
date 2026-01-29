@@ -102,8 +102,18 @@ jobs:
     - name: Package artifacts
       run: |
         VERSION=${{ github.ref_name }}
+        mkdir -p release/individual
         
-        echo "Creating circuit package..."
+        # Copy individual artifacts with versioned names
+        echo "Creating individual asset files..."
+        cp build/disclosure_js/disclosure.wasm release/individual/disclosure-${VERSION}.wasm
+        cp keys/disclosure_pk.zkey release/individual/disclosure_pk-${VERSION}.zkey
+        cp keys/disclosure_pk.ark release/individual/disclosure_pk-${VERSION}.ark
+        cp build/verification_key_disclosure.json release/individual/verification_key_disclosure-${VERSION}.json
+        cp release/checksums.txt release/individual/checksums-${VERSION}.txt
+        
+        # Also create the full bundle for convenience
+        echo "Creating complete circuit bundle..."
         tar -czf release/disclosure-circuit-${VERSION}.tar.gz \
           build/disclosure_js/disclosure.wasm \
           keys/disclosure_pk.zkey \
@@ -111,15 +121,11 @@ jobs:
           build/verification_key_disclosure.json \
           release/checksums.txt
         
-        echo "✓ Created disclosure-circuit-${VERSION}.tar.gz"
-        ls -lh release/disclosure-circuit-${VERSION}.tar.gz
+        echo "✓ Created individual assets:"
+        ls -lh release/individual/
         echo ""
-        echo "Package includes:"
-        echo "  ✓ disclosure.wasm (witness calculator)"
-        echo "  ✓ disclosure_pk.zkey (snarkjs proving key)"
-        echo "  ✓ disclosure_pk.ark (arkworks proving key)"
-        echo "  ✓ verification_key_disclosure.json (verifier key)"
-        echo "  ✓ checksums.txt (SHA256 checksums)"
+        echo "✓ Created bundle: disclosure-circuit-${VERSION}.tar.gz"
+        ls -lh release/disclosure-circuit-${VERSION}.tar.gz
     
     - name: Create release notes
       id: release_notes
@@ -188,7 +194,11 @@ jobs:
       with:
         files: |
           release/*.tar.gz
-          release/checksums.txt
+          release/individual/*.wasm
+          release/individual/*.zkey
+          release/individual/*.ark
+          release/individual/*.json
+          release/individual/checksums-*.txt
         body_path: release_notes.md
         draft: false
         prerelease: false
