@@ -1,0 +1,123 @@
+name: CI - Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Install Circom
+      run: |
+        wget https://github.com/iden3/circom/releases/download/v2.2.3/circom-linux-amd64
+        chmod +x circom-linux-amd64
+        sudo mv circom-linux-amd64 /usr/local/bin/circom
+        circom --version
+    
+    - name: Setup Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+    
+    - name: Cache Cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Install ark-circom
+      run: |
+        cargo install ark-circom --git https://github.com/arkworks-rs/circom-compat || true
+        if command -v ark-circom &> /dev/null; then
+          echo "✓ ark-circom installed successfully"
+          ark-circom --version
+        else
+          echo "⚠ ark-circom installation skipped (non-blocking)"
+        fi
+      continue-on-error: true
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run linter
+      run: |
+        npm run format:check
+        npm run lint:circom
+    
+    - name: Build all circuits
+      run: npm run build-all
+    
+    - name: Run tests
+      run: npm test
+    
+    - name: Run benchmarks
+      run: npm run bench
+      
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: circuit-artifacts-${{ matrix.node-version }}
+        path: |
+          build/**/*.wasm
+          keys/**/*.zkey
+          build/**/*.json
+        retention-days: 7
+    
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results-${{ matrix.node-version }}
+        path: build/benchmark_results_*.json
+        retention-days: 30
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run security audit
+      run: npm audit --audit-level=moderate
+      continue-on-error: true
+    
+    - name: Check for secrets
+      uses: trufflesecurity/trufflehog@main
+      with:
+        path: ./
+        base: ${{ github.event.repository.default_branch }}
+        head: HEAD
