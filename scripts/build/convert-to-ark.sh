@@ -1,5 +1,5 @@
 #!/bin/bash
-# Convert .zkey files to .ark format using ark-circom
+# Convert .zkey files to .ark format using ark-circom Rust library
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -33,34 +33,38 @@ if [ ! -f "$ZKEY_FILE" ]; then
     exit 1
 fi
 
-# Check if ark-circom is installed
-if ! command -v ark-circom &> /dev/null; then
-    echo -e "${YELLOW}⚠️  ark-circom not found${NC}"
+# Check if cargo is installed
+if ! command -v cargo &> /dev/null; then
+    echo -e "${RED}Error: Cargo not found${NC}"
     echo ""
-    echo "ark-circom is required to convert .zkey to arkworks format."
-    echo "This is needed for Rust-based proof generation (Substrate runtime)."
+    echo "Rust and Cargo are required to convert .zkey to .ark format."
     echo ""
-    echo "Install with:"
-    echo -e "${BLUE}  # Install Rust (if not installed)${NC}"
+    echo "Install Rust:"
     echo -e "${BLUE}  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh${NC}"
     echo ""
-    echo -e "${BLUE}  # Install ark-circom${NC}"
-    echo -e "${BLUE}  cargo install ark-circom --git https://github.com/arkworks-rs/circom-compat${NC}"
-    echo ""
-    echo "Or skip this step if you only need .zkey (TypeScript/snarkjs)."
+    exit 1
+fi
     exit 1
 fi
 
 ARK_VERSION=$(ark-circom --version 2>&1 || echo "unknown")
-echo -e "${GREEN}✓ ark-circom detected: $ARK_VERSION${NC}"
+
+echo -e "${GREEN}✓ Cargo detected${NC}"
 echo ""
 
-# Convert .zkey to .ark
+# Convert .zkey to .ark using Rust script
 echo "Converting: $ZKEY_FILE"
 echo "       to: $ARK_FILE"
 echo ""
 
-if ark-circom --input "$ZKEY_FILE" --output "$ARK_FILE"; then
+RUST_SCRIPT="$SCRIPT_DIR/convert-to-ark.rs"
+
+if [ ! -f "$RUST_SCRIPT" ]; then
+    echo -e "${RED}Error: Conversion script not found: $RUST_SCRIPT${NC}"
+    exit 1
+fi
+
+if cargo +nightly -Zscript "$RUST_SCRIPT" "$ZKEY_FILE" "$ARK_FILE"; then
     echo ""
     echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
     echo -e "${GREEN}  ✓ Conversion completed successfully!${NC}"
@@ -70,8 +74,9 @@ if ark-circom --input "$ZKEY_FILE" --output "$ARK_FILE"; then
     ls -lh "$ZKEY_FILE" "$ARK_FILE" | awk '{print "  " $9 " (" $5 ")"}'
     echo ""
     echo "Usage:"
-    echo "  • JavaScript/TypeScript:  disclosure_pk.zkey"
-    echo "  • Rust/Substrate:         disclosure_pk.ark"
+    echo "  • JavaScript/TypeScript:  disclosure_pk.zkey (snarkjs)"
+    echo "  • Rust/Substrate (fast):  disclosure_pk.ark (pre-serialized)"
+    echo "  • Rust/Substrate (compat): disclosure_pk.zkey (ark-circom)"
 else
     echo ""
     echo -e "${RED}═══════════════════════════════════════════════════════${NC}"
@@ -80,7 +85,7 @@ else
     echo ""
     echo "Possible causes:"
     echo "  • Invalid .zkey file format"
-    echo "  • ark-circom version mismatch"
+    echo "  • Missing Rust dependencies (ark-circom, ark-bn254, ark-serialize)"
     echo "  • Insufficient memory"
     echo ""
     exit 1
