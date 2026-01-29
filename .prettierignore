@@ -1,0 +1,12 @@
+build/
+keys/
+node_modules/
+dist/
+ptau/
+*.r1cs
+*.sym
+*.wtns
+*.zkey
+*.json
+package-lock.json
+tsconfig.json
