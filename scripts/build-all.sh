@@ -22,18 +22,26 @@ echo ""
 
 # Check if node_modules exists
 if [ ! -d "node_modules" ]; then
-    echo -e "${BLUE}[Step 1/2]${NC} Installing dependencies..."
+    echo -e "${BLUE}[Step 1/4]${NC} Installing dependencies..."
     npm install
     echo ""
 else
-    echo -e "${GREEN}[Step 1/2]${NC} Dependencies already installed ✓"
+    echo -e "${GREEN}[Step 1/4]${NC} Dependencies already installed ✓"
     echo ""
 fi
 
-# Run full build pipeline
-echo -e "${BLUE}[Step 2/2]${NC} Building circuits..."
-echo ""
-npm run full-build:disclosure
+# Build all circuits
+CIRCUITS=("disclosure" "transfer" "unshield")
+
+for i in "${!CIRCUITS[@]}"; do
+    CIRCUIT="${CIRCUITS[$i]}"
+    STEP=$((i + 2))
+    
+    echo -e "${BLUE}[Step $STEP/4]${NC} Building ${CIRCUIT} circuit..."
+    echo ""
+    npm run full-build:${CIRCUIT}
+    echo ""
+done
 
 echo ""
 echo -e "${GREEN}══════════════════════════════════════════════════════════${NC}"
@@ -41,12 +49,21 @@ echo -e "${GREEN}              Build Completed Successfully                 ${NC
 echo -e "${GREEN}══════════════════════════════════════════════════════════${NC}"
 echo ""
 echo -e "${BLUE}Generated Artifacts:${NC}"
+echo ""
+echo -e "${YELLOW}Disclosure Circuit:${NC}"
 echo -e "  ${YELLOW}•${NC} build/disclosure_js/disclosure.wasm"
-echo -e "    ${NC}Witness calculator for proof generation${NC}"
 echo -e "  ${YELLOW}•${NC} keys/disclosure_pk.zkey"
-echo -e "    ${NC}Proving key (689 KB)${NC}"
 echo -e "  ${YELLOW}•${NC} build/verification_key_disclosure.json"
-echo -e "    ${NC}Verifying key for on-chain validation${NC}"
+echo ""
+echo -e "${YELLOW}Transfer Circuit:${NC}"
+echo -e "  ${YELLOW}•${NC} build/transfer_js/transfer.wasm"
+echo -e "  ${YELLOW}•${NC} keys/transfer_pk.zkey"
+echo -e "  ${YELLOW}•${NC} build/verification_key_transfer.json"
+echo ""
+echo -e "${YELLOW}Unshield Circuit:${NC}"
+echo -e "  ${YELLOW}•${NC} build/unshield_js/unshield.wasm"
+echo -e "  ${YELLOW}•${NC} keys/unshield_pk.zkey"
+echo -e "  ${YELLOW}•${NC} build/verification_key_unshield.json"
 echo ""
 echo -e "${BLUE}Integration:${NC}"
 echo -e "  ${YELLOW}Wallet CLI:${NC} Copy WASM + .zkey files for client-side proving"
