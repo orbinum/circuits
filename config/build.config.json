@@ -1,0 +1,35 @@
+{
+  "compiler": {
+    "version": "2.2.3",
+    "optimization": "O1",
+    "outputFormats": ["r1cs", "wasm", "sym"]
+  },
+  "setup": {
+    "ptauSize": 16,
+    "ptauUrl": "https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_16.ptau",
+    "ceremony": {
+      "type": "development",
+      "contributors": 1,
+      "entropy": "orbinum-dev-contribution"
+    }
+  },
+  "paths": {
+    "circuits": "./circuits",
+    "build": "./build",
+    "keys": "./keys",
+    "ptau": "./ptau",
+    "scripts": "./scripts",
+    "test": "./test"
+  },
+  "output": {
+    "witnessCalculator": "{circuit}_js/{circuit}.wasm",
+    "provingKey": "keys/{circuit}_pk.zkey",
+    "verifyingKey": "build/verification_key_{circuit}.json",
+    "r1cs": "build/{circuit}.r1cs",
+    "symbols": "build/{circuit}.sym"
+  },
+  "parallelBuilds": false,
+  "cacheEnabled": true,
+  "cleanBeforeBuild": true,
+  "verboseOutput": false
+}
