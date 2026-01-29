@@ -1,0 +1,152 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+    
+    - name: Install Circom
+      run: |
+        wget https://github.com/iden3/circom/releases/download/v2.2.3/circom-linux-amd64
+        chmod +x circom-linux-amd64
+        sudo mv circom-linux-amd64 /usr/local/bin/circom
+        circom --version
+    
+    - name: Setup Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+    
+    - name: Cache ark-circom
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/bin/ark-circom
+        key: ${{ runner.os }}-ark-circom-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-ark-circom-
+    
+    - name: Install ark-circom
+      run: |
+        if ! command -v ark-circom &> /dev/null; then
+          echo "Installing ark-circom..."
+          cargo install ark-circom --git https://github.com/arkworks-rs/circom-compat
+        else
+          echo "✓ ark-circom already installed"
+        fi
+        ark-circom --version
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run tests
+      run: npm test
+    
+    - name: Build all circuits
+      run: npm run build-all
+    
+    - name: Verify build artifacts
+      run: |
+        echo "Checking generated files..."
+        ls -lh build/disclosure_js/disclosure.wasm
+        ls -lh build/verification_key_disclosure.json
+        ls -lh keys/disclosure_pk.zkey
+        if [ -f keys/disclosure_pk.ark ]; then
+          echo "✓ .ark file generated successfully"
+          ls -lh keys/disclosure_pk.ark
+        else
+          echo "⚠ .ark file not generated (ark-circom may have failed)"
+        fi
+    
+    - name: Generate checksums
+      run: |
+        mkdir -p release
+        cd build
+        sha256sum disclosure_js/disclosure.wasm > ../release/checksums-js.txt
+        sha256sum verification_key_disclosure.json >> ../release/checksums-js.txt
+        cd ../keys
+        sha256sum disclosure_pk.zkey >> ../release/checksums-js.txt
+        
+        # Generate Rust checksums if .ark exists
+        if [ -f disclosure_pk.ark ]; then
+          sha256sum disclosure_pk.ark > ../release/checksums-rust.txt
+          cat ../release/checksums-js.txt | grep -v ".zkey" >> ../release/checksums-rust.txt
+          echo "✓ Generated checksums for both JS and Rust packages"
+        else
+          echo "⚠ Skipping Rust checksums (.ark not available)"
+        fi
+    
+    - name: Package artifacts
+      run: |
+        VERSION=${{ github.ref_name }}
+        
+        # JavaScript/TypeScript package (always generated)
+        echo "Creating JavaScript package..."
+        tar -czf release/disclosure-circuit-js-${VERSION}.tar.gz \
+          build/disclosure_js/disclosure.wasm \
+          keys/disclosure_pk.zkey \
+          build/verification_key_disclosure.json \
+          release/checksums-js.txt
+        
+        echo "✓ Created disclosure-circuit-js-${VERSION}.tar.gz"
+        ls -lh release/disclosure-circuit-js-${VERSION}.tar.gz
+        
+        # Rust/Arkworks package (conditional)
+        if [ -f keys/disclosure_pk.ark ]; then
+          echo "Creating Rust package..."
+          tar -czf release/disclosure-circuit-rust-${VERSION}.tar.gz \
+            build/disclosure_js/disclosure.wasm \
+            keys/disclosure_pk.ark \
+            build/verification_key_disclosure.json \
+            release/checksums-rust.txt
+          
+          echo "✓ Created disclosure-circuit-rust-${VERSION}.tar.gz"
+          ls -lh release/disclosure-circuit-rust-${VERSION}.tar.gz
+        else
+          echo "⚠ Skipping Rust package (.ark file not available)"
+          echo "JavaScript package still created successfully."
+        fi
+    
+    - name: Extract changelog
+      id: changelog
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/v}
+        sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '$ d' > release_notes.md
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          release/*.tar.gz
+          release/checksums-*.txt
+        body_path: release_notes.md
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Announce release
+      run: |
+        echo "🎉 Release ${{ github.ref_name }} published!"
+        echo "Download artifacts from: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
