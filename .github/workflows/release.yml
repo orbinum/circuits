@@ -49,33 +49,38 @@ jobs:
     - name: Install ark-circom
       run: |
         if ! command -v ark-circom &> /dev/null; then
-          echo "Installing ark-circom..."
+          echo "Installing ark-circom from release..."
           
-          # Clone and build ark-circom from source
-          git clone https://github.com/gakonst/ark-circom.git /tmp/ark-circom
-          cd /tmp/ark-circom
-          cargo build --release --bin ark-circom
+          # Download and extract the release
+          cd /tmp
+          wget https://github.com/arkworks-rs/circom-compat/archive/refs/tags/v0.5.0-alpha.tar.gz
+          tar -xzf v0.5.0-alpha.tar.gz
+          cd circom-compat-0.5.0-alpha
           
-          # Install binary to cargo bin directory
-          mkdir -p ~/.cargo/bin
-          cp target/release/ark-circom ~/.cargo/bin/
-          chmod +x ~/.cargo/bin/ark-circom
+          # Build the ark-circom binary
+          cargo build --release
           
-          # Add to PATH
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          # Find and install the binary
+          find target/release -maxdepth 1 -type f -executable -name "ark-circom" -o -name "circom-compat"
           
-          # Verify installation
-          if command -v ark-circom &> /dev/null; then
+          if [ -f target/release/ark-circom ]; then
+            mkdir -p ~/.cargo/bin
+            cp target/release/ark-circom ~/.cargo/bin/
+            chmod +x ~/.cargo/bin/ark-circom
+            echo "$HOME/.cargo/bin" >> $GITHUB_PATH
             echo "✓ ark-circom installed successfully"
-            ark-circom --version
+            ark-circom --version || echo "Binary installed but version check failed"
           else
-            echo "✗ ark-circom installation failed"
+            echo "⚠ No binary found after build"
+            echo "Available binaries:"
+            ls -la target/release/ | grep -E "^-rwx"
             echo "Release will continue with JavaScript package only"
           fi
         else
           echo "✓ ark-circom already installed"
           ark-circom --version
         fi
+      continue-on-error: true
     
     - name: Install dependencies
       run: npm ci
