@@ -60,29 +60,58 @@ jobs:
     
     - name: Convert .zkey to .ark format
       run: |
-        echo "🔄 Converting .zkey to .ark using Rust script..."
+        echo "🔄 Converting all .zkey files to .ark format using Rust script..."
         rustup toolchain install nightly
+        
+        # Convert disclosure
         cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
           keys/disclosure_pk.zkey \
           keys/disclosure_pk.ark
         
+        # Convert transfer
+        cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
+          keys/transfer_pk.zkey \
+          keys/transfer_pk.ark
+        
+        # Convert unshield
+        cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
+          keys/unshield_pk.zkey \
+          keys/unshield_pk.ark
+        
         echo ""
-        echo "✓ Conversion complete"
-        ls -lh keys/disclosure_pk.*
+        echo "✓ All conversions complete"
+        ls -lh keys/*_pk.*
     
     - name: Verify build artifacts
       run: |
-        echo "Verifying generated artifacts..."
+        echo "Verifying generated artifacts for all circuits..."
         echo ""
-        echo "Circuit files:"
+        echo "=== Disclosure Circuit ==="
         ls -lh build/disclosure_js/disclosure.wasm && echo "✓ WASM file present"
         ls -lh build/verification_key_disclosure.json && echo "✓ Verification key present"
         ls -lh keys/disclosure_pk.zkey && echo "✓ Proving key (.zkey) present"
         ls -lh keys/disclosure_pk.ark && echo "✓ Arkworks key (.ark) present"
+        
         echo ""
-        echo "✓ All required files present for release"
+        echo "=== Transfer Circuit ==="
+        ls -lh build/transfer_js/transfer.wasm && echo "✓ WASM file present"
+        ls -lh build/verification_key_transfer.json && echo "✓ Verification key present"
+        ls -lh keys/transfer_pk.zkey && echo "✓ Proving key (.zkey) present"
+        ls -lh keys/transfer_pk.ark && echo "✓ Arkworks key (.ark) present"
+        
+        echo ""
+        echo "=== Unshield Circuit ==="
+        ls -lh build/unshield_js/unshield.wasm && echo "✓ WASM file present"
+        ls -lh build/verification_key_unshield.json && echo "✓ Verification key present"
+        ls -lh keys/unshield_pk.zkey && echo "✓ Proving key (.zkey) present"
+        ls -lh keys/unshield_pk.ark && echo "✓ Arkworks key (.ark) present"
+        
+        echo ""
+        echo "✓ All 12 required files present for release (4 files × 3 circuits)"
         echo ""
         echo "Files available:"
+        echo "  - .wasm → Witness calculator"
+        echo "  - .json → Verification keys"
         echo "  - .zkey → snarkjs (JavaScript/TypeScript)"
         echo "  - .ark  → arkworks (Rust/Substrate, optimized)"
 
@@ -91,22 +120,67 @@ jobs:
       run: |
         mkdir -p release
         cd build
+        
+        # Disclosure
         sha256sum disclosure_js/disclosure.wasm > ../release/checksums.txt
         sha256sum verification_key_disclosure.json >> ../release/checksums.txt
-        cd ../keys
-        sha256sum disclosure_pk.zkey >> ../release/checksums.txt
-        sha256sum disclosure_pk.ark >> ../release/checksums.txt
-        cd ../release
-        cat checksums.txt
-    
-    - name: Package artifacts
-      run: |
-        VERSION=${{ github.ref_name }}
-        mkdir -p release/individual
         
-        # Copy individual artifacts with versioned names
-        echo "Creating individual asset files..."
+        # Transfer
+        sha256sum transfer_js/transfer.wasm >> ../release/checksums.txt
+        sha256sum verification_key_transfer.json >> ../release/checksums.txt
+        
+        # Unshield
+        sha256sum unshield_js/unshield.wasm >> ../release/checksums.txt
+        sha256sum verification_key_unshield.json >> ../release/checksums.txt
+        
+        cd ../keys
+         for all circuits..."
+        
+        # Disclosure
         cp build/disclosure_js/disclosure.wasm release/individual/disclosure-${VERSION}.wasm
+        cp keys/disclosure_pk.zkey release/individual/disclosure_pk-${VERSION}.zkey
+        cp keys/disclosure_pk.ark release/individual/disclosure_pk-${VERSION}.ark
+        cp build/verification_key_disclosure.json release/individual/verification_key_disclosure-${VERSION}.json
+        
+        # Transfer
+        cp build/transfer_js/transfer.wasm release/individual/transfer-${VERSION}.wasm
+        cp keys/transfer_pk.zkey release/individual/transfer_pk-${VERSION}.zkey
+        cp keys/transfer_pk.ark release/individual/transfer_pk-${VERSION}.ark
+        cp build/verification_key_transfer.json release/individual/verification_key_transfer-${VERSION}.json
+        
+        # Unshield
+        cp build/unshield_js/unshield.wasm release/individual/unshield-${VERSION}.wasm
+        cp keys/unshield_pk.zkey release/individual/unshield_pk-${VERSION}.zkey
+        cp keys/unshield_pk.ark release/individual/unshield_pk-${VERSION}.ark
+        cp build/verification_key_unshield.json release/individual/verification_key_unshield-${VERSION}.json
+        
+        # Checksums
+        cp release/checksums.txt release/individual/checksums-${VERSION}.txt
+        
+        # Create complete bundle with all circuits
+        echo ""
+        echo "Creating complete circuits bundle..."
+        tar -czf release/orbinum-circuits-${VERSION}.tar.gz \
+          build/disclosure_js/disclosure.wasm \
+          build/transfer_js/transfer.wasm \
+          build/unshield_js/unshield.wasm \
+          keys/disclosure_pk.zkey \
+          keys/transfer_pk.zkey \
+          keys/unshield_pk.zkey \
+          keys/disclosure_pk.ark \
+          keys/transfer_pk.ark \
+          keys/unshield_pk.ark \
+          build/verification_key_disclosure.json \
+          build/verification_key_transfer.json \
+          build/verification_key_unshield.json \
+          release/checksums.txt
+        
+        echo ""
+        echo "✓ Created 13 individual assets (12 circuit files + checksums):"
+        ls -lh release/individual/
+        echo ""
+        echo "✓ Created complete bundle: orbinum-circuits-${VERSION}.tar.gz"
+        ls -lh release/orbinum-circuits.wasm release/individual/disclosure-${VERSION}.wasm
         cp keys/disclosure_pk.zkey release/individual/disclosure_pk-${VERSION}.zkey
         cp keys/disclosure_pk.ark release/individual/disclosure_pk-${VERSION}.ark
         cp build/verification_key_disclosure.json release/individual/verification_key_disclosure-${VERSION}.json
@@ -138,17 +212,38 @@ jobs:
         # Add integration instructions
         cat >> release_notes.md << 'EOFNOTES'
         
-        ## Integration
+        ## 📦 Release Contents
+        
+        This release includes **all three Orbinum ZK circuits**:
+        
+        - **Disclosure Circuit**: Selective revelation of note fields (1,584 constraints)
+        - **Transfer Circuit**: Private token transfers with EdDSA signatures (41,212 constraints)
+        - **Unshield Circuit**: Convert private notes to public tokens (11,718 constraints)
+        
+        Each circuit includes:
+        - `.wasm` - Witness calculator for proof generation
+        - `.json` - Verification key for on-chain validation
+        - `.zkey` - Proving key for snarkjs (JavaScript/TypeScript)
+        - `.ark` - Proving key for arkworks (Rust/Substrate, optimized)
+        
+        **Total: 12 files + checksums**
+        
+        ## 🔗 Integration Examples
         
         ### JavaScript/TypeScript (snarkjs)
         ```typescript
         import { groth16 } from 'snarkjs';
         
+        // Example: Transfer circuit
         const { proof, publicSignals } = await groth16.fullProve(
           inputs,
-          'disclosure.wasm',
-          'disclosure_pk.zkey'  // Use .zkey file
+          'transfer.wasm',
+          'transfer_pk.zkey'
         );
+        
+        // Verify with verification key
+        const vkey = JSON.parse(fs.readFileSync('verification_key_transfer.json'));
+        const isValid = await groth16.verify(vkey, publicSignals, proof);
         ```
         
         ### Rust/Substrate (arkworks) - Option 1: .ark file (optimized)
@@ -158,8 +253,8 @@ jobs:
         use ark_serialize::CanonicalDeserialize;
         use std::fs::File;
         
-        // Load pre-serialized .ark file (faster)
-        let mut ark_file = File::open("disclosure_pk.ark")?;
+        // Load pre-serialized .ark file (faster, ~2-3x performance)
+        let mut ark_file = File::open("transfer_pk.ark")?;
         let proving_key = ProvingKey::<Bn254>::deserialize_compressed(&mut ark_file)?;
         
         // Generate proof
@@ -173,7 +268,7 @@ jobs:
         use ark_groth16::Groth16;
         
         // Read .zkey file directly (requires ark-circom)
-        let mut zkey_file = File::open("disclosure_pk.zkey")?;
+        let mut zkey_file = File::open("transfer_pk.zkey")?;
         let (proving_key, matrices) = read_zkey(&mut zkey_file)?;
         
         // Generate proof
@@ -185,20 +280,35 @@ jobs:
         - Rust (Option 2): `ark-circom = "0.5.0"`
         - Repository: https://github.com/arkworks-rs/circom-compat
         
-        **Performance:** `.ark` file loads ~2-3x faster than `.zkey` (no parsing overhead)
+        ## 📊 File Sizes
+        
+        | Circuit | WASM | VK (JSON) | Proving Key (.zkey) | Arkworks (.ark) |
+        |---------|------|-----------|---------------------|-----------------|
+        | Disclosure | ~200 KB | 3.4 KB | 689 KB | ~600 KB |
+        | Transfer | ~400 KB | 3.6 KB | 19 MB | ~17 MB |
+        | Unshield | ~250 KB | 3.6 KB | 5.1 MB | ~4.5 MB |
+        
+        ## ⚠️ Security Notice
+        
+        These keys are generated with a **development setup** for testing purposes only.
+        
+        **Production deployment requires**:
+        - Multi-party trusted setup ceremony (50+ independent contributors)
+        - Hardware security modules (HSMs) for key contributors
+        - Public verification of ceremony transcripts
+        
+        ## 📥 Download
+        
+        Download the complete bundle `orbinum-circuits-{version}.tar.gz` which includes all 12 circuit files.
+        
+        Extract with: `tar -xzf orbinum-circuits-{version}.tar.gz`
         EOFNOTES
 
     
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        files: |
-          release/*.tar.gz
-          release/individual/*.wasm
-          release/individual/*.zkey
-          release/individual/*.ark
-          release/individual/*.json
-          release/individual/checksums-*.txt
+        files: release/*.tar.gz
         body_path: release_notes.md
         draft: false
         prerelease: false
