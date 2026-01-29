@@ -1,0 +1,70 @@
+{
+  "circuits": {
+    "disclosure": {
+      "name": "Selective Disclosure",
+      "file": "disclosure.circom",
+      "merkleDepth": 20,
+      "maxAssets": 8,
+      "constraints": 1584,
+      "publicInputs": 4,
+      "privateInputs": 8
+    },
+    "transfer": {
+      "name": "Private Transfer",
+      "file": "transfer.circom",
+      "merkleDepth": 20,
+      "inputNotes": 2,
+      "outputNotes": 2,
+      "maxAssets": 8,
+      "constraints": 10000
+    },
+    "unshield": {
+      "name": "Asset Unshield",
+      "file": "unshield.circom",
+      "merkleDepth": 20,
+      "maxAssets": 8,
+      "constraints": 5000
+    }
+  },
+  "components": {
+    "merkleTree": {
+      "file": "core/merkle_tree.circom",
+      "maxDepth": 32,
+      "hashFunction": "poseidon"
+    },
+    "note": {
+      "file": "core/note.circom",
+      "commitmentScheme": "poseidon"
+    },
+    "poseidonWrapper": {
+      "file": "core/poseidon_wrapper.circom",
+      "version": "circomlib-2.0"
+    }
+  },
+  "security": {
+    "developmentOnly": true,
+    "trustedSetup": "single-party",
+    "productionReady": false,
+    "auditStatus": "pending",
+    "requiredCeremonyParticipants": 50
+  },
+  "performance": {
+    "targets": {
+      "disclosure": {
+        "proofTime": "150ms",
+        "verifyTime": "5ms",
+        "constraints": 1600
+      },
+      "transfer": {
+        "proofTime": "500ms",
+        "verifyTime": "5ms",
+        "constraints": 10000
+      },
+      "unshield": {
+        "proofTime": "250ms",
+        "verifyTime": "5ms",
+        "constraints": 5000
+      }
+    }
+  }
+}
