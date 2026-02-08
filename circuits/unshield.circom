@@ -42,9 +42,10 @@ template Unshield(tree_depth) {
     amount === note_value;
 
     // ========== CONSTRAINT 2: RANGE CHECK ==========
-    // Ensure note_value is within u64 range (0 to 2^64-1)
-    // This prevents overflow attacks and ensures value is valid u64
-    component value_range_check = Num2Bits(64);
+    // Ensure note_value is within u128 range (0 to 2^128-1)
+    // This prevents overflow attacks and ensures value is valid u128
+    // Matches runtime Balance type which uses u128
+    component value_range_check = Num2Bits(128);
     value_range_check.in <== note_value;
 
     // ========== CONSTRAINT 3: COMPUTE NOTE COMMITMENT ==========
