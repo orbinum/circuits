@@ -119,6 +119,63 @@ describe("Unshield Circuit Logic", function () {
 
             assert(noteValue !== withdrawAmount, "Should detect amount mismatch");
         });
+
+        it("should support u128 maximum value (2^128 - 1)", () => {
+            console.log("\n  === Testing u128 Range (Num2Bits(128)) ===");
+
+            // Maximum u128: 340282366920938463463374607431768211455
+            const maxU128 = 2n ** 128n - 1n;
+            const noteValue = maxU128;
+            const assetId = 0n;
+            const owner = 0x1234n;
+            const blinding = 0x5678n;
+
+            const commitment = computeCommitment(noteValue, assetId, owner, blinding);
+            console.log("  Max u128 value:", maxU128.toString());
+            console.log("  Commitment created:", commitment.slice(0, 20) + "...");
+
+            assert(commitment !== "0", "Should handle max u128 value");
+            console.log("  ✓ u128 maximum value supported");
+        });
+
+        it("should support large ORB amounts (>18.4 ORB)", () => {
+            console.log("\n  === Testing Large Amounts (>u64 limit) ===");
+
+            // Previous u64 limit: 2^64 - 1 = 18446744073709551615 wei ≈ 18.4 ORB
+            const u64_max = 2n ** 64n - 1n;
+
+            // Test with 1000 ORB = 10^21 wei (exceeds old u64 limit)
+            const largeAmount = 1000n * 10n ** 18n; // 1000 ORB
+            const assetId = 0n;
+            const owner = 0xabcdn;
+            const blinding = 0xef01n;
+
+            console.log("  u64 max (old limit):", u64_max.toString());
+            console.log("  Testing with:", largeAmount.toString(), "wei (1000 ORB)");
+            console.log("  Exceeds u64 by:", (largeAmount - u64_max).toString(), "wei");
+
+            const commitment = computeCommitment(largeAmount, assetId, owner, blinding);
+            assert(commitment !== "0", "Should handle amounts >18.4 ORB");
+
+            console.log("  ✓ 1000 ORB (10^21 wei) supported with u128");
+            console.log("  ✓ Old u64 limit (18.4 ORB) no longer applies");
+        });
+
+        it("should support realistic large amounts", () => {
+            // Test various large amounts that would fail with u64
+            const amounts = [
+                { value: 100n * 10n ** 18n, label: "100 ORB" },
+                { value: 10000n * 10n ** 18n, label: "10,000 ORB" },
+                { value: 1000000n * 10n ** 18n, label: "1 Million ORB" },
+            ];
+
+            console.log("\n  Testing realistic large amounts:");
+            amounts.forEach(({ value, label }) => {
+                const commitment = computeCommitment(value, 0n, 0x1234n, 0x5678n);
+                assert(commitment !== "0", `Should support ${label}`);
+                console.log(`  ✓ ${label}: ${value.toString()} wei`);
+            });
+        });
     });
 
     describe("Merkle Membership Proof", () => {

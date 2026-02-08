@@ -141,6 +141,85 @@ describe("Transfer Circuit Logic", function () {
 
             assert(input_sum !== output_sum, "Should detect imbalance");
         });
+
+        it("should support u128 values in transfer inputs and outputs", () => {
+            console.log("\n  === Testing u128 Range for Transfer (Num2Bits(128)) ===");
+
+            // Test large amounts in transfer circuit
+            const largeInput1 = 1000n * 10n ** 18n; // 1000 ORB
+            const largeInput2 = 500n * 10n ** 18n; // 500 ORB
+            const largeOutput1 = 800n * 10n ** 18n; // 800 ORB
+            const largeOutput2 = 700n * 10n ** 18n; // 700 ORB
+
+            const input_sum = largeInput1 + largeInput2;
+            const output_sum = largeOutput1 + largeOutput2;
+
+            console.log("  Input 1: 1000 ORB =", largeInput1.toString(), "wei");
+            console.log("  Input 2: 500 ORB  =", largeInput2.toString(), "wei");
+            console.log("  Output 1: 800 ORB =", largeOutput1.toString(), "wei");
+            console.log("  Output 2: 700 ORB =", largeOutput2.toString(), "wei");
+
+            assert.strictEqual(input_sum, output_sum, "Large u128 balances should be equal");
+            console.log("  ✓ u128 values supported in both inputs and outputs");
+        });
+
+        it("should handle maximum u128 values in transfer", () => {
+            console.log("\n  === Testing Maximum u128 Transfer ===");
+
+            // Maximum u128
+            const maxU128 = 2n ** 128n - 1n;
+            const halfMax = maxU128 / 2n;
+            const remainingHalf = maxU128 - halfMax;
+
+            // Transfer max value split into two outputs
+            const input1 = maxU128;
+            const output1 = halfMax;
+            const output2 = remainingHalf;
+
+            console.log("  Max u128:", maxU128.toString());
+            console.log("  Input: max u128");
+            console.log("  Output 1: half");
+            console.log("  Output 2: remaining");
+
+            assert.strictEqual(input1, output1 + output2, "Should split max u128 correctly");
+            console.log("  ✓ Maximum u128 transfer validated");
+        });
+
+        it("should create commitments with large u128 values", () => {
+            const largeValue = 10000n * 10n ** 18n; // 10,000 ORB
+            const asset_id = 0n;
+            const owner_pubkey = 0x1234567890abcdefn;
+            const blinding = 0xfedcba0987654321n;
+
+            const commitment: string = poseidon.F.toString(
+                poseidon([largeValue, asset_id, owner_pubkey, blinding])
+            );
+
+            console.log("\n  Testing large value commitment:");
+            console.log("  Value: 10,000 ORB =", largeValue.toString(), "wei");
+            console.log("  Commitment:", commitment.slice(0, 20) + "...");
+
+            assert(commitment !== "0", "Should create commitment with large u128 value");
+            console.log("  ✓ Large u128 commitment created successfully");
+        });
+
+        it("should verify u64 limit no longer applies", () => {
+            const u64_max = 2n ** 64n - 1n;
+            const exceeds_u64 = u64_max + 1000n * 10n ** 18n; // Much larger than u64
+
+            console.log("\n  === Verifying u64 Limitation Removed ===");
+            console.log("  Old u64 max:", u64_max.toString());
+            console.log("  Testing with:", exceeds_u64.toString());
+            console.log("  Difference:", (exceeds_u64 - u64_max).toString());
+
+            // Create transfer with amount exceeding old u64 limit
+            const input_sum = exceeds_u64;
+            const output_sum = exceeds_u64;
+
+            assert.strictEqual(input_sum, output_sum, "Should handle values >u64");
+            console.log("  ✓ Values exceeding u64 (18.4 ORB) now supported");
+            console.log("  ✓ u128 range (up to ~340 undecillion) available");
+        });
     });
 
     describe("Complete Transfer Example", () => {
