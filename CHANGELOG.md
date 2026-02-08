@@ -7,25 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- Pre-commit hooks with husky and lint-staged
-- Automated code formatting with Prettier
-- Conventional Commits validation
-- Comprehensive architecture documentation
-- Circom file linting script
-
-### Changed
-
-- Improved build script output formatting
-- Consolidated script messages for better UX
-- Silenced verbose snarkJS logs
-- Aligned all script borders to 58 characters
+## [0.2.0] - 2026-02-08
 
 ### Fixed
 
-- Build artifacts now properly overwrite previous versions
-- Removed duplicate "Generated Artifacts" messages
+- **CRITICAL**: Increased value range check from u64 to u128 in `unshield.circom` and `transfer.circom`
+    - Changed `Num2Bits(64)` to `Num2Bits(128)` to match runtime Balance type
+    - Previous limit: ~18.4 ORB maximum per transaction
+    - New limit: ~340 undecillion ORB (full u128 range)
+    - Affects: Unshield and Private Transfer operations
+    - Impact: Users can now transact with realistic amounts without artificial circuit limitations
+    - **BREAKING CHANGE**: Requires recompilation of all circuits and regeneration of artifacts
 
 ## [0.1.0] - 2026-01-28
 
