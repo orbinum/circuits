@@ -147,12 +147,12 @@ template Transfer(tree_depth) {
     component output_range_checks[2];
 
     for (var i = 0; i < 2; i++) {
-        // Range check input values
-        input_range_checks[i] = Num2Bits(64);
+        // Range check input values (u128 to match runtime Balance type)
+        input_range_checks[i] = Num2Bits(128);
         input_range_checks[i].in <== input_values[i];
 
-        // Range check output values
-        output_range_checks[i] = Num2Bits(64);
+        // Range check output values (u128 to match runtime Balance type)
+        output_range_checks[i] = Num2Bits(128);
         output_range_checks[i].in <== output_values[i];
     }
 
