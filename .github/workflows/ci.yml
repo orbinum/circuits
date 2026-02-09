@@ -16,18 +16,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     
-    strategy:
-      matrix:
-        node-version: [18.x, 20.x]
-    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Setup Node.js ${{ matrix.node-version }}
+    - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: ${{ matrix.node-version }}
+        node-version: '20.x'
         cache: 'npm'
     
     - name: Install Circom
@@ -86,7 +82,7 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: circuit-artifacts-${{ matrix.node-version }}
+        name: circuit-artifacts
         path: |
           build/**/*.wasm
           keys/**/*.zkey
@@ -96,7 +92,7 @@ jobs:
     - name: Upload benchmark results
       uses: actions/upload-artifact@v4
       with:
-        name: benchmark-results-${{ matrix.node-version }}
+        name: benchmark-results
         path: build/benchmark_results_*.json
         retention-days: 30
 
