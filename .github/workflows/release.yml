@@ -61,29 +61,29 @@ jobs:
       - name: Convert .zkey to .ark format
         run: |
           echo "🔄 Converting all .zkey files to .ark format using Rust script..."
-        
+
           # Install nightly Rust with script support
           rustup toolchain install nightly --profile minimal
           rustup component add rust-src --toolchain nightly
-          
+
           echo ""
           echo "Converting disclosure circuit..."
           cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
             keys/disclosure_pk.zkey \
             keys/disclosure_pk.ark
-          
+
           echo ""
           echo "Converting transfer circuit..."
           cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
             keys/transfer_pk.zkey \
             keys/transfer_pk.ark
-          
+
           echo ""
           echo "Converting unshield circuit..."
           cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
             keys/unshield_pk.zkey \
             keys/unshield_pk.ark
-          
+
           echo ""
           echo "✓ All conversions complete"
           echo ""
@@ -230,131 +230,34 @@ jobs:
           # Extract changelog section
           sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '$ d' > release_notes.md
 
-          # Add integration instructions
+          # Add asset information
           cat >> release_notes.md << 'EOFNOTES'
 
-          ## 📦 Release Assets
+          ## Release Assets
 
           This release includes **3 compressed archives**:
 
-          ### 1. `orbinum-circuits-{version}.tar.gz` (Arkworks - ~22 MB)
-          Contains files for **Rust/arkworks proof generation**:
-          - `disclosure.wasm`, `transfer.wasm`, `unshield.wasm` - Witness calculators
-          - `disclosure_pk.ark`, `transfer_pk.ark`, `unshield_pk.ark` - Proving keys (arkworks format)
+          ### 1. `orbinum-circuits-{version}.tar.gz` (~22 MB)
+          For **Rust/arkworks proof generation**:
+          - 3 WASM witness calculators (`.wasm`)
+          - 3 arkworks proving keys (`.ark`)
 
-          **Total: 6 files at root** (no nested directories)
+          ### 2. `orbinum-circuits-snarkjs-{version}.tar.gz` (~24 MB)
+          For **JavaScript/TypeScript proof generation**:
+          - 3 snarkjs proving keys (`.zkey`)
+          - **Note:** Requires `.wasm` files from Asset 1
 
-          ### 2. `orbinum-circuits-snarkjs-{version}.tar.gz` (snarkjs - ~24 MB)
-          Contains files for **JavaScript/TypeScript proof generation**:
-          - `disclosure_pk.zkey`, `transfer_pk.zkey`, `unshield_pk.zkey` - Proving keys (snarkjs format)
+          ### 3. `orbinum-verification-keys-{version}.tar.gz` (~10 KB)
+          For **on-chain verification** (Substrate runtime):
+          - 3 verification keys in JSON format
 
-          **Total: 3 files at root** (no nested directories)  
-          **Note:** You still need the `.wasm` files from Asset 1 to use snarkjs
+          ## Documentation
 
-          ### 3. `orbinum-verification-keys-{version}.tar.gz` (VKs - ~10 KB)
-          Contains **verification keys** for on-chain validation:
-          - `verification_key_disclosure.json`
-          - `verification_key_transfer.json`
-          - `verification_key_unshield.json`
+          For integration examples, circuit specifications, and usage instructions, see the [docs](https://github.com/orbinum/circuits/tree/main/docs) directory.
 
-          **Total: 3 files at root** (no nested directories)
+          ## Security Notice
 
-          ## 🚀 Included Circuits
-
-          - **Disclosure Circuit**: Selective revelation of note fields (1,584 constraints)
-          - **Transfer Circuit**: Private token transfers with EdDSA signatures (41,212 constraints)
-          - **Unshield Circuit**: Convert private notes to public tokens (11,718 constraints)
-
-          ## 🔗 Integration Examples
-
-          ### JavaScript/TypeScript (snarkjs)
-          ```bash
-          # Download both arkworks (for .wasm) and snarkjs (for .zkey)
-          wget https://github.com/orbinum/circuits/releases/download/{version}/orbinum-circuits-{version}.tar.gz
-          wget https://github.com/orbinum/circuits/releases/download/{version}/orbinum-circuits-snarkjs-{version}.tar.gz
-          tar -xzf orbinum-circuits-{version}.tar.gz
-          tar -xzf orbinum-circuits-snarkjs-{version}.tar.gz
-          ```
-
-          ```typescript
-          import { groth16 } from 'snarkjs';
-
-          // Generate proof with transfer circuit
-          const { proof, publicSignals } = await groth16.fullProve(
-            inputs,
-            'transfer.wasm',           // From orbinum-circuits-{version}.tar.gz
-            'transfer_pk.zkey'          // From orbinum-circuits-snarkjs-{version}.tar.gz
-          );
-          ```
-
-          ### Rust/Substrate (arkworks + optimized .ark file)
-          ```bash
-          # Download arkworks files only (.wasm + .ark)
-          wget https://github.com/orbinum/circuits/releases/download/{version}/orbinum-circuits-{version}.tar.gz
-          tar -xzf orbinum-circuits-{version}.tar.gz
-          ```
-
-          ```rust
-          use ark_bn254::Bn254;
-          use ark_groth16::{Groth16, ProvingKey};
-          use ark_serialize::CanonicalDeserialize;
-          use std::fs::File;
-
-          // Load pre-serialized .ark file (2-3x faster)
-          let mut ark_file = File::open("transfer_pk.ark")?;
-          let proving_key = ProvingKey::<Bn254>::deserialize_compressed(&mut ark_file)?;
-
-          // Generate proof
-          let proof = Groth16::<Bn254>::prove(&proving_key, circuit, &mut rng)?;
-          ```
-
-          ### Substrate Runtime (on-chain verification)
-          ```bash
-          # Download verification keys
-          wget https://github.com/orbinum/circuits/releases/download/{version}/orbinum-verification-keys-{version}.tar.gz
-          tar -xzf orbinum-verification-keys-{version}.tar.gz
-          ```
-
-          The JSON verification keys are registered in the runtime using `pallet-zk-verifier`.
-
-          ## 📊 File Sizes
-
-          | Circuit | WASM | .ark | .zkey | VK (JSON) |
-          |---------|------|------|-------|-----------|
-          | Disclosure | ~200 KB | ~600 KB | 689 KB | 3.4 KB |
-          | Transfer | ~400 KB | ~17 MB | 19 MB | 3.6 KB |
-          | Unshield | ~250 KB | ~4.5 MB | 5.1 MB | 3.6 KB |
-
-          **Asset 1 (arkworks):** ~22 MB compressed (.wasm + .ark)  
-          **Asset 2 (snarkjs):** ~24 MB compressed (.zkey)  
-          **Asset 3 (verification keys):** ~10 KB compressed (.json)
-
-          ## ⚠️ Security Notice
-
-          These keys are generated with a **development setup** for testing purposes only.
-
-          **Production deployment requires:**
-          - Multi-party trusted setup ceremony (50+ independent contributors)
-          - Hardware security modules (HSMs) for key contributors
-          - Public verification of ceremony transcripts
-
-          ## 📥 Quick Download
-
-          ```bash
-          # For Rust/arkworks proof generation
-          wget https://github.com/orbinum/circuits/releases/download/{version}/orbinum-circuits-{version}.tar.gz
-          tar -xzf orbinum-circuits-{version}.tar.gz
-
-          # For JavaScript/snarkjs proof generation (needs both)
-          wget https://github.com/orbinum/circuits/releases/download/{version}/orbinum-circuits-{version}.tar.gz
-          wget https://github.com/orbinum/circuits/releases/download/{version}/orbinum-circuits-snarkjs-{version}.tar.gz
-          tar -xzf orbinum-circuits-{version}.tar.gz
-          tar -xzf orbinum-circuits-snarkjs-{version}.tar.gz
-
-          # For on-chain verification (runtime)
-          wget https://github.com/orbinum/circuits/releases/download/{version}/orbinum-verification-keys-{version}.tar.gz
-          tar -xzf orbinum-verification-keys-{version}.tar.gz
-          ```
+          These keys are for **testing purposes only**. Production deployment requires a multi-party trusted setup ceremony.
           EOFNOTES
 
       - name: Create GitHub Release
@@ -368,6 +271,7 @@ jobs:
           body_path: release_notes.md
           draft: false
           prerelease: false
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
