@@ -214,8 +214,8 @@ jobs:
           tar -tzf release/orbinum-verification-keys-${VERSION}.tar.gz
           echo ""
 
-          # Copy checksums
-          cp release/checksums.txt release/checksums-${VERSION}.txt
+          # Rename checksums with version (remove original)
+          mv release/checksums.txt release/checksums-${VERSION}.txt
 
           echo "📦 Assets summary:"
           ls -lh release/*.tar.gz release/checksums-${VERSION}.txt
