@@ -8,13 +8,13 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 # Check commit message format (Conventional Commits)
-if ! echo "$commit_msg" | grep -qE "^(feat|fix|docs|style|refactor|perf|test|build|ci|chore)(\(.+\))?: .{1,}"; then
+if ! echo "$commit_msg" | grep -qE "^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|release)(\(.+\))?: .{1,}|^release v[0-9]+\.[0-9]+\.[0-9]+: .{1,}"; then
     echo "${RED}✗ Invalid commit message format${NC}"
     echo ""
     echo "${YELLOW}Commit message must follow Conventional Commits format:${NC}"
     echo "  <type>(<scope>): <description>"
     echo ""
-    echo "Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore"
+    echo "Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, release"
     echo ""
     echo "Examples:"
     echo "  feat(circuits): add new disclosure circuit"
