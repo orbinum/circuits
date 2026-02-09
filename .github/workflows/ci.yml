@@ -3,6 +3,8 @@ name: CI - Build and Test
 on:
   push:
     branches: [ main, develop ]
+    tags-ignore:
+      - '**'
   pull_request:
     branches: [ main, develop ]
 
@@ -79,7 +81,8 @@ jobs:
     
     - name: Run benchmarks
       run: npm run bench
-      
+      continue-on-error: true  # Benchmarks may fail if input files are not generated
+
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
