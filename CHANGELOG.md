@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-02-09
+
+### Changed
+
+- **Release Format**: Restructured release assets into 3 separate archives for better usability
+    - `orbinum-circuits-{version}.tar.gz`: Arkworks files (.wasm + .ark) for Rust/Substrate (~22 MB)
+    - `orbinum-circuits-snarkjs-{version}.tar.gz`: snarkjs files (.zkey) for JavaScript/TypeScript (~24 MB)
+    - `orbinum-verification-keys-{version}.tar.gz`: Verification keys (.json) for on-chain validation (~10 KB)
+- All files are now extracted to the root directory (no nested folders) for easier integration
+- Improved CI/CD workflow for reliable .ark file generation
+
 ## [0.2.0] - 2026-02-08
 
 ### Fixed

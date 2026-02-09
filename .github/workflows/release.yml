@@ -61,29 +61,34 @@ jobs:
       - name: Convert .zkey to .ark format
         run: |
           echo "🔄 Converting all .zkey files to .ark format using Rust script..."
-          rustup toolchain install nightly
-
-          # Convert disclosure
-          cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
-            keys/disclosure_pk.zkey \
-            keys/disclosure_pk.ark
-
-          # Convert transfer
-          cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
-            keys/transfer_pk.zkey \
-            keys/transfer_pk.ark
-
-          # Convert unshield
-          cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
-            keys/unshield_pk.zkey \
-            keys/unshield_pk.ark
-
-          echo ""
-          echo "✓ All conversions complete"
-          ls -lh keys/*_pk.*
-
-      - name: Verify build artifacts
-        run: |
+        
+        # Install nightly Rust with script support
+        rustup toolchain install nightly --profile minimal
+        rustup component add rust-src --toolchain nightly
+        
+        echo ""
+        echo "Converting disclosure circuit..."
+        cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
+          keys/disclosure_pk.zkey \
+          keys/disclosure_pk.ark
+        
+        echo ""
+        echo "Converting transfer circuit..."
+        cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
+          keys/transfer_pk.zkey \
+          keys/transfer_pk.ark
+        
+        echo ""
+        echo "Converting unshield circuit..."
+        cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
+          keys/unshield_pk.zkey \
+          keys/unshield_pk.ark
+        
+        echo ""
+        echo "✓ All conversions complete"
+        echo ""
+        echo "Generated .ark files:"
+        ls -lh keys/*_pk.ark
           echo "Verifying generated artifacts for all circuits..."
           echo ""
           echo "=== Disclosure Circuit ==="
