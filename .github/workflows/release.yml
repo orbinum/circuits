@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
 
 permissions:
   contents: write
@@ -11,282 +11,362 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20.x'
-        cache: 'npm'
-    
-    - name: Install Circom
-      run: |
-        wget https://github.com/iden3/circom/releases/download/v2.2.3/circom-linux-amd64
-        chmod +x circom-linux-amd64
-        sudo mv circom-linux-amd64 /usr/local/bin/circom
-        circom --version
-    
-    - name: Setup Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
-    
-    - name: Build artifacts information
-      run: |
-        echo "ℹ️  Rust/Substrate Integration"
-        echo ""
-        echo "The .zkey file works directly with ark-circom (Rust library):"
-        echo "  https://github.com/arkworks-rs/circom-compat"
-        echo ""
-        echo "Example usage:"
-        echo "  use ark_circom::read_zkey;"
-        echo "  let (pk, matrices) = read_zkey(&mut zkey_file)?;"
-        echo "  let proof = Groth16::<Bn254>::prove(&pk, circuit, &mut rng)?;"
-        echo ""
-        echo "No .ark conversion needed!"
-    
-    - name: Install dependencies
-      run: npm ci
-    
-    - name: Build all circuits
-      run: npm run build-all
-    
-    - name: Convert .zkey to .ark format
-      run: |
-        echo "🔄 Converting all .zkey files to .ark format using Rust script..."
-        rustup toolchain install nightly
-        
-        # Convert disclosure
-        cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
-          keys/disclosure_pk.zkey \
-          keys/disclosure_pk.ark
-        
-        # Convert transfer
-        cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
-          keys/transfer_pk.zkey \
-          keys/transfer_pk.ark
-        
-        # Convert unshield
-        cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
-          keys/unshield_pk.zkey \
-          keys/unshield_pk.ark
-        
-        echo ""
-        echo "✓ All conversions complete"
-        ls -lh keys/*_pk.*
-    
-    - name: Verify build artifacts
-      run: |
-        echo "Verifying generated artifacts for all circuits..."
-        echo ""
-        echo "=== Disclosure Circuit ==="
-        ls -lh build/disclosure_js/disclosure.wasm && echo "✓ WASM file present"
-        ls -lh build/verification_key_disclosure.json && echo "✓ Verification key present"
-        ls -lh keys/disclosure_pk.zkey && echo "✓ Proving key (.zkey) present"
-        ls -lh keys/disclosure_pk.ark && echo "✓ Arkworks key (.ark) present"
-        
-        echo ""
-        echo "=== Transfer Circuit ==="
-        ls -lh build/transfer_js/transfer.wasm && echo "✓ WASM file present"
-        ls -lh build/verification_key_transfer.json && echo "✓ Verification key present"
-        ls -lh keys/transfer_pk.zkey && echo "✓ Proving key (.zkey) present"
-        ls -lh keys/transfer_pk.ark && echo "✓ Arkworks key (.ark) present"
-        
-        echo ""
-        echo "=== Unshield Circuit ==="
-        ls -lh build/unshield_js/unshield.wasm && echo "✓ WASM file present"
-        ls -lh build/verification_key_unshield.json && echo "✓ Verification key present"
-        ls -lh keys/unshield_pk.zkey && echo "✓ Proving key (.zkey) present"
-        ls -lh keys/unshield_pk.ark && echo "✓ Arkworks key (.ark) present"
-        
-        echo ""
-        echo "✓ All 12 required files present for release (4 files × 3 circuits)"
-        echo ""
-        echo "Files available:"
-        echo "  - .wasm → Witness calculator"
-        echo "  - .json → Verification keys"
-        echo "  - .zkey → snarkjs (JavaScript/TypeScript)"
-        echo "  - .ark  → arkworks (Rust/Substrate, optimized)"
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    
-    - name: Generate checksums
-      run: |
-        mkdir -p release
-        cd build
-        
-        # Disclosure
-        sha256sum disclosure_js/disclosure.wasm > ../release/checksums.txt
-        sha256sum verification_key_disclosure.json >> ../release/checksums.txt
-        
-        # Transfer
-        sha256sum transfer_js/transfer.wasm >> ../release/checksums.txt
-        sha256sum verification_key_transfer.json >> ../release/checksums.txt
-        
-        # Unshield
-        sha256sum unshield_js/unshield.wasm >> ../release/checksums.txt
-        sha256sum verification_key_unshield.json >> ../release/checksums.txt
-        
-        cd ../keys
-        
-        # All zkey and ark files
-        sha256sum disclosure_pk.zkey >> ../release/checksums.txt
-        sha256sum disclosure_pk.ark >> ../release/checksums.txt
-        sha256sum transfer_pk.zkey >> ../release/checksums.txt
-        sha256sum transfer_pk.ark >> ../release/checksums.txt
-        sha256sum unshield_pk.zkey >> ../release/checksums.txt
-        sha256sum unshield_pk.ark >> ../release/checksums.txt
-        
-        cd ../release
-        echo "Generated checksums for all 12 files:"
-        cat checksums.txt
-    
-    - name: Package artifacts
-      run: |
-        VERSION=${{ github.ref_name }}
-        
-        # Create complete bundle with all circuits
-        echo "Creating complete circuits bundle..."
-        tar -czf release/orbinum-circuits-${VERSION}.tar.gz \
-          build/disclosure_js/disclosure.wasm \
-          build/transfer_js/transfer.wasm \
-          build/unshield_js/unshield.wasm \
-          keys/disclosure_pk.zkey \
-          keys/transfer_pk.zkey \
-          keys/unshield_pk.zkey \
-          keys/disclosure_pk.ark \
-          keys/transfer_pk.ark \
-          keys/unshield_pk.ark \
-          build/verification_key_disclosure.json \
-          build/verification_key_transfer.json \
-          build/verification_key_unshield.json \
-          release/checksums.txt
-        
-        echo ""
-        echo "✓ Created complete bundle: orbinum-circuits-${VERSION}.tar.gz"
-        ls -lh release/orbinum-circuits-${VERSION}.tar.gz
-    
-    - name: Create release notes
-      id: release_notes
-      run: |
-        VERSION=${GITHUB_REF#refs/tags/v}
-        
-        # Extract changelog section
-        sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '$ d' > release_notes.md
-        
-        # Add integration instructions
-        cat >> release_notes.md << 'EOFNOTES'
-        
-        ## 📦 Release Contents
-        
-        This release includes **all three Orbinum ZK circuits**:
-        
-        - **Disclosure Circuit**: Selective revelation of note fields (1,584 constraints)
-        - **Transfer Circuit**: Private token transfers with EdDSA signatures (41,212 constraints)
-        - **Unshield Circuit**: Convert private notes to public tokens (11,718 constraints)
-        
-        Each circuit includes:
-        - `.wasm` - Witness calculator for proof generation
-        - `.json` - Verification key for on-chain validation
-        - `.zkey` - Proving key for snarkjs (JavaScript/TypeScript)
-        - `.ark` - Proving key for arkworks (Rust/Substrate, optimized)
-        
-        **Total: 12 files + checksums**
-        
-        ## 🔗 Integration Examples
-        
-        ### JavaScript/TypeScript (snarkjs)
-        ```typescript
-        import { groth16 } from 'snarkjs';
-        
-        // Example: Transfer circuit
-        const { proof, publicSignals } = await groth16.fullProve(
-          inputs,
-          'transfer.wasm',
-          'transfer_pk.zkey'
-        );
-        
-        // Verify with verification key
-        const vkey = JSON.parse(fs.readFileSync('verification_key_transfer.json'));
-        const isValid = await groth16.verify(vkey, publicSignals, proof);
-        ```
-        
-        ### Rust/Substrate (arkworks) - Option 1: .ark file (optimized)
-        ```rust
-        use ark_bn254::Bn254;
-        use ark_groth16::{Groth16, ProvingKey};
-        use ark_serialize::CanonicalDeserialize;
-        use std::fs::File;
-        
-        // Load pre-serialized .ark file (faster, ~2-3x performance)
-        let mut ark_file = File::open("transfer_pk.ark")?;
-        let proving_key = ProvingKey::<Bn254>::deserialize_compressed(&mut ark_file)?;
-        
-        // Generate proof
-        let proof = Groth16::<Bn254>::prove(&proving_key, circuit, &mut rng)?;
-        ```
-        
-        ### Rust/Substrate (arkworks) - Option 2: .zkey file (direct)
-        ```rust
-        use ark_circom::read_zkey;
-        use ark_bn254::Bn254;
-        use ark_groth16::Groth16;
-        
-        // Read .zkey file directly (requires ark-circom)
-        let mut zkey_file = File::open("transfer_pk.zkey")?;
-        let (proving_key, matrices) = read_zkey(&mut zkey_file)?;
-        
-        // Generate proof
-        let proof = Groth16::<Bn254>::prove(&proving_key, circuit, &mut rng)?;
-        ```
-        
-        **Dependencies:**
-        - Rust (Option 1): `ark-bn254 = "0.5.0"`, `ark-groth16 = "0.5.0"`, `ark-serialize = "0.5.0"`
-        - Rust (Option 2): `ark-circom = "0.5.0"`
-        - Repository: https://github.com/arkworks-rs/circom-compat
-        
-        ## 📊 File Sizes
-        
-        | Circuit | WASM | VK (JSON) | Proving Key (.zkey) | Arkworks (.ark) |
-        |---------|------|-----------|---------------------|-----------------|
-        | Disclosure | ~200 KB | 3.4 KB | 689 KB | ~600 KB |
-        | Transfer | ~400 KB | 3.6 KB | 19 MB | ~17 MB |
-        | Unshield | ~250 KB | 3.6 KB | 5.1 MB | ~4.5 MB |
-        
-        ## ⚠️ Security Notice
-        
-        These keys are generated with a **development setup** for testing purposes only.
-        
-        **Production deployment requires**:
-        - Multi-party trusted setup ceremony (50+ independent contributors)
-        - Hardware security modules (HSMs) for key contributors
-        - Public verification of ceremony transcripts
-        
-        ## 📥 Download
-        
-        Download the complete bundle `orbinum-circuits-{version}.tar.gz` which includes all 12 circuit files.
-        
-        Extract with: `tar -xzf orbinum-circuits-{version}.tar.gz`
-        EOFNOTES
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
 
-    
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: release/*.tar.gz
-        body_path: release_notes.md
-        draft: false
-        prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Announce release
-      run: |
-        echo "🎉 Release ${{ github.ref_name }} published!"
-        echo "Download artifacts from: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+      - name: Install Circom
+        run: |
+          wget https://github.com/iden3/circom/releases/download/v2.2.3/circom-linux-amd64
+          chmod +x circom-linux-amd64
+          sudo mv circom-linux-amd64 /usr/local/bin/circom
+          circom --version
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Build artifacts information
+        run: |
+          echo "ℹ️  Rust/Substrate Integration"
+          echo ""
+          echo "The .zkey file works directly with ark-circom (Rust library):"
+          echo "  https://github.com/arkworks-rs/circom-compat"
+          echo ""
+          echo "Example usage:"
+          echo "  use ark_circom::read_zkey;"
+          echo "  let (pk, matrices) = read_zkey(&mut zkey_file)?;"
+          echo "  let proof = Groth16::<Bn254>::prove(&pk, circuit, &mut rng)?;"
+          echo ""
+          echo "No .ark conversion needed!"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build all circuits
+        run: npm run build-all
+
+      - name: Convert .zkey to .ark format
+        run: |
+          echo "🔄 Converting all .zkey files to .ark format using Rust script..."
+          rustup toolchain install nightly
+
+          # Convert disclosure
+          cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
+            keys/disclosure_pk.zkey \
+            keys/disclosure_pk.ark
+
+          # Convert transfer
+          cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
+            keys/transfer_pk.zkey \
+            keys/transfer_pk.ark
+
+          # Convert unshield
+          cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
+            keys/unshield_pk.zkey \
+            keys/unshield_pk.ark
+
+          echo ""
+          echo "✓ All conversions complete"
+          ls -lh keys/*_pk.*
+
+      - name: Verify build artifacts
+        run: |
+          echo "Verifying generated artifacts for all circuits..."
+          echo ""
+          echo "=== Disclosure Circuit ==="
+          ls -lh build/disclosure_js/disclosure.wasm && echo "✓ WASM file present"
+          ls -lh build/verification_key_disclosure.json && echo "✓ Verification key present"
+          ls -lh keys/disclosure_pk.zkey && echo "✓ Proving key (.zkey) present"
+          ls -lh keys/disclosure_pk.ark && echo "✓ Arkworks key (.ark) present"
+
+          echo ""
+          echo "=== Transfer Circuit ==="
+          ls -lh build/transfer_js/transfer.wasm && echo "✓ WASM file present"
+          ls -lh build/verification_key_transfer.json && echo "✓ Verification key present"
+          ls -lh keys/transfer_pk.zkey && echo "✓ Proving key (.zkey) present"
+          ls -lh keys/transfer_pk.ark && echo "✓ Arkworks key (.ark) present"
+
+          echo ""
+          echo "=== Unshield Circuit ==="
+          ls -lh build/unshield_js/unshield.wasm && echo "✓ WASM file present"
+          ls -lh build/verification_key_unshield.json && echo "✓ Verification key present"
+          ls -lh keys/unshield_pk.zkey && echo "✓ Proving key (.zkey) present"
+          ls -lh keys/unshield_pk.ark && echo "✓ Arkworks key (.ark) present"
+
+          echo ""
+          echo "✓ All 12 required files present for release (4 files × 3 circuits)"
+          echo ""
+          echo "Files available:"
+          echo "  - .wasm → Witness calculator"
+          echo "  - .json → Verification keys"
+          echo "  - .zkey → snarkjs (JavaScript/TypeScript)"
+          echo "  - .ark  → arkworks (Rust/Substrate, optimized)"
+
+      - name: Generate checksums
+        run: |
+          mkdir -p release
+          cd build
+
+          # Disclosure
+          sha256sum disclosure_js/disclosure.wasm > ../release/checksums.txt
+          sha256sum verification_key_disclosure.json >> ../release/checksums.txt
+
+          # Transfer
+          sha256sum transfer_js/transfer.wasm >> ../release/checksums.txt
+          sha256sum verification_key_transfer.json >> ../release/checksums.txt
+
+          # Unshield
+          sha256sum unshield_js/unshield.wasm >> ../release/checksums.txt
+          sha256sum verification_key_unshield.json >> ../release/checksums.txt
+
+          cd ../keys
+
+          # All zkey and ark files
+          sha256sum disclosure_pk.zkey >> ../release/checksums.txt
+          sha256sum disclosure_pk.ark >> ../release/checksums.txt
+          sha256sum transfer_pk.zkey >> ../release/checksums.txt
+          sha256sum transfer_pk.ark >> ../release/checksums.txt
+          sha256sum unshield_pk.zkey >> ../release/checksums.txt
+          sha256sum unshield_pk.ark >> ../release/checksums.txt
+
+          cd ../release
+          echo "Generated checksums for all 12 files:"
+          cat checksums.txt
+
+      - name: Package artifacts
+        run: |
+          VERSION=${{ github.ref_name }}
+
+          # Create temporary directories for packaging
+          mkdir -p release/arkworks-temp
+          mkdir -p release/snarkjs-temp
+          mkdir -p release/verification-keys-temp
+
+          echo "📦 Preparing release assets..."
+
+          # Asset 1: .wasm and .ark files for arkworks/Rust (at root, no nested directories)
+          echo ""
+          echo "1️⃣  Copying arkworks files (.wasm, .ark)..."
+          cp build/disclosure_js/disclosure.wasm release/arkworks-temp/
+          cp build/transfer_js/transfer.wasm release/arkworks-temp/
+          cp build/unshield_js/unshield.wasm release/arkworks-temp/
+          cp keys/disclosure_pk.ark release/arkworks-temp/
+          cp keys/transfer_pk.ark release/arkworks-temp/
+          cp keys/unshield_pk.ark release/arkworks-temp/
+
+          # Create tarball of arkworks files (all at root)
+          cd release/arkworks-temp
+          tar -czf ../orbinum-circuits-${VERSION}.tar.gz *
+          cd ../..
+
+          echo "✅ Asset 1 created: orbinum-circuits-${VERSION}.tar.gz"
+          echo "   Contents (6 files at root - .wasm + .ark):"
+          tar -tzf release/orbinum-circuits-${VERSION}.tar.gz
+          echo ""
+
+          # Asset 2: .zkey files for snarkjs/JavaScript (at root, no nested directories)
+          echo "2️⃣  Copying snarkjs files (.zkey)..."
+          cp keys/disclosure_pk.zkey release/snarkjs-temp/
+          cp keys/transfer_pk.zkey release/snarkjs-temp/
+          cp keys/unshield_pk.zkey release/snarkjs-temp/
+
+          # Create tarball of snarkjs files (all at root)
+          cd release/snarkjs-temp
+          tar -czf ../orbinum-circuits-snarkjs-${VERSION}.tar.gz *
+          cd ../..
+
+          echo "✅ Asset 2 created: orbinum-circuits-snarkjs-${VERSION}.tar.gz"
+          echo "   Contents (3 files at root - .zkey):"
+          tar -tzf release/orbinum-circuits-snarkjs-${VERSION}.tar.gz
+          echo ""
+
+          # Asset 3: All verification keys JSON (at root, no nested directories)
+          echo "3️⃣  Copying verification keys (JSON)..."
+          cp build/verification_key_disclosure.json release/verification-keys-temp/
+          cp build/verification_key_transfer.json release/verification-keys-temp/
+          cp build/verification_key_unshield.json release/verification-keys-temp/
+
+          # Create tarball of verification keys (all at root)
+          cd release/verification-keys-temp
+          tar -czf ../orbinum-verification-keys-${VERSION}.tar.gz *
+          cd ../..
+
+          echo "✅ Asset 3 created: orbinum-verification-keys-${VERSION}.tar.gz"
+          echo "   Contents (3 files at root - .json):"
+          tar -tzf release/orbinum-verification-keys-${VERSION}.tar.gz
+          echo ""
+
+          # Copy checksums
+          cp release/checksums.txt release/checksums-${VERSION}.txt
+
+          echo "📦 Assets summary:"
+          ls -lh release/*.tar.gz release/checksums-${VERSION}.txt
+          echo ""
+          echo "✅ All 3 assets ready for release"
+
+      - name: Create release notes
+        id: release_notes
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+
+          # Extract changelog section
+          sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '$ d' > release_notes.md
+
+          # Add integration instructions
+          cat >> release_notes.md << 'EOFNOTES'
+
+          ## 📦 Release Assets
+
+          This release includes **3 compressed archives**:
+
+          ### 1. `orbinum-circuits-{version}.tar.gz` (Arkworks - ~22 MB)
+          Contains files for **Rust/arkworks proof generation**:
+          - `disclosure.wasm`, `transfer.wasm`, `unshield.wasm` - Witness calculators
+          - `disclosure_pk.ark`, `transfer_pk.ark`, `unshield_pk.ark` - Proving keys (arkworks format)
+
+          **Total: 6 files at root** (no nested directories)
+
+          ### 2. `orbinum-circuits-snarkjs-{version}.tar.gz` (snarkjs - ~24 MB)
+          Contains files for **JavaScript/TypeScript proof generation**:
+          - `disclosure_pk.zkey`, `transfer_pk.zkey`, `unshield_pk.zkey` - Proving keys (snarkjs format)
+
+          **Total: 3 files at root** (no nested directories)  
+          **Note:** You still need the `.wasm` files from Asset 1 to use snarkjs
+
+          ### 3. `orbinum-verification-keys-{version}.tar.gz` (VKs - ~10 KB)
+          Contains **verification keys** for on-chain validation:
+          - `verification_key_disclosure.json`
+          - `verification_key_transfer.json`
+          - `verification_key_unshield.json`
+
+          **Total: 3 files at root** (no nested directories)
+
+          ## 🚀 Included Circuits
+
+          - **Disclosure Circuit**: Selective revelation of note fields (1,584 constraints)
+          - **Transfer Circuit**: Private token transfers with EdDSA signatures (41,212 constraints)
+          - **Unshield Circuit**: Convert private notes to public tokens (11,718 constraints)
+
+          ## 🔗 Integration Examples
+
+          ### JavaScript/TypeScript (snarkjs)
+          ```bash
+          # Download both arkworks (for .wasm) and snarkjs (for .zkey)
+          wget https://github.com/orbinum/circuits/releases/download/{version}/orbinum-circuits-{version}.tar.gz
+          wget https://github.com/orbinum/circuits/releases/download/{version}/orbinum-circuits-snarkjs-{version}.tar.gz
+          tar -xzf orbinum-circuits-{version}.tar.gz
+          tar -xzf orbinum-circuits-snarkjs-{version}.tar.gz
+          ```
+
+          ```typescript
+          import { groth16 } from 'snarkjs';
+
+          // Generate proof with transfer circuit
+          const { proof, publicSignals } = await groth16.fullProve(
+            inputs,
+            'transfer.wasm',           // From orbinum-circuits-{version}.tar.gz
+            'transfer_pk.zkey'          // From orbinum-circuits-snarkjs-{version}.tar.gz
+          );
+          ```
+
+          ### Rust/Substrate (arkworks + optimized .ark file)
+          ```bash
+          # Download arkworks files only (.wasm + .ark)
+          wget https://github.com/orbinum/circuits/releases/download/{version}/orbinum-circuits-{version}.tar.gz
+          tar -xzf orbinum-circuits-{version}.tar.gz
+          ```
+
+          ```rust
+          use ark_bn254::Bn254;
+          use ark_groth16::{Groth16, ProvingKey};
+          use ark_serialize::CanonicalDeserialize;
+          use std::fs::File;
+
+          // Load pre-serialized .ark file (2-3x faster)
+          let mut ark_file = File::open("transfer_pk.ark")?;
+          let proving_key = ProvingKey::<Bn254>::deserialize_compressed(&mut ark_file)?;
+
+          // Generate proof
+          let proof = Groth16::<Bn254>::prove(&proving_key, circuit, &mut rng)?;
+          ```
+
+          ### Substrate Runtime (on-chain verification)
+          ```bash
+          # Download verification keys
+          wget https://github.com/orbinum/circuits/releases/download/{version}/orbinum-verification-keys-{version}.tar.gz
+          tar -xzf orbinum-verification-keys-{version}.tar.gz
+          ```
+
+          The JSON verification keys are registered in the runtime using `pallet-zk-verifier`.
+
+          ## 📊 File Sizes
+
+          | Circuit | WASM | .ark | .zkey | VK (JSON) |
+          |---------|------|------|-------|-----------|
+          | Disclosure | ~200 KB | ~600 KB | 689 KB | 3.4 KB |
+          | Transfer | ~400 KB | ~17 MB | 19 MB | 3.6 KB |
+          | Unshield | ~250 KB | ~4.5 MB | 5.1 MB | 3.6 KB |
+
+          **Asset 1 (arkworks):** ~22 MB compressed (.wasm + .ark)  
+          **Asset 2 (snarkjs):** ~24 MB compressed (.zkey)  
+          **Asset 3 (verification keys):** ~10 KB compressed (.json)
+
+          ## ⚠️ Security Notice
+
+          These keys are generated with a **development setup** for testing purposes only.
+
+          **Production deployment requires:**
+          - Multi-party trusted setup ceremony (50+ independent contributors)
+          - Hardware security modules (HSMs) for key contributors
+          - Public verification of ceremony transcripts
+
+          ## 📥 Quick Download
+
+          ```bash
+          # For Rust/arkworks proof generation
+          wget https://github.com/orbinum/circuits/releases/download/{version}/orbinum-circuits-{version}.tar.gz
+          tar -xzf orbinum-circuits-{version}.tar.gz
+
+          # For JavaScript/snarkjs proof generation (needs both)
+          wget https://github.com/orbinum/circuits/releases/download/{version}/orbinum-circuits-{version}.tar.gz
+          wget https://github.com/orbinum/circuits/releases/download/{version}/orbinum-circuits-snarkjs-{version}.tar.gz
+          tar -xzf orbinum-circuits-{version}.tar.gz
+          tar -xzf orbinum-circuits-snarkjs-{version}.tar.gz
+
+          # For on-chain verification (runtime)
+          wget https://github.com/orbinum/circuits/releases/download/{version}/orbinum-verification-keys-{version}.tar.gz
+          tar -xzf orbinum-verification-keys-{version}.tar.gz
+          ```
+          EOFNOTES
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release/orbinum-circuits-*.tar.gz
+            release/orbinum-circuits-snarkjs-*.tar.gz
+            release/orbinum-verification-keys-*.tar.gz
+            release/checksums-*.txt
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Announce release
+        run: |
+          echo "🎉 Release ${{ github.ref_name }} published!"
+          echo "Download artifacts from: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
