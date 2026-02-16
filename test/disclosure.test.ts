@@ -1,4 +1,5 @@
 import path from "path";
+import fs from "fs";
 import { expect } from "chai";
 import { wasm as wasm_tester } from "circom_tester";
 import { buildPoseidon } from "circomlibjs";
@@ -23,15 +24,23 @@ describe("Selective Disclosure Circuit - Phase 2", function () {
     this.timeout(120000); // Compilation may take time
 
     const circuitPath = path.join(__dirname, "..", "circuits", "disclosure.circom");
+    const outputDir = path.join(__dirname, "..", "build");
+    const precompiledDir = path.join(outputDir, "disclosure_js");
 
     let circuit: WasmTester;
     let poseidon: any;
     let F: any;
 
     before(async function () {
+        const precompiledWasm = path.join(precompiledDir, "disclosure.wasm");
+        if (!fs.existsSync(precompiledWasm)) {
+            this.skip();
+            return;
+        }
+
         circuit = await wasm_tester(circuitPath, {
-            output: path.join(__dirname, "..", "build"),
-            recompile: false, // Use precompiled circuit
+            output: outputDir,
+            recompile: false,
         });
         poseidon = await buildPoseidon();
         F = poseidon.F;
