@@ -30,6 +30,7 @@ help:
 	@echo ""
 	@echo "Release:"
 	@echo "  make release       Create release artifacts"
+	@echo "  make prepare-npm   Prepare npm package for testing"
 	@echo ""
 
 # Install dependencies
@@ -91,9 +92,7 @@ check: format-check lint test
 # Clean build artifacts
 clean:
 	@echo "🧹 Cleaning build artifacts..."
-	rm -rf build/*.r1cs build/*.sym build/*.wtns build/*_js
-	rm -rf keys/*.zkey
-	rm -rf ptau/*.ptau
+	rm -rf build/ ptau/ keys/ pkg/ node_modules/ package-lock.json
 	@echo "✅ Cleanup complete"
 
 # Clean everything including node_modules
@@ -101,6 +100,34 @@ clean-all: clean
 	@echo "🧹 Removing node_modules..."
 	rm -rf node_modules package-lock.json
 	@echo "✅ Deep cleanup complete"
+
+# Prepare npm package (for local testing)
+prepare-npm:
+	@echo "📦 Preparing npm package..."
+	@mkdir -p pkg
+	@echo "Copying circuit artifacts..."
+	@cp build/disclosure_js/disclosure.wasm pkg/ 2>/dev/null || echo "⚠️  disclosure.wasm not found"
+	@cp build/transfer_js/transfer.wasm pkg/ 2>/dev/null || echo "⚠️  transfer.wasm not found"
+	@cp build/unshield_js/unshield.wasm pkg/ 2>/dev/null || echo "⚠️  unshield.wasm not found"
+	@cp keys/disclosure_pk.zkey pkg/ 2>/dev/null || echo "⚠️  disclosure_pk.zkey not found"
+	@cp keys/transfer_pk.zkey pkg/ 2>/dev/null || echo "⚠️  transfer_pk.zkey not found"
+	@cp keys/unshield_pk.zkey pkg/ 2>/dev/null || echo "⚠️  unshield_pk.zkey not found"
+	@cp keys/disclosure_pk.ark pkg/ 2>/dev/null || echo "⚠️  disclosure_pk.ark not found"
+	@cp keys/transfer_pk.ark pkg/ 2>/dev/null || echo "⚠️  transfer_pk.ark not found"
+	@cp keys/unshield_pk.ark pkg/ 2>/dev/null || echo "⚠️  unshield_pk.ark not found"
+	@cp build/verification_key_disclosure.json pkg/ 2>/dev/null || echo "⚠️  verification_key_disclosure.json not found"
+	@cp build/verification_key_transfer.json pkg/ 2>/dev/null || echo "⚠️  verification_key_transfer.json not found"
+	@cp build/verification_key_unshield.json pkg/ 2>/dev/null || echo "⚠️  verification_key_unshield.json not found"
+	@echo "Copying npm metadata..."
+	@cp npm/README.md pkg/
+	@cp npm/index.js pkg/
+	@cp npm/index.d.ts pkg/
+	@cp LICENSE pkg/
+	@cp npm/package.json.template pkg/package.json
+	@echo "✅ Package ready in pkg/"
+	@echo ""
+	@echo "To test locally:"
+	@echo "  cd pkg && npm pack"
 
 # Create release artifacts
 release: clean build

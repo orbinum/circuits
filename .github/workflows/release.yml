@@ -1,279 +1,251 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
+    push:
+        branches: [main]
+        paths:
+            - "package.json"
+            - "CHANGELOG.md"
+            - "circuits/**"
+            - "scripts/**"
+            - "npm/**"
+            - "Makefile"
+            - ".github/workflows/release.yml"
 
 permissions:
-  contents: write
+    contents: write
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+    release:
+        name: Build, Release, and Publish
+        runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20.x"
-          cache: "npm"
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "22"
+                  cache: "npm"
 
-      - name: Install Circom
-        run: |
-          wget https://github.com/iden3/circom/releases/download/v2.2.3/circom-linux-amd64
-          chmod +x circom-linux-amd64
-          sudo mv circom-linux-amd64 /usr/local/bin/circom
-          circom --version
+            - name: Extract version from package.json
+              id: version
+              run: |
+                  VERSION=$(node -p "require('./package.json').version")
+                  echo "version=$VERSION" >> $GITHUB_OUTPUT
+                  echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+                  echo "📦 Version: $VERSION"
 
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+            - name: Check if tag already exists
+              id: check_tag
+              run: |
+                  if git rev-parse "refs/tags/v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+                    echo "exists=true" >> $GITHUB_OUTPUT
+                    echo "⚠️  Tag v${{ steps.version.outputs.version }} already exists. Skipping release."
+                  else
+                    echo "exists=false" >> $GITHUB_OUTPUT
+                    echo "✅ Tag v${{ steps.version.outputs.version }} does not exist, proceeding"
+                  fi
 
-      - name: Build artifacts information
-        run: |
-          echo "ℹ️  Rust/Substrate Integration"
-          echo ""
-          echo "The .zkey file works directly with ark-circom (Rust library):"
-          echo "  https://github.com/arkworks-rs/circom-compat"
-          echo ""
-          echo "Example usage:"
-          echo "  use ark_circom::read_zkey;"
-          echo "  let (pk, matrices) = read_zkey(&mut zkey_file)?;"
-          echo "  let proof = Groth16::<Bn254>::prove(&pk, circuit, &mut rng)?;"
-          echo ""
-          echo "No .ark conversion needed!"
+            - name: Install Circom
+              if: steps.check_tag.outputs.exists == 'false'
+              run: |
+                  wget https://github.com/iden3/circom/releases/download/v2.2.3/circom-linux-amd64
+                  chmod +x circom-linux-amd64
+                  sudo mv circom-linux-amd64 /usr/local/bin/circom
+                  circom --version
 
-      - name: Install dependencies
-        run: npm ci
+            - name: Setup Rust
+              if: steps.check_tag.outputs.exists == 'false'
+              uses: actions-rs/toolchain@v1
+              with:
+                  profile: minimal
+                  toolchain: stable
+                  override: true
 
-      - name: Build all circuits
-        run: npm run build-all
+            - name: Install dependencies
+              if: steps.check_tag.outputs.exists == 'false'
+              run: npm ci
 
-      - name: Convert .zkey to .ark format
-        run: |
-          echo "🔄 Converting all .zkey files to .ark format using Rust script..."
+            - name: Build all circuits
+              if: steps.check_tag.outputs.exists == 'false'
+              run: npm run build-all
 
-          # Install nightly Rust with script support
-          rustup toolchain install nightly --profile minimal
-          rustup component add rust-src --toolchain nightly
+            - name: Convert .zkey to .ark format
+              if: steps.check_tag.outputs.exists == 'false'
+              run: |
+                  echo "🔄 Converting all .zkey files to .ark format using Rust script..."
 
-          echo ""
-          echo "Converting disclosure circuit..."
-          cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
-            keys/disclosure_pk.zkey \
-            keys/disclosure_pk.ark
+                  rustup toolchain install nightly --profile minimal
+                  rustup component add rust-src --toolchain nightly
 
-          echo ""
-          echo "Converting transfer circuit..."
-          cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
-            keys/transfer_pk.zkey \
-            keys/transfer_pk.ark
+                  cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
+                    keys/disclosure_pk.zkey \
+                    keys/disclosure_pk.ark
 
-          echo ""
-          echo "Converting unshield circuit..."
-          cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
-            keys/unshield_pk.zkey \
-            keys/unshield_pk.ark
+                  cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
+                    keys/transfer_pk.zkey \
+                    keys/transfer_pk.ark
 
-          echo ""
-          echo "✓ All conversions complete"
-          echo ""
-          echo "Generated .ark files:"
-          ls -lh keys/*_pk.ark
-          echo "Verifying generated artifacts for all circuits..."
-          echo ""
-          echo "=== Disclosure Circuit ==="
-          ls -lh build/disclosure_js/disclosure.wasm && echo "✓ WASM file present"
-          ls -lh build/verification_key_disclosure.json && echo "✓ Verification key present"
-          ls -lh keys/disclosure_pk.zkey && echo "✓ Proving key (.zkey) present"
-          ls -lh keys/disclosure_pk.ark && echo "✓ Arkworks key (.ark) present"
+                  cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
+                    keys/unshield_pk.zkey \
+                    keys/unshield_pk.ark
 
-          echo ""
-          echo "=== Transfer Circuit ==="
-          ls -lh build/transfer_js/transfer.wasm && echo "✓ WASM file present"
-          ls -lh build/verification_key_transfer.json && echo "✓ Verification key present"
-          ls -lh keys/transfer_pk.zkey && echo "✓ Proving key (.zkey) present"
-          ls -lh keys/transfer_pk.ark && echo "✓ Arkworks key (.ark) present"
+                  echo "✓ All conversions complete"
+                  ls -lh keys/*_pk.ark
 
-          echo ""
-          echo "=== Unshield Circuit ==="
-          ls -lh build/unshield_js/unshield.wasm && echo "✓ WASM file present"
-          ls -lh build/verification_key_unshield.json && echo "✓ Verification key present"
-          ls -lh keys/unshield_pk.zkey && echo "✓ Proving key (.zkey) present"
-          ls -lh keys/unshield_pk.ark && echo "✓ Arkworks key (.ark) present"
+            - name: Generate checksums
+              if: steps.check_tag.outputs.exists == 'false'
+              run: |
+                  mkdir -p release
+                  cd build
 
-          echo ""
-          echo "✓ All 12 required files present for release (4 files × 3 circuits)"
-          echo ""
-          echo "Files available:"
-          echo "  - .wasm → Witness calculator"
-          echo "  - .json → Verification keys"
-          echo "  - .zkey → snarkjs (JavaScript/TypeScript)"
-          echo "  - .ark  → arkworks (Rust/Substrate, optimized)"
+                  sha256sum disclosure_js/disclosure.wasm > ../release/checksums.txt
+                  sha256sum verification_key_disclosure.json >> ../release/checksums.txt
+                  sha256sum transfer_js/transfer.wasm >> ../release/checksums.txt
+                  sha256sum verification_key_transfer.json >> ../release/checksums.txt
+                  sha256sum unshield_js/unshield.wasm >> ../release/checksums.txt
+                  sha256sum verification_key_unshield.json >> ../release/checksums.txt
 
-      - name: Generate checksums
-        run: |
-          mkdir -p release
-          cd build
+                  cd ../keys
+                  sha256sum disclosure_pk.zkey >> ../release/checksums.txt
+                  sha256sum disclosure_pk.ark >> ../release/checksums.txt
+                  sha256sum transfer_pk.zkey >> ../release/checksums.txt
+                  sha256sum transfer_pk.ark >> ../release/checksums.txt
+                  sha256sum unshield_pk.zkey >> ../release/checksums.txt
+                  sha256sum unshield_pk.ark >> ../release/checksums.txt
 
-          # Disclosure
-          sha256sum disclosure_js/disclosure.wasm > ../release/checksums.txt
-          sha256sum verification_key_disclosure.json >> ../release/checksums.txt
+            - name: Package artifacts
+              if: steps.check_tag.outputs.exists == 'false'
+              run: |
+                  VERSION=${{ steps.version.outputs.tag }}
 
-          # Transfer
-          sha256sum transfer_js/transfer.wasm >> ../release/checksums.txt
-          sha256sum verification_key_transfer.json >> ../release/checksums.txt
+                  mkdir -p release/arkworks-temp
+                  mkdir -p release/snarkjs-temp
+                  mkdir -p release/verification-keys-temp
 
-          # Unshield
-          sha256sum unshield_js/unshield.wasm >> ../release/checksums.txt
-          sha256sum verification_key_unshield.json >> ../release/checksums.txt
+                  cp build/disclosure_js/disclosure.wasm release/arkworks-temp/
+                  cp build/transfer_js/transfer.wasm release/arkworks-temp/
+                  cp build/unshield_js/unshield.wasm release/arkworks-temp/
+                  cp keys/disclosure_pk.ark release/arkworks-temp/
+                  cp keys/transfer_pk.ark release/arkworks-temp/
+                  cp keys/unshield_pk.ark release/arkworks-temp/
 
-          cd ../keys
+                  cd release/arkworks-temp
+                  tar -czf ../orbinum-circuits-${VERSION}.tar.gz *
+                  cd ../..
 
-          # All zkey and ark files
-          sha256sum disclosure_pk.zkey >> ../release/checksums.txt
-          sha256sum disclosure_pk.ark >> ../release/checksums.txt
-          sha256sum transfer_pk.zkey >> ../release/checksums.txt
-          sha256sum transfer_pk.ark >> ../release/checksums.txt
-          sha256sum unshield_pk.zkey >> ../release/checksums.txt
-          sha256sum unshield_pk.ark >> ../release/checksums.txt
+                  cp keys/disclosure_pk.zkey release/snarkjs-temp/
+                  cp keys/transfer_pk.zkey release/snarkjs-temp/
+                  cp keys/unshield_pk.zkey release/snarkjs-temp/
 
-          cd ../release
-          echo "Generated checksums for all 12 files:"
-          cat checksums.txt
+                  cd release/snarkjs-temp
+                  tar -czf ../orbinum-circuits-snarkjs-${VERSION}.tar.gz *
+                  cd ../..
 
-      - name: Package artifacts
-        run: |
-          VERSION=${{ github.ref_name }}
+                  cp build/verification_key_disclosure.json release/verification-keys-temp/
+                  cp build/verification_key_transfer.json release/verification-keys-temp/
+                  cp build/verification_key_unshield.json release/verification-keys-temp/
 
-          # Create temporary directories for packaging
-          mkdir -p release/arkworks-temp
-          mkdir -p release/snarkjs-temp
-          mkdir -p release/verification-keys-temp
+                  cd release/verification-keys-temp
+                  tar -czf ../orbinum-verification-keys-${VERSION}.tar.gz *
+                  cd ../..
 
-          echo "📦 Preparing release assets..."
+                  mv release/checksums.txt release/checksums-${VERSION}.txt
 
-          # Asset 1: .wasm and .ark files for arkworks/Rust (at root, no nested directories)
-          echo ""
-          echo "1️⃣  Copying arkworks files (.wasm, .ark)..."
-          cp build/disclosure_js/disclosure.wasm release/arkworks-temp/
-          cp build/transfer_js/transfer.wasm release/arkworks-temp/
-          cp build/unshield_js/unshield.wasm release/arkworks-temp/
-          cp keys/disclosure_pk.ark release/arkworks-temp/
-          cp keys/transfer_pk.ark release/arkworks-temp/
-          cp keys/unshield_pk.ark release/arkworks-temp/
+                  ls -lh release/*.tar.gz release/checksums-${VERSION}.txt
 
-          # Create tarball of arkworks files (all at root)
-          cd release/arkworks-temp
-          tar -czf ../orbinum-circuits-${VERSION}.tar.gz *
-          cd ../..
+            - name: Create release notes
+              if: steps.check_tag.outputs.exists == 'false'
+              run: |
+                  VERSION=${{ steps.version.outputs.version }}
 
-          echo "✅ Asset 1 created: orbinum-circuits-${VERSION}.tar.gz"
-          echo "   Contents (6 files at root - .wasm + .ark):"
-          tar -tzf release/orbinum-circuits-${VERSION}.tar.gz
-          echo ""
+                  awk '/^## \[Unreleased\]/{flag=1;next}/^## \[/{if(flag){exit}}flag' CHANGELOG.md > release_unreleased.md
 
-          # Asset 2: .zkey files for snarkjs/JavaScript (at root, no nested directories)
-          echo "2️⃣  Copying snarkjs files (.zkey)..."
-          cp keys/disclosure_pk.zkey release/snarkjs-temp/
-          cp keys/transfer_pk.zkey release/snarkjs-temp/
-          cp keys/unshield_pk.zkey release/snarkjs-temp/
+                  {
+                    echo "## ${{ steps.version.outputs.tag }}"
+                    echo ""
+                    if [ -s release_unreleased.md ]; then
+                      cat release_unreleased.md
+                    else
+                      echo "- Release generated from CI."
+                    fi
+                    echo ""
+                    echo "## Release Assets"
+                    echo ""
+                    echo "- orbinum-circuits-${{ steps.version.outputs.tag }}.tar.gz (.wasm + .ark)"
+                    echo "- orbinum-circuits-snarkjs-${{ steps.version.outputs.tag }}.tar.gz (.zkey)"
+                    echo "- orbinum-verification-keys-${{ steps.version.outputs.tag }}.tar.gz (.json)"
+                  } > release_notes.md
 
-          # Create tarball of snarkjs files (all at root)
-          cd release/snarkjs-temp
-          tar -czf ../orbinum-circuits-snarkjs-${VERSION}.tar.gz *
-          cd ../..
+            - name: Create and push tag
+              if: steps.check_tag.outputs.exists == 'false'
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
+                  git push origin "${{ steps.version.outputs.tag }}"
 
-          echo "✅ Asset 2 created: orbinum-circuits-snarkjs-${VERSION}.tar.gz"
-          echo "   Contents (3 files at root - .zkey):"
-          tar -tzf release/orbinum-circuits-snarkjs-${VERSION}.tar.gz
-          echo ""
+            - name: Create GitHub Release
+              if: steps.check_tag.outputs.exists == 'false'
+              uses: softprops/action-gh-release@v1
+              with:
+                  tag_name: ${{ steps.version.outputs.tag }}
+                  name: Release ${{ steps.version.outputs.tag }}
+                  files: |
+                      release/*.tar.gz
+                      release/*.txt
+                  body_path: release_notes.md
+                  draft: false
+                  prerelease: false
+                  fail_on_unmatched_files: false
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-          # Asset 3: All verification keys JSON (at root, no nested directories)
-          echo "3️⃣  Copying verification keys (JSON)..."
-          cp build/verification_key_disclosure.json release/verification-keys-temp/
-          cp build/verification_key_transfer.json release/verification-keys-temp/
-          cp build/verification_key_unshield.json release/verification-keys-temp/
+            - name: Prepare npm package
+              if: steps.check_tag.outputs.exists == 'false'
+              run: |
+                  VERSION=${{ steps.version.outputs.version }}
+                  mkdir -p pkg
 
-          # Create tarball of verification keys (all at root)
-          cd release/verification-keys-temp
-          tar -czf ../orbinum-verification-keys-${VERSION}.tar.gz *
-          cd ../..
+                  cp build/disclosure_js/disclosure.wasm pkg/
+                  cp build/transfer_js/transfer.wasm pkg/
+                  cp build/unshield_js/unshield.wasm pkg/
 
-          echo "✅ Asset 3 created: orbinum-verification-keys-${VERSION}.tar.gz"
-          echo "   Contents (3 files at root - .json):"
-          tar -tzf release/orbinum-verification-keys-${VERSION}.tar.gz
-          echo ""
+                  cp keys/disclosure_pk.zkey pkg/
+                  cp keys/transfer_pk.zkey pkg/
+                  cp keys/unshield_pk.zkey pkg/
 
-          # Rename checksums with version (remove original)
-          mv release/checksums.txt release/checksums-${VERSION}.txt
+                  cp keys/disclosure_pk.ark pkg/
+                  cp keys/transfer_pk.ark pkg/
+                  cp keys/unshield_pk.ark pkg/
 
-          echo "📦 Assets summary:"
-          ls -lh release/*.tar.gz release/checksums-${VERSION}.txt
-          echo ""
-          echo "✅ All 3 assets ready for release"
+                  cp build/verification_key_disclosure.json pkg/
+                  cp build/verification_key_transfer.json pkg/
+                  cp build/verification_key_unshield.json pkg/
 
-      - name: Create release notes
-        id: release_notes
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
+                  cp npm/README.md pkg/
+                  cp npm/index.js pkg/
+                  cp npm/index.d.ts pkg/
+                  cp LICENSE pkg/
 
-          # Extract changelog section
-          sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '$ d' > release_notes.md
+                  cat npm/package.json.template | sed "s/\"version\": \".*\"/\"version\": \"${VERSION}\"/" > pkg/package.json
 
-          # Add asset information
-          cat >> release_notes.md << 'EOFNOTES'
+            - name: Setup Node.js for npm publish
+              if: steps.check_tag.outputs.exists == 'false'
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "22"
+                  registry-url: "https://registry.npmjs.org"
 
-          ## Release Assets
-
-          This release includes **3 compressed archives**:
-
-          ### 1. `orbinum-circuits-{version}.tar.gz` (~22 MB)
-          For **Rust/arkworks proof generation**:
-          - 3 WASM witness calculators (`.wasm`)
-          - 3 arkworks proving keys (`.ark`)
-
-          ### 2. `orbinum-circuits-snarkjs-{version}.tar.gz` (~24 MB)
-          For **JavaScript/TypeScript proof generation**:
-          - 3 snarkjs proving keys (`.zkey`)
-          - **Note:** Requires `.wasm` files from Asset 1
-
-          ### 3. `orbinum-verification-keys-{version}.tar.gz` (~10 KB)
-          For **on-chain verification** (Substrate runtime):
-          - 3 verification keys in JSON format
-
-          ## Documentation
-
-          For integration examples, circuit specifications, and usage instructions, see the [docs](https://github.com/orbinum/circuits/tree/main/docs) directory.
-
-          ## Security Notice
-
-          These keys are for **testing purposes only**. Production deployment requires a multi-party trusted setup ceremony.
-          EOFNOTES
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            release/*.tar.gz
-            release/*.txt
-          body_path: release_notes.md
-          draft: false
-          prerelease: false
-          fail_on_unmatched_files: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Announce release
-        run: |
-          echo "🎉 Release ${{ github.ref_name }} published!"
-          echo "Download artifacts from: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+            - name: Publish to npm
+              if: steps.check_tag.outputs.exists == 'false'
+              run: |
+                  cd pkg
+                  npm publish
+              env:
+                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

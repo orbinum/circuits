@@ -2,6 +2,7 @@
 /build/
 keys/
 ptau/
+pkg/
 
 # Compiled outputs
 *.wtns

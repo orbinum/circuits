@@ -1,0 +1,38 @@
+{
+  "name": "@orbinum/circuits",
+  "version": "0.0.0",
+  "description": "Zero-Knowledge circuits for Orbinum privacy blockchain",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "*.wasm",
+    "*.zkey",
+    "*.ark",
+    "*.json",
+    "index.js",
+    "index.d.ts",
+    "LICENSE"
+  ],
+  "keywords": [
+    "zk-snark",
+    "groth16",
+    "circom",
+    "circuits",
+    "privacy",
+    "orbinum",
+    "zero-knowledge"
+  ],
+  "author": "Orbinum",
+  "license": "GPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/orbinum/circuits"
+  },
+  "homepage": "https://github.com/orbinum/circuits",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

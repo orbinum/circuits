@@ -5,7 +5,26 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-02-16
+
+### Added
+
+- **npm package distribution**: Added npm packaging assets under `npm/`:
+    - `npm/package.json.template`
+    - `npm/index.js`
+    - `npm/index.d.ts`
+    - `npm/README.md`
+- **Release automation for npm**: Added release workflow steps to assemble `pkg/` and publish `@orbinum/circuits` to npm from CI.
+- **Local package preparation target**: Added `make prepare-npm` to build a local `pkg/` package structure for validation before release.
+
+### Changed
+
+- **Release pipeline**: `.github/workflows/release.yml` now prepares npm-ready artifacts from circuit outputs (`.wasm`, `.zkey`, `.ark`, `verification_key_*.json`) and publishes with `NPM_TOKEN`.
+- **Repository docs**: Updated `README.md` to document npm installation (`npm install @orbinum/circuits`) and package-based consumption.
+- **Ignore rules**: Added `pkg/` to `.gitignore` because it is now a generated release/package directory.
+- **Cleanup behavior**: Updated clean targets to include generated package/release working directories used for npm packaging.
+- **Disclosure test behavior**: `test/disclosure.test.ts` now skips suites that require precompiled artifacts when `build/disclosure_js` is missing, instead of failing in environments where `make build` has not been run.
+- **Commit hook scope**: `.husky/pre-commit` no longer runs `npm test`; it now executes only staged format/lint checks via `lint-staged`.
 
 ## [0.2.1] - 2026-02-09
 
