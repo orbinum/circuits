@@ -1,6 +1,5 @@
 # Orbinum Circuits
 
-[![CI](https://github.com/orbinum/circuits/workflows/CI/badge.svg)](https://github.com/orbinum/circuits/actions)
 [![npm version](https://img.shields.io/npm/v/@orbinum/circuits.svg)](https://www.npmjs.com/package/@orbinum/circuits)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
