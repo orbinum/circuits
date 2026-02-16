@@ -1,6 +1,6 @@
 {
   "name": "orbinum-circuits",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Zero-Knowledge circuits for Orbinum privacy blockchain",
   "scripts": {
     "compile": "npm run compile:transfer",
@@ -31,7 +31,7 @@
     "bench": "ts-node benches/run-all.bench.ts",
     "bench:transfer": "ts-node benches/transfer.bench.ts",
     "bench:disclosure": "ts-node benches/disclosure.bench.ts",
-    "clean": "rm -rf build/*.zkey build/*.json build/*.wtns ptau/",
+    "clean": "rm -rf build/ ptau/ keys/ node_modules/ package-lock.json",
     "format": "prettier --write \"**/*.{ts,js,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,js,json,md}\"",
     "lint:circom": "bash scripts/utils/lint-circom.sh",
