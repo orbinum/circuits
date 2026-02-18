@@ -246,7 +246,12 @@ jobs:
               if: steps.check_tag.outputs.exists == 'false'
               run: |
                   cd pkg
-                  npm publish
+                  VERSION=${{ steps.version.outputs.version }}
+                  if npm view @orbinum/circuits@$VERSION version >/dev/null 2>&1; then
+                    echo "⚠️ Version $VERSION already published on npm. Skipping publish."
+                  else
+                    npm publish
+                  fi
               env:
                   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
