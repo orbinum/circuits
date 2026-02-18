@@ -5,6 +5,16 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-02-18
+
+### Added
+
+- **CDN**: Automated deployment of circuit artifacts to Cloudflare R2 (`circuits.orbinum.io`) via CI/CD.
+
+### Changed
+
+- **Configuration**: Updated default circuit URL in `proof-generator` to point to the new global CDN.
+
 ## [0.3.0] - 2026-02-16
 
 ### Added

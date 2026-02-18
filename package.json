@@ -1,6 +1,6 @@
 {
   "name": "orbinum-circuits",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Zero-Knowledge circuits for Orbinum privacy blockchain",
   "scripts": {
     "compile": "npm run compile:transfer",
