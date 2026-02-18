@@ -249,3 +249,16 @@ jobs:
                   npm publish
               env:
                   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+            - name: Upload to Cloudflare R2
+              if: steps.check_tag.outputs.exists == 'false'
+              env:
+                  AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+                  AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+                  AWS_DEFAULT_REGION: auto
+                  AWS_ENDPOINT_URL: https://${{ secrets.CF_ACCOUNT_ID }}.r2.cloudflarestorage.com
+              run: |
+                  echo "☁️ Syncing artifacts to Cloudflare R2 (v1)..."
+                  # Sync pkg directory to v1 folder in bucket
+                  aws s3 sync pkg/ s3://orbinum-circuits/v1/ --endpoint-url $AWS_ENDPOINT_URL --no-progress
+                  echo "✅ Upload complete"
