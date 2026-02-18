@@ -259,6 +259,7 @@ jobs:
                   AWS_ENDPOINT_URL: https://${{ secrets.CF_ACCOUNT_ID }}.r2.cloudflarestorage.com
               run: |
                   echo "☁️ Syncing artifacts to Cloudflare R2 (v1)..."
+                  ls -la pkg/ || echo "pkg/ not found"
                   # Sync pkg directory to v1 folder in bucket
-                  aws s3 sync pkg/ s3://orbinum-circuits/v1/ --endpoint-url $AWS_ENDPOINT_URL --no-progress
+                  aws s3 sync pkg s3://orbinum-circuits/v1/ --endpoint-url $AWS_ENDPOINT_URL --no-progress
                   echo "✅ Upload complete"
