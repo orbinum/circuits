@@ -261,5 +261,5 @@ jobs:
                   echo "☁️ Syncing artifacts to Cloudflare R2 (v1)..."
                   ls -la pkg/ || echo "pkg/ not found"
                   # Sync pkg directory to v1 folder in bucket
-                  aws s3 sync pkg s3://orbinum-circuits/v1/ --endpoint-url $AWS_ENDPOINT_URL --no-progress
+                  aws s3 sync pkg s3://circuits/v1/ --endpoint-url $AWS_ENDPOINT_URL --no-progress
                   echo "✅ Upload complete"
