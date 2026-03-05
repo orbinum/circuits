@@ -31,15 +31,15 @@ else
 fi
 
 # Build all circuits
-CIRCUITS=("disclosure" "transfer" "unshield")
+CIRCUITS=("disclosure" "transfer" "unshield" "private_link")
 
 for i in "${!CIRCUITS[@]}"; do
     CIRCUIT="${CIRCUITS[$i]}"
     STEP=$((i + 2))
     
-    echo -e "${BLUE}[Step $STEP/4]${NC} Building ${CIRCUIT} circuit..."
+    echo -e "${BLUE}[Step $STEP/5]${NC} Building ${CIRCUIT} circuit..."
     echo ""
-    npm run full-build:${CIRCUIT}
+    npm run full-build:${CIRCUIT//_/-}
     echo ""
 done
 
@@ -64,6 +64,11 @@ echo -e "${YELLOW}Unshield Circuit:${NC}"
 echo -e "  ${YELLOW}•${NC} build/unshield_js/unshield.wasm"
 echo -e "  ${YELLOW}•${NC} keys/unshield_pk.zkey"
 echo -e "  ${YELLOW}•${NC} build/verification_key_unshield.json"
+echo ""
+echo -e "${YELLOW}Private Link Circuit:${NC}"
+echo -e "  ${YELLOW}•${NC} build/private_link_js/private_link.wasm"
+echo -e "  ${YELLOW}•${NC} keys/private_link_pk.zkey"
+echo -e "  ${YELLOW}•${NC} build/verification_key_private_link.json"
 echo ""
 echo -e "${BLUE}Integration:${NC}"
 echo -e "  ${YELLOW}Wallet CLI:${NC} Copy WASM + .zkey files for client-side proving"
