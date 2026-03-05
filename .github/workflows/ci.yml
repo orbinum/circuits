@@ -2,11 +2,11 @@ name: CI - Build and Test
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ '**' ]
     tags-ignore:
       - '**'
   pull_request:
-    branches: [ main, develop ]
+    branches: [ '**' ]
 
 permissions:
   contents: read
