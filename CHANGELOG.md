@@ -5,6 +5,31 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-03-05
+
+### Added
+
+- **Circuit**: `private_link.circom` — nuevo circuito `PrivateLinkDispatch` para la operación `dispatch_as_private_link` en `pallet-account-mapping`.
+    - 487 restricciones no lineales (dos llamadas Poseidon(2) + constraint cuadrático de call_hash)
+    - 2 inputs públicos: `commitment` y `call_hash_fe`
+    - 3 inputs privados: `chain_id_fe`, `address_fe`, `blinding_fe`
+    - Esquema de commitment: `Poseidon2(Poseidon2(chain_id_fe, address_fe), blinding_fe)`
+    - Fix de seguridad crítico: constraint cuadrático `call_hash_sq <== call_hash_fe * call_hash_fe` para sobrevivir a la simplificación lineal `--O1` y prevenir ataques de replay.
+- **Scripts CI**: `compile:private-link`, `setup:private-link`, `full-build:private-link`, `convert:private-link` en `package.json`.
+- **build-all.sh**: `private_link` añadido al array `CIRCUITS` — incluido en `npm run build-all`.
+- **CI/CD** (`release.yml`): `private_link` incluido en todas las fases del pipeline de release:
+    - Conversión `.zkey` → `.ark`
+    - Generación de checksums
+    - Empaquetado en los tres archivos tar (arkworks, snarkjs, verification-keys)
+    - Paquete npm (`pkg/`)
+- **Tests de circuito** (`test/private_link.test.ts`): 15 tests — validación del esquema Poseidon y restricciones R1CS.
+- **VK embebida en runtime** (`primitives/zk-verifier/src/infrastructure/storage/verification_keys/private_link.rs`): VK Groth16/BN254 generada con el trusted setup de desarrollo, cargada en genesis.
+- **Tests Rust de VK** (`orbinum-zk-verifier`): 5 tests que validan estructura de la VK (puntos en curva, round-trip de serialización, conteo de IC points).
+
+### Changed
+
+- **package.json**: versión bump `0.3.1` → `0.4.0`.
+
 ## [0.3.1] - 2026-02-18
 
 ### Added

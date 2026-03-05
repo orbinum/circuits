@@ -95,6 +95,10 @@ jobs:
                     keys/unshield_pk.zkey \
                     keys/unshield_pk.ark
 
+                  cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
+                    keys/private_link_pk.zkey \
+                    keys/private_link_pk.ark
+
                   echo "✓ All conversions complete"
                   ls -lh keys/*_pk.ark
 
@@ -110,6 +114,8 @@ jobs:
                   sha256sum verification_key_transfer.json >> ../release/checksums.txt
                   sha256sum unshield_js/unshield.wasm >> ../release/checksums.txt
                   sha256sum verification_key_unshield.json >> ../release/checksums.txt
+                  sha256sum private_link_js/private_link.wasm >> ../release/checksums.txt
+                  sha256sum verification_key_private_link.json >> ../release/checksums.txt
 
                   cd ../keys
                   sha256sum disclosure_pk.zkey >> ../release/checksums.txt
@@ -118,6 +124,8 @@ jobs:
                   sha256sum transfer_pk.ark >> ../release/checksums.txt
                   sha256sum unshield_pk.zkey >> ../release/checksums.txt
                   sha256sum unshield_pk.ark >> ../release/checksums.txt
+                  sha256sum private_link_pk.zkey >> ../release/checksums.txt
+                  sha256sum private_link_pk.ark >> ../release/checksums.txt
 
             - name: Package artifacts
               if: steps.check_tag.outputs.exists == 'false'
@@ -131,9 +139,11 @@ jobs:
                   cp build/disclosure_js/disclosure.wasm release/arkworks-temp/
                   cp build/transfer_js/transfer.wasm release/arkworks-temp/
                   cp build/unshield_js/unshield.wasm release/arkworks-temp/
+                  cp build/private_link_js/private_link.wasm release/arkworks-temp/
                   cp keys/disclosure_pk.ark release/arkworks-temp/
                   cp keys/transfer_pk.ark release/arkworks-temp/
                   cp keys/unshield_pk.ark release/arkworks-temp/
+                  cp keys/private_link_pk.ark release/arkworks-temp/
 
                   cd release/arkworks-temp
                   tar -czf ../orbinum-circuits-${VERSION}.tar.gz *
@@ -142,6 +152,7 @@ jobs:
                   cp keys/disclosure_pk.zkey release/snarkjs-temp/
                   cp keys/transfer_pk.zkey release/snarkjs-temp/
                   cp keys/unshield_pk.zkey release/snarkjs-temp/
+                  cp keys/private_link_pk.zkey release/snarkjs-temp/
 
                   cd release/snarkjs-temp
                   tar -czf ../orbinum-circuits-snarkjs-${VERSION}.tar.gz *
@@ -150,6 +161,7 @@ jobs:
                   cp build/verification_key_disclosure.json release/verification-keys-temp/
                   cp build/verification_key_transfer.json release/verification-keys-temp/
                   cp build/verification_key_unshield.json release/verification-keys-temp/
+                  cp build/verification_key_private_link.json release/verification-keys-temp/
 
                   cd release/verification-keys-temp
                   tar -czf ../orbinum-verification-keys-${VERSION}.tar.gz *
@@ -164,7 +176,7 @@ jobs:
               run: |
                   VERSION=${{ steps.version.outputs.version }}
 
-                  awk '/^## \[Unreleased\]/{flag=1;next}/^## \[/{if(flag){exit}}flag' CHANGELOG.md > release_unreleased.md
+                  awk '/^## \[/{if(flag){exit}flag=1;next}flag' CHANGELOG.md > release_unreleased.md
 
                   {
                     echo "## ${{ steps.version.outputs.tag }}"
@@ -215,18 +227,22 @@ jobs:
                   cp build/disclosure_js/disclosure.wasm pkg/
                   cp build/transfer_js/transfer.wasm pkg/
                   cp build/unshield_js/unshield.wasm pkg/
+                  cp build/private_link_js/private_link.wasm pkg/
 
                   cp keys/disclosure_pk.zkey pkg/
                   cp keys/transfer_pk.zkey pkg/
                   cp keys/unshield_pk.zkey pkg/
+                  cp keys/private_link_pk.zkey pkg/
 
                   cp keys/disclosure_pk.ark pkg/
                   cp keys/transfer_pk.ark pkg/
                   cp keys/unshield_pk.ark pkg/
+                  cp keys/private_link_pk.ark pkg/
 
                   cp build/verification_key_disclosure.json pkg/
                   cp build/verification_key_transfer.json pkg/
                   cp build/verification_key_unshield.json pkg/
+                  cp build/verification_key_private_link.json pkg/
 
                   cp npm/README.md pkg/
                   cp npm/index.js pkg/
