@@ -40,6 +40,10 @@
     "format:check": "prettier --check \"**/*.{ts,js,json,md}\"",
     "lint:circom": "bash scripts/utils/lint-circom.sh",
     "health": "bash scripts/utils/health-check.sh",
+    "check-artifacts": "ts-node scripts/utils/check-artifacts.ts",
+    "check-artifacts:build": "ts-node scripts/utils/check-artifacts.ts --build",
+    "check-artifacts:cdn": "ts-node scripts/utils/check-artifacts.ts --cdn-only",
+    "check-artifacts:npm": "ts-node scripts/utils/check-artifacts.ts --npm-only",
     "prepare": "husky"
   },
   "lint-staged": {

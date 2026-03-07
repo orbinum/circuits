@@ -5,7 +5,7 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0] - 2026-03-05
+## [0.4.0] - 2026-03-07
 
 ### Added
 
@@ -25,10 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tests de circuito** (`test/private_link.test.ts`): 15 tests — validación del esquema Poseidon y restricciones R1CS.
 - **VK embebida en runtime** (`primitives/zk-verifier/src/infrastructure/storage/verification_keys/private_link.rs`): VK Groth16/BN254 generada con el trusted setup de desarrollo, cargada en genesis.
 - **Tests Rust de VK** (`orbinum-zk-verifier`): 5 tests que validan estructura de la VK (puntos en curva, round-trip de serialización, conteo de IC points).
+- **`scripts/utils/check-artifacts.ts`** — herramienta de comparación de artifacts:
+    - Compara SHA-256 de los artifacts locales contra CDN (`circuits.orbinum.io/v1`) y npm (`@orbinum/circuits`)
+    - Detecta qué circuitos están desactualizados en cada fuente
+    - Flag `--build` para compilar todo antes de comparar
+    - Flags `--cdn-only` / `--npm-only` para consultas parciales
+    - Exit code 1 si hay desactualizados (útil en CI)
+    - Comandos: `npm run check-artifacts`, `check-artifacts:build`, `check-artifacts:cdn`, `check-artifacts:npm`
 
 ### Changed
 
 - **package.json**: versión bump `0.3.1` → `0.4.0`.
+- **CI/CD** (`release.yml`): workflow restringido a branches `main` y `develop`.
 
 ## [0.3.1] - 2026-02-18
 
