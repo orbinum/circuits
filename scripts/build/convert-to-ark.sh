@@ -1,6 +1,6 @@
 #!/bin/bash
 # Convert .zkey files to .ark format using ark-circom Rust library
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -44,10 +44,12 @@ if ! command -v cargo &> /dev/null; then
     echo ""
     exit 1
 fi
+
+if ! command -v rustup &> /dev/null; then
+    echo -e "${RED}Error: rustup not found${NC}"
+    echo "Install rustup to use cargo +nightly -Zscript"
     exit 1
 fi
-
-ARK_VERSION=$(ark-circom --version 2>&1 || echo "unknown")
 
 echo -e "${GREEN}✓ Cargo detected${NC}"
 echo ""
@@ -64,6 +66,11 @@ if [ ! -f "$RUST_SCRIPT" ]; then
     exit 1
 fi
 
+if ! rustup toolchain list | grep -q nightly; then
+    echo -e "${YELLOW}nightly toolchain not found, installing...${NC}"
+    rustup toolchain install nightly --profile minimal
+fi
+
 if cargo +nightly -Zscript "$RUST_SCRIPT" "$ZKEY_FILE" "$ARK_FILE"; then
     echo ""
     echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
@@ -74,9 +81,9 @@ if cargo +nightly -Zscript "$RUST_SCRIPT" "$ZKEY_FILE" "$ARK_FILE"; then
     ls -lh "$ZKEY_FILE" "$ARK_FILE" | awk '{print "  " $9 " (" $5 ")"}'
     echo ""
     echo "Usage:"
-    echo "  • JavaScript/TypeScript:  disclosure_pk.zkey (snarkjs)"
-    echo "  • Rust/Substrate (fast):  disclosure_pk.ark (pre-serialized)"
-    echo "  • Rust/Substrate (compat): disclosure_pk.zkey (ark-circom)"
+    echo "  • JavaScript/TypeScript:  ${CIRCUIT_NAME}_pk.zkey (snarkjs)"
+    echo "  • Rust/Substrate (fast):  ${CIRCUIT_NAME}_pk.ark (pre-serialized)"
+    echo "  • Rust/Substrate (compat): ${CIRCUIT_NAME}_pk.zkey (ark-circom)"
 else
     echo ""
     echo -e "${RED}═══════════════════════════════════════════════════════${NC}"
