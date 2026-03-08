@@ -5,51 +5,36 @@ include "./merkle_tree.circom";
 include "./poseidon_wrapper.circom";
 include "../node_modules/circomlib/circuits/bitify.circom";
 
-// Unshield circuit - converts private note to public tokens
-// Proves ownership of a note in the Merkle tree and reveals amount
-// for withdrawal to a public address
-//
-// This circuit:
-// 1. Verifies the note exists in the Merkle tree
-// 2. Verifies the nullifier is computed correctly (prevents double-spend)
-// 3. Reveals the amount being withdrawn (public for balance tracking)
-// 4. Reveals the recipient address (public for token transfer)
-//
+// Unshield: withdraws a private note to a public account.
+// Proves note existence in the Merkle tree, nullifier correctness,
+// and that the revealed amount matches the note value.
 template Unshield(tree_depth) {
-    // ========== PUBLIC INPUTS ==========
-    // These are revealed on-chain
-    signal input merkle_root;      // Current merkle root (verified against historic roots)
-    signal input nullifier;        // Nullifier to prevent double-spend
-    signal input amount;           // Amount being withdrawn (publicly revealed)
-    signal input recipient;        // Recipient address (publicly revealed)
-    signal input asset_id;         // Asset ID being unshielded (publicly revealed for validation)
+    // Public inputs
+    signal input merkle_root;
+    signal input nullifier;
+    signal input amount;      // revealed withdrawal amount
+    signal input recipient;   // recipient address (validated non-zero in runtime)
+    signal input asset_id;    // asset being unshielded
 
-    // ========== PRIVATE INPUTS ==========
-    // These remain hidden - only prover knows them
-    signal input note_value;       // Value in the note (must equal amount)
-    signal input note_asset_id;    // Asset ID in note (must match public asset_id)
-    signal input note_owner;       // Owner public key
-    signal input note_blinding;    // Random blinding factor
-    signal input spending_key;     // Secret key to compute nullifier
+    // Private inputs
+    signal input note_value;
+    signal input note_asset_id;
+    signal input note_owner;
+    signal input note_blinding;
+    signal input spending_key;
 
     // Merkle proof
-    signal input path_elements[tree_depth];  // Sibling hashes
-    signal input path_indices[tree_depth];   // Path directions (0=left, 1=right)
+    signal input path_elements[tree_depth];
+    signal input path_indices[tree_depth];  // 0 = left, 1 = right
 
-    // ========== CONSTRAINT 1: AMOUNT MUST MATCH NOTE VALUE ==========
-    // The publicly revealed amount must equal the note's value
-    // This ensures user cannot withdraw more than they deposited
+    // Constraint 1: revealed amount must equal note value
     amount === note_value;
 
-    // ========== CONSTRAINT 2: RANGE CHECK ==========
-    // Ensure note_value is within u128 range (0 to 2^128-1)
-    // This prevents overflow attacks and ensures value is valid u128
-    // Matches runtime Balance type which uses u128
+    // Constraint 2: note_value must fit in u128 (matches runtime Balance type)
     component value_range_check = Num2Bits(128);
     value_range_check.in <== note_value;
 
-    // ========== CONSTRAINT 3: COMPUTE NOTE COMMITMENT ==========
-    // Compute the commitment that should be in the Merkle tree
+    // Constraint 3: compute note commitment
     component commitment_computer = NoteCommitment();
     commitment_computer.value <== note_value;
     commitment_computer.asset_id <== note_asset_id;
@@ -59,8 +44,7 @@ template Unshield(tree_depth) {
     signal computed_commitment;
     computed_commitment <== commitment_computer.commitment;
 
-    // ========== CONSTRAINT 4: VERIFY MERKLE MEMBERSHIP ==========
-    // Prove the commitment exists in the Merkle tree
+    // Constraint 4: commitment must exist in the Merkle tree
     component merkle_verifier = MerkleTreeVerifier(tree_depth);
     merkle_verifier.leaf <== computed_commitment;
 
@@ -69,31 +53,18 @@ template Unshield(tree_depth) {
         merkle_verifier.path_index[i] <== path_indices[i];
     }
 
-    // The computed root must match the public merkle_root
     merkle_verifier.root === merkle_root;
 
-    // ========== CONSTRAINT 5: VERIFY NULLIFIER ==========
-    // Compute nullifier and verify it matches the public input
-    // This links the spending to this specific note
+    // Constraint 5: nullifier must equal Poseidon(commitment, spending_key)
     component nullifier_computer = Nullifier();
     nullifier_computer.commitment <== computed_commitment;
     nullifier_computer.spending_key <== spending_key;
 
-    // The computed nullifier must match the public nullifier
     nullifier_computer.nullifier === nullifier;
 
-    // ========== CONSTRAINT 6: ASSET ID CONSISTENCY ==========
-    // Ensure the note's asset_id matches the public asset_id
-    // This prevents unshielding notes with a different asset than declared
+    // Constraint 6: note asset_id must match the declared public asset_id
     note_asset_id === asset_id;
-    
-    // Note: The runtime still validates that asset_id exists and is authorized
-
-    // Note: Recipient validation (recipient != 0) is performed in the runtime
-    // to prevent burning tokens by sending to address zero. This is more
-    // efficient than constraining it in the circuit.
 }
 
-// Main component with tree depth of 20 (matches pallet MAX_TREE_DEPTH)
-// asset_id added as public input for multi-asset security
+// Tree depth 20 matches pallet MAX_TREE_DEPTH
 component main {public [merkle_root, nullifier, amount, recipient, asset_id]} = Unshield(20);

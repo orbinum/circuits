@@ -5,6 +5,20 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-03-08
+
+### Changed
+
+- **`circuits/disclosure.circom`**: removed redundant `viewing_key` private input.
+  Ownership is already proven implicitly by constraint 1 (commitment reconstruction);
+  a separate `Poseidon(owner_pubkey)` signal provided no additional security.
+  Updated `scripts/generators/generate_disclosure_input.ts` and
+  `test/disclosure.test.ts` accordingly.
+- **All circuits**: normalized all comments to English. Removed verbose section
+  headers, Spanish text, and explanatory comments that restated the code.
+  Comments now only document non-obvious logic.
+- **`package.json`**: version bump `0.4.1` → `0.4.2`.
+
 ## [0.4.1] - 2026-03-07
 
 ### Added

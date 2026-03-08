@@ -14,7 +14,6 @@ interface CircuitInput extends Record<string, string> {
     asset_id: string;
     owner_pubkey: string;
     blinding: string;
-    viewing_key: string;
     disclose_value: string;
     disclose_asset_id: string;
     disclose_owner: string;
@@ -57,15 +56,11 @@ describe("Selective Disclosure Circuit - Phase 2", function () {
         return F.toString(hash);
     }
 
-    // Helper: Compute viewing_key = Poseidon(owner_pubkey)
-    function computeViewingKey(ownerPubkey: bigint): string {
+    // Helper: Compute owner_hash = Poseidon(owner_pubkey)
+    // This is the value revealed on-chain when disclose_owner = 1
+    function computeOwnerHash(ownerPubkey: bigint): string {
         const hash = poseidon([ownerPubkey]);
         return F.toString(hash);
-    }
-
-    // Helper: Compute owner_hash = Poseidon(owner_pubkey)
-    function computeOwnerHash(ownerPubkey: bigint): string {
-        return computeViewingKey(ownerPubkey); // Same function
     }
 
     describe("Checklist 2.2 - Commitment Verification", () => {
@@ -77,7 +72,6 @@ describe("Selective Disclosure Circuit - Phase 2", function () {
             const blinding = 98765432109876543210n;
 
             const commitment = computeCommitment(value, assetId, ownerPubkey, blinding);
-            const viewingKey = computeViewingKey(ownerPubkey);
 
             // Inputs (revealing nothing)
             const input: CircuitInput = {
@@ -89,7 +83,6 @@ describe("Selective Disclosure Circuit - Phase 2", function () {
                 asset_id: assetId.toString(),
                 owner_pubkey: ownerPubkey.toString(),
                 blinding: blinding.toString(),
-                viewing_key: viewingKey,
                 disclose_value: "0",
                 disclose_asset_id: "0",
                 disclose_owner: "0",
@@ -106,7 +99,6 @@ describe("Selective Disclosure Circuit - Phase 2", function () {
             const blinding = 98765432109876543210n;
 
             const commitment = computeCommitment(value, assetId, ownerPubkey, blinding);
-            const viewingKey = computeViewingKey(ownerPubkey);
 
             // Invalid commitment (change expected value)
             const input: CircuitInput = {
@@ -118,7 +110,6 @@ describe("Selective Disclosure Circuit - Phase 2", function () {
                 asset_id: assetId.toString(),
                 owner_pubkey: ownerPubkey.toString(),
                 blinding: blinding.toString(),
-                viewing_key: viewingKey,
                 disclose_value: "0",
                 disclose_asset_id: "0",
                 disclose_owner: "0",
@@ -164,15 +155,14 @@ describe("Selective Disclosure Circuit - Phase 2", function () {
         });
     });
 
-    describe("Checklist 2.3 - Viewing Key Verification", () => {
-        it("should accept valid viewing key", async () => {
+    describe("Checklist 2.3 - Ownership Verification via Commitment", () => {
+        it("should accept proof with correct private inputs", async () => {
             const value = 5000n;
             const assetId = 0n;
             const ownerPubkey = 777777777777777777n;
             const blinding = 123456789012345678n;
 
             const commitment = computeCommitment(value, assetId, ownerPubkey, blinding);
-            const viewingKey = computeViewingKey(ownerPubkey);
 
             const input: CircuitInput = {
                 commitment: commitment,
@@ -183,7 +173,6 @@ describe("Selective Disclosure Circuit - Phase 2", function () {
                 asset_id: assetId.toString(),
                 owner_pubkey: ownerPubkey.toString(),
                 blinding: blinding.toString(),
-                viewing_key: viewingKey,
                 disclose_value: "0",
                 disclose_asset_id: "0",
                 disclose_owner: "0",
@@ -193,16 +182,16 @@ describe("Selective Disclosure Circuit - Phase 2", function () {
             await circuit.checkConstraints(witness);
         });
 
-        it("should reject invalid viewing key", async () => {
+        it("should reject wrong owner_pubkey (ownership bound to commitment)", async () => {
             const value = 5000n;
             const assetId = 0n;
             const ownerPubkey = 777777777777777777n;
             const blinding = 123456789012345678n;
 
+            // Commitment computed with the real owner_pubkey
             const commitment = computeCommitment(value, assetId, ownerPubkey, blinding);
-            const viewingKey = computeViewingKey(ownerPubkey);
 
-            // Wrong viewing key
+            // Attacker uses a different owner_pubkey — commitment won't reconstruct
             const input: CircuitInput = {
                 commitment: commitment,
                 revealed_value: "0",
@@ -210,9 +199,8 @@ describe("Selective Disclosure Circuit - Phase 2", function () {
                 revealed_owner_hash: "0",
                 value: value.toString(),
                 asset_id: assetId.toString(),
-                owner_pubkey: ownerPubkey.toString(),
+                owner_pubkey: (ownerPubkey + 1n).toString(), // ❌ Wrong owner
                 blinding: blinding.toString(),
-                viewing_key: (BigInt(viewingKey) + 1n).toString(), // ❌ Wrong viewing key
                 disclose_value: "0",
                 disclose_asset_id: "0",
                 disclose_owner: "0",
@@ -220,7 +208,7 @@ describe("Selective Disclosure Circuit - Phase 2", function () {
 
             try {
                 await circuit.calculateWitness(input);
-                expect.fail("Should have thrown error for invalid viewing key");
+                expect.fail("Should have thrown error for wrong owner_pubkey");
             } catch (error: any) {
                 expect(error.message).to.include("Assert Failed");
             }
@@ -235,7 +223,6 @@ describe("Selective Disclosure Circuit - Phase 2", function () {
             const blinding = 98765432109876543210n;
 
             const commitment = computeCommitment(value, assetId, ownerPubkey, blinding);
-            const viewingKey = computeViewingKey(ownerPubkey);
 
             const input: CircuitInput = {
                 commitment: commitment,
@@ -246,7 +233,6 @@ describe("Selective Disclosure Circuit - Phase 2", function () {
                 asset_id: assetId.toString(),
                 owner_pubkey: ownerPubkey.toString(),
                 blinding: blinding.toString(),
-                viewing_key: viewingKey,
                 disclose_value: "1", // ✅ Reveal value
                 disclose_asset_id: "0",
                 disclose_owner: "0",
@@ -263,7 +249,6 @@ describe("Selective Disclosure Circuit - Phase 2", function () {
             const blinding = 98765432109876543210n;
 
             const commitment = computeCommitment(value, assetId, ownerPubkey, blinding);
-            const viewingKey = computeViewingKey(ownerPubkey);
 
             const input: CircuitInput = {
                 commitment: commitment,
@@ -274,7 +259,6 @@ describe("Selective Disclosure Circuit - Phase 2", function () {
                 asset_id: assetId.toString(),
                 owner_pubkey: ownerPubkey.toString(),
                 blinding: blinding.toString(),
-                viewing_key: viewingKey,
                 disclose_value: "0", // ✅ Hide value
                 disclose_asset_id: "0",
                 disclose_owner: "0",
@@ -291,7 +275,6 @@ describe("Selective Disclosure Circuit - Phase 2", function () {
             const blinding = 98765432109876543210n;
 
             const commitment = computeCommitment(value, assetId, ownerPubkey, blinding);
-            const viewingKey = computeViewingKey(ownerPubkey);
             const ownerHash = computeOwnerHash(ownerPubkey);
 
             const input: CircuitInput = {
@@ -303,7 +286,6 @@ describe("Selective Disclosure Circuit - Phase 2", function () {
                 asset_id: assetId.toString(),
                 owner_pubkey: ownerPubkey.toString(),
                 blinding: blinding.toString(),
-                viewing_key: viewingKey,
                 disclose_value: "1",
                 disclose_asset_id: "1",
                 disclose_owner: "1",
