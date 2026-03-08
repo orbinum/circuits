@@ -1,6 +1,6 @@
 {
   "name": "orbinum-circuits",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Zero-Knowledge circuits for Orbinum privacy blockchain",
   "scripts": {
     "compile": "npm run compile:transfer",
@@ -22,6 +22,8 @@
     "full-build:unshield": "bash scripts/build/full-pipeline.sh unshield",
     "full-build:private-link": "bash scripts/build/full-pipeline.sh private_link",
     "build-all": "bash scripts/build-all.sh",
+    "manifest": "ts-node scripts/utils/generate-manifest.ts",
+    "build-all:manifest": "npm run build-all && npm run manifest",
     "gen-input:disclosure": "ts-node scripts/generators/generate_disclosure_input.ts",
     "gen-input:transfer": "ts-node scripts/generators/generate_input.ts",
     "prove": "ts-node scripts/generators/generate_proof.ts",

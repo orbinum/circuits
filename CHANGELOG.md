@@ -5,6 +5,37 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2026-03-08
+
+### Added
+
+- **`scripts/utils/generate-manifest.ts`**: canonical artifact manifest generator.
+    - Generates `manifest.json` with per-circuit metadata.
+    - Includes `active_version`, `supported_versions`, `vk_hash`, artifact size, and SHA-256.
+    - Supports strict mode with `MANIFEST_REQUIRE_ALL=true` (fails if any required circuit artifact is missing).
+- **`package.json` scripts**:
+    - `manifest`: generates `manifest.json`.
+    - `build-all:manifest`: runs full build then manifest generation.
+
+### Changed
+
+- **CI pipeline** (`.github/workflows/ci.yml`):
+    - Enforces strict manifest generation after `build-all`.
+    - Uploads `manifest.json` as CI artifact.
+- **Release pipeline** (`.github/workflows/release.yml`):
+    - Enforces strict manifest generation before packaging/publishing.
+    - Includes `manifest.json` in checksum generation.
+    - Copies `manifest.json` into npm package payload (`pkg/`) so CDN sync includes manifest.
+- **`scripts/build/convert-to-ark.sh`**:
+    - Fixed broken control flow / silent failure path.
+    - Added strict shell mode (`set -euo pipefail`).
+    - Added `rustup`/nightly checks with auto-install for nightly when missing.
+    - Corrected usage output to display dynamic circuit names.
+- **Documentation**:
+    - Updated `README.md` with manifest generation section.
+    - Added `docs/guides/pre-push-check-rapido.md` (quick pre-push checklist).
+- **`package.json`**: version bump `0.4.2` → `0.4.3`.
+
 ## [0.4.2] - 2026-03-08
 
 ### Changed
