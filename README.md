@@ -38,6 +38,20 @@ This automatically:
 - Downloads Powers of Tau (72MB, one-time)
 - Generates cryptographic keys (proving + verifying keys)
 - Converts to compatible formats
+- Generates `manifest.json` with SHA-256 hashes for artifacts (when using `npm run build-all:manifest`)
+
+### Generate Artifact Manifest (NPM/CDN sync)
+
+```bash
+npm run manifest
+```
+
+This creates `manifest.json` at repo root with:
+
+- package version metadata
+- active/supported version per circuit
+- SHA-256 + size for `.wasm`, `.zkey`, `.ark` (if available)
+- `vk_hash` derived from `verification_key_<circuit>.json`
 
 **Output:**
 

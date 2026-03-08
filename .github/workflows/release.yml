@@ -75,6 +75,10 @@ jobs:
               if: steps.check_tag.outputs.exists == 'false'
               run: npm run build-all
 
+            - name: Generate manifest (strict)
+              if: steps.check_tag.outputs.exists == 'false'
+              run: MANIFEST_REQUIRE_ALL=true npm run manifest
+
             - name: Convert .zkey to .ark format
               if: steps.check_tag.outputs.exists == 'false'
               run: |
@@ -106,9 +110,10 @@ jobs:
               if: steps.check_tag.outputs.exists == 'false'
               run: |
                   mkdir -p release
+                  sha256sum manifest.json > release/checksums.txt
                   cd build
 
-                  sha256sum disclosure_js/disclosure.wasm > ../release/checksums.txt
+                  sha256sum disclosure_js/disclosure.wasm >> ../release/checksums.txt
                   sha256sum verification_key_disclosure.json >> ../release/checksums.txt
                   sha256sum transfer_js/transfer.wasm >> ../release/checksums.txt
                   sha256sum verification_key_transfer.json >> ../release/checksums.txt
@@ -223,6 +228,8 @@ jobs:
               run: |
                   VERSION=${{ steps.version.outputs.version }}
                   mkdir -p pkg
+
+                  cp manifest.json pkg/
 
                   cp build/disclosure_js/disclosure.wasm pkg/
                   cp build/transfer_js/transfer.wasm pkg/

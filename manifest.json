@@ -1,0 +1,160 @@
+{
+  "schema_version": "1.0.0",
+  "package_name": "orbinum-circuits",
+  "package_version": "0.4.3",
+  "generated_at": "2026-03-08T18:05:52.859Z",
+  "circuits": {
+    "disclosure": {
+      "active_version": 1,
+      "supported_versions": [
+        1
+      ],
+      "versions": {
+        "1": {
+          "version": 1,
+          "vk_hash": "0x9f597dab944eacdcaaea2ddf11f1885786a2efe53ab856a19b29c978834c060a",
+          "artifacts": {
+            "wasm": {
+              "file": "disclosure.wasm",
+              "localPath": "build/disclosure_js/disclosure.wasm",
+              "bytes": 2220560,
+              "sha256": "db42d0d4941c7d7265717fe44e43048c0800f962a2ea7251353ea2f645aa9f31"
+            },
+            "zkey": {
+              "file": "disclosure_pk.zkey",
+              "localPath": "keys/disclosure_pk.zkey",
+              "bytes": 554204,
+              "sha256": "02d29a8a08b5815ac958e7cab60e47b85d063bc3432a62ff2f6cdc070374caa2"
+            },
+            "vk_json": {
+              "file": "verification_key_disclosure.json",
+              "localPath": "build/verification_key_disclosure.json",
+              "bytes": 3470,
+              "sha256": "9f597dab944eacdcaaea2ddf11f1885786a2efe53ab856a19b29c978834c060a"
+            },
+            "ark": {
+              "file": "disclosure_pk.ark",
+              "localPath": "keys/disclosure_pk.ark",
+              "bytes": 253232,
+              "sha256": "7cb195502a659a73357895128c430a01730665e1019338693ee54bbe355f323b"
+            }
+          }
+        }
+      }
+    },
+    "transfer": {
+      "active_version": 1,
+      "supported_versions": [
+        1
+      ],
+      "versions": {
+        "1": {
+          "version": 1,
+          "vk_hash": "0x767efb38c3e08df88991e4c1cd244d1600d825d6f87b02b517d01b37b5905f82",
+          "artifacts": {
+            "wasm": {
+              "file": "transfer.wasm",
+              "localPath": "build/transfer_js/transfer.wasm",
+              "bytes": 3359868,
+              "sha256": "97cae6deed6c526ed0a287da3d3ab4b8f2cc71ccc956278d262f850ec435b7e5"
+            },
+            "zkey": {
+              "file": "transfer_pk.zkey",
+              "localPath": "keys/transfer_pk.zkey",
+              "bytes": 20484784,
+              "sha256": "c2e3178d580b9cb37108e1e7d733877b7a161ce4ce20675bf39f9fe9365042be"
+            },
+            "vk_json": {
+              "file": "verification_key_transfer.json",
+              "localPath": "build/verification_key_transfer.json",
+              "bytes": 3656,
+              "sha256": "767efb38c3e08df88991e4c1cd244d1600d825d6f87b02b517d01b37b5905f82"
+            },
+            "ark": {
+              "file": "transfer_pk.ark",
+              "localPath": "keys/transfer_pk.ark",
+              "bytes": 8739088,
+              "sha256": "f811ddf980f1eb42faa9258ec2e3981b4de11bc5fbbe4d3fec0cbc09572d8647"
+            }
+          }
+        }
+      }
+    },
+    "unshield": {
+      "active_version": 1,
+      "supported_versions": [
+        1
+      ],
+      "versions": {
+        "1": {
+          "version": 1,
+          "vk_hash": "0xc28dc81278492a2b04866a3b13e4f72abca05a9563587cc3e7a86cf4a68c4585",
+          "artifacts": {
+            "wasm": {
+              "file": "unshield.wasm",
+              "localPath": "build/unshield_js/unshield.wasm",
+              "bytes": 2396830,
+              "sha256": "aebf93eb6d7544742eb8bffdbedc82101ff524efdfb649839e3f5b3960c3f06e"
+            },
+            "zkey": {
+              "file": "unshield_pk.zkey",
+              "localPath": "keys/unshield_pk.zkey",
+              "bytes": 5326768,
+              "sha256": "dcbd7b9c955f7526817b972eb3bf164b1f0fa486527c3bfe019687f278c7fc0d"
+            },
+            "vk_json": {
+              "file": "verification_key_unshield.json",
+              "localPath": "build/verification_key_unshield.json",
+              "bytes": 3658,
+              "sha256": "c28dc81278492a2b04866a3b13e4f72abca05a9563587cc3e7a86cf4a68c4585"
+            },
+            "ark": {
+              "file": "unshield_pk.ark",
+              "localPath": "keys/unshield_pk.ark",
+              "bytes": 2413904,
+              "sha256": "d9b7103466a2f18352a7e8038c1faff2f79e2c6ffeaba8dd57dc34f486c550cf"
+            }
+          }
+        }
+      }
+    },
+    "private_link": {
+      "active_version": 1,
+      "supported_versions": [
+        1
+      ],
+      "versions": {
+        "1": {
+          "version": 1,
+          "vk_hash": "0xad452933eb017073d8d9106c7dfaf98ad1cb5f2f026b261c5b4345e21b491f1f",
+          "artifacts": {
+            "wasm": {
+              "file": "private_link.wasm",
+              "localPath": "build/private_link_js/private_link.wasm",
+              "bytes": 1750902,
+              "sha256": "3190bb18260b294c2dccad6f509867a2fdd756707a3c1d10a483551e18796e08"
+            },
+            "zkey": {
+              "file": "private_link_pk.zkey",
+              "localPath": "keys/private_link_pk.zkey",
+              "bytes": 508588,
+              "sha256": "2faf5ea6214a13012a90d8c87e9ea54aaa93a2acf5160ba984fe223d7aa82fa6"
+            },
+            "vk_json": {
+              "file": "verification_key_private_link.json",
+              "localPath": "build/verification_key_private_link.json",
+              "bytes": 3109,
+              "sha256": "ad452933eb017073d8d9106c7dfaf98ad1cb5f2f026b261c5b4345e21b491f1f"
+            },
+            "ark": {
+              "file": "private_link_pk.ark",
+              "localPath": "keys/private_link_pk.ark",
+              "bytes": 232272,
+              "sha256": "63bda6058bb2a68d5590f1a897aa3b391184b5dead410ceac11909ac3a72be63"
+            }
+          }
+        }
+      }
+    }
+  }
+}
