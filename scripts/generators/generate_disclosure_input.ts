@@ -35,7 +35,6 @@ interface CircuitInput {
     asset_id: string;
     owner_pubkey: string;
     blinding: string;
-    viewing_key: string;
     disclose_value: string;
     disclose_asset_id: string;
     disclose_owner: string;
@@ -67,10 +66,10 @@ async function main(): Promise<void> {
     const commitment = BigInt(F.toString(commitment_hash));
     console.log("   Commitment:", commitment.toString().slice(0, 20) + "...");
 
-    // Compute viewing key (proves ownership)
-    const viewing_key_hash = poseidon([memo.owner_pubkey]);
-    const viewing_key = BigInt(F.toString(viewing_key_hash));
-    console.log("   Viewing Key:", viewing_key.toString().slice(0, 20) + "...");
+    // Compute owner hash (used as revealed_owner_hash when disclose_owner = 1)
+    const owner_hash_value = poseidon([memo.owner_pubkey]);
+    const owner_hash = BigInt(F.toString(owner_hash_value));
+    console.log("   Owner Hash:", owner_hash.toString().slice(0, 20) + "...");
 
     // Disclosure scenarios
     const scenarios: Record<string, Scenario> = {
@@ -111,7 +110,7 @@ async function main(): Promise<void> {
             disclose_owner: 1n,
             revealed_value: memo.value,
             revealed_asset_id: memo.asset_id,
-            revealed_owner_hash: viewing_key, // Hash of owner
+            revealed_owner_hash: owner_hash,
         },
     };
 
@@ -136,7 +135,6 @@ async function main(): Promise<void> {
             asset_id: memo.asset_id.toString(),
             owner_pubkey: memo.owner_pubkey.toString(),
             blinding: memo.blinding.toString(),
-            viewing_key: viewing_key.toString(),
 
             // Disclosure mask
             disclose_value: scenario.disclose_value.toString(),
