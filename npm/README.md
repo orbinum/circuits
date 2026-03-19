@@ -13,14 +13,15 @@ npm install @orbinum/circuits
 
 ## 📦 Package Contents
 
-This package includes **12 files** for 3 circuits (disclosure, transfer, unshield):
+This package includes **20 files** for 4 circuits (disclosure, transfer, unshield, private_link):
 
-### For Each Circuit (disclosure, transfer, unshield):
+### For Each Circuit (disclosure, transfer, unshield, private_link):
 
-1. **`{circuit}.wasm`** - Witness calculator (3 files)
-2. **`{circuit}_pk.zkey`** - Proving key for snarkjs (3 files)
-3. **`{circuit}_pk.ark`** - Proving key for arkworks/Rust (3 files)
-4. **`verification_key_{circuit}.json`** - Verification key for on-chain verification (3 files)
+1. **`{circuit}.wasm`** - Witness calculator (4 files)
+2. **`{circuit}.r1cs`** - R1CS constraint system — for custom provers / verification (4 files)
+3. **`{circuit}_pk.zkey`** - Proving key for snarkjs (4 files)
+4. **`{circuit}_pk.ark`** - Proving key for arkworks/Rust (4 files)
+5. **`verification_key_{circuit}.json`** - Verification key for on-chain verification (4 files)
 
 ## 🔧 Usage
 
@@ -29,17 +30,19 @@ This package includes **12 files** for 3 circuits (disclosure, transfer, unshiel
 ```typescript
 import { join } from "path";
 import { readFileSync } from "fs";
+import { getCircuitPaths } from "@orbinum/circuits";
 
-// Get circuit artifacts
-const circuitsPath = require.resolve("@orbinum/circuits/package.json").replace("package.json", "");
+// Get all paths for a circuit
+const paths = getCircuitPaths("transfer"); // 'disclosure' | 'transfer' | 'unshield' | 'private_link'
 
 // Load WASM witness calculator
-const wasmPath = join(circuitsPath, "transfer.wasm");
-const wasmBuffer = readFileSync(wasmPath);
+const wasmBuffer = readFileSync(paths.wasm);
 
 // Load proving key (.zkey)
-const zkeyPath = join(circuitsPath, "transfer_pk.zkey");
-const zkeyBuffer = readFileSync(zkeyPath);
+const zkeyBuffer = readFileSync(paths.zkey);
+
+// Load R1CS (e.g. for custom prover or constraint inspection)
+const r1csBuffer = readFileSync(paths.r1cs);
 
 // Use with snarkjs for proof generation
 // ... snarkjs proof generation code ...
@@ -82,6 +85,10 @@ Private token transfer circuit with 2 inputs and 2 outputs.
 
 Withdrawal circuit from private pool to public account.
 
+### 4. **Private Link** (`private_link_*`)
+
+Proves linkage between two commitments without revealing their values.
+
 ## 🔗 Related Packages
 
 - [@orbinum/proof-generator](https://www.npmjs.com/package/@orbinum/proof-generator) - High-level proof orchestrator
@@ -101,12 +108,13 @@ console.log("Public signals:", result.publicSignals);
 
 ## 📄 File Sizes
 
-- **WASM files**: ~1-2 MB each (witness calculators)
-- **`.zkey` files**: ~7-9 MB each (snarkjs proving keys)
-- **`.ark` files**: ~7-9 MB each (arkworks proving keys)
+- **WASM files**: ~1-3 MB each (witness calculators)
+- **R1CS files**: ~1-5 MB each (constraint systems)
+- **`.zkey` files**: ~0.5-20 MB each (snarkjs proving keys)
+- **`.ark` files**: ~0.2-9 MB each (arkworks proving keys)
 - **Verification keys**: ~3-4 KB each (JSON)
 
-**Total package size**: ~50-60 MB
+**Total package size**: ~80-90 MB
 
 ## 🔒 Security Notice
 
