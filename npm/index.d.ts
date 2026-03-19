@@ -6,6 +6,7 @@
 
 export interface CircuitPaths {
     wasm: string;
+    r1cs: string;
     zkey: string;
     ark: string;
     verificationKey: string;
@@ -14,11 +15,13 @@ export interface CircuitPaths {
 /**
  * Get paths to all files for a specific circuit
  */
-export function getCircuitPaths(circuit: "disclosure" | "transfer" | "unshield"): CircuitPaths;
+export function getCircuitPaths(
+    circuit: "disclosure" | "transfer" | "unshield" | "private_link"
+): CircuitPaths;
 
 /**
  * Available circuits
  */
-export type CircuitType = "disclosure" | "transfer" | "unshield";
+export type CircuitType = "disclosure" | "transfer" | "unshield" | "private_link";
 
 export const CIRCUITS: CircuitType[];

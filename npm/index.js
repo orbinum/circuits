@@ -6,11 +6,11 @@
 
 const { join } = require("path");
 
-const CIRCUITS = ["disclosure", "transfer", "unshield"];
+const CIRCUITS = ["disclosure", "transfer", "unshield", "private_link"];
 
 /**
  * Get paths to all files for a specific circuit
- * @param {string} circuit - Circuit name: 'disclosure', 'transfer', or 'unshield'
+ * @param {string} circuit - Circuit name: 'disclosure', 'transfer', 'unshield', or 'private_link'
  * @returns {Object} Paths to circuit files
  */
 function getCircuitPaths(circuit) {
@@ -22,6 +22,7 @@ function getCircuitPaths(circuit) {
 
     return {
         wasm: join(basePath, `${circuit}.wasm`),
+        r1cs: join(basePath, `${circuit}.r1cs`),
         zkey: join(basePath, `${circuit}_pk.zkey`),
         ark: join(basePath, `${circuit}_pk.ark`),
         verificationKey: join(basePath, `verification_key_${circuit}.json`),

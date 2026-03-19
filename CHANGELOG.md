@@ -5,6 +5,21 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.4] - 2026-03-19
+
+### Added
+
+- **R1CS artifacts published to CDN**:
+    - `release.yml`: copies `build/{circuit}.r1cs` files into `pkg/` before the Cloudflare R2 sync, making them available at `https://circuits.orbinum.io/v1/{circuit}.r1cs`.
+    - `release.yml`: includes `{circuit}.r1cs` SHA-256 checksums in `release/checksums-{version}.txt`.
+    - `scripts/utils/generate-manifest.ts`: added `r1cs` as a new `ArtifactKind`; reads `build/{circuit}.r1cs` and includes size + SHA-256 in the manifest when the file exists.
+- **`private_link` circuit added to npm package** (`npm/`):
+    - `npm/index.js`: `private_link` added to `CIRCUITS` array; `getCircuitPaths` now returns a `r1cs` path alongside `wasm`, `zkey`, `ark`, `verificationKey`.
+    - `npm/index.d.ts`: `CircuitType` and `getCircuitPaths` signature extended with `"private_link"`; `CircuitPaths` interface includes new `r1cs: string` field.
+    - `npm/package.json.template`: `*.r1cs` added to the `files` array so R1CS files are included in the published npm package.
+    - `npm/README.md`: updated to document 4 circuits (20 artifacts total), `r1cs` artifact, corrected file sizes, and updated usage example to use `getCircuitPaths`.
+- **`package.json`**: version bump `0.4.3` → `0.4.4`.
+
 ## [0.4.3] - 2026-03-08
 
 ### Added

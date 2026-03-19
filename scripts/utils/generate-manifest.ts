@@ -5,7 +5,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 type CircuitName = "disclosure" | "transfer" | "unshield" | "private_link";
-type ArtifactKind = "wasm" | "zkey" | "ark" | "vk_json";
+type ArtifactKind = "wasm" | "zkey" | "ark" | "r1cs" | "vk_json";
 
 interface ArtifactEntry {
     file: string;
@@ -73,11 +73,13 @@ function buildCircuitEntry(circuit: CircuitName): Manifest["circuits"][CircuitNa
     const wasmPath = `build/${circuit}_js/${circuit}.wasm`;
     const zkeyPath = `keys/${circuit}_pk.zkey`;
     const arkPath = `keys/${circuit}_pk.ark`;
+    const r1csPath = `build/${circuit}.r1cs`;
     const vkJsonPath = `build/verification_key_${circuit}.json`;
 
     const wasm = readArtifact(wasmPath);
     const zkey = readArtifact(zkeyPath);
     const ark = readArtifact(arkPath);
+    const r1cs = readArtifact(r1csPath);
     const vkJson = readArtifact(vkJsonPath);
 
     if (!wasm || !zkey || !vkJson) {
@@ -94,6 +96,9 @@ function buildCircuitEntry(circuit: CircuitName): Manifest["circuits"][CircuitNa
     };
     if (ark) {
         artifacts.ark = ark;
+    }
+    if (r1cs) {
+        artifacts.r1cs = r1cs;
     }
 
     return {

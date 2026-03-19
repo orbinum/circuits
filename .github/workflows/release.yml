@@ -113,12 +113,16 @@ jobs:
                   sha256sum manifest.json > release/checksums.txt
                   cd build
 
+                  sha256sum disclosure.r1cs >> ../release/checksums.txt
                   sha256sum disclosure_js/disclosure.wasm >> ../release/checksums.txt
                   sha256sum verification_key_disclosure.json >> ../release/checksums.txt
+                  sha256sum transfer.r1cs >> ../release/checksums.txt
                   sha256sum transfer_js/transfer.wasm >> ../release/checksums.txt
                   sha256sum verification_key_transfer.json >> ../release/checksums.txt
+                  sha256sum unshield.r1cs >> ../release/checksums.txt
                   sha256sum unshield_js/unshield.wasm >> ../release/checksums.txt
                   sha256sum verification_key_unshield.json >> ../release/checksums.txt
+                  sha256sum private_link.r1cs >> ../release/checksums.txt
                   sha256sum private_link_js/private_link.wasm >> ../release/checksums.txt
                   sha256sum verification_key_private_link.json >> ../release/checksums.txt
 
@@ -230,6 +234,11 @@ jobs:
                   mkdir -p pkg
 
                   cp manifest.json pkg/
+
+                  cp build/disclosure.r1cs pkg/
+                  cp build/transfer.r1cs pkg/
+                  cp build/unshield.r1cs pkg/
+                  cp build/private_link.r1cs pkg/
 
                   cp build/disclosure_js/disclosure.wasm pkg/
                   cp build/transfer_js/transfer.wasm pkg/
