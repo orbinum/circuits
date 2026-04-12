@@ -4,15 +4,19 @@ include "./note.circom";
 include "./merkle_tree.circom";
 include "../node_modules/circomlib/circuits/eddsaposeidon.circom";
 include "../node_modules/circomlib/circuits/bitify.circom";
+include "../node_modules/circomlib/circuits/comparators.circom";
 
 // Private transfer: 2 input notes → 2 output notes.
 // Proves Merkle membership, nullifier correctness, EdDSA ownership,
 // output commitment correctness, value conservation, and range bounds.
+// The fee is paid to the block author (validator) by the pallet runtime.
 template Transfer(tree_depth) {
     // Public inputs
     signal input merkle_root;
     signal input nullifiers[2];
     signal input commitments[2];
+    signal input asset_id;  // asset being transferred (must match input notes)
+    signal input fee;       // gasless fee deducted from input sum; paid to block author
 
     // Private inputs — input notes (being spent)
     signal input input_values[2];
@@ -107,14 +111,14 @@ template Transfer(tree_depth) {
         output_commitment_computers[i].commitment === commitments[i];
     }
 
-    // Constraint 5: sum(input values) == sum(output values)
+    // Constraint 5: sum(input values) == sum(output values) + fee
     signal input_sum;
     signal output_sum;
 
     input_sum <== input_values[0] + input_values[1];
     output_sum <== output_values[0] + output_values[1];
 
-    input_sum === output_sum;
+    input_sum === output_sum + fee;
 
     // Constraint 6: all values must fit in u128 (matches runtime Balance type)
     component input_range_checks[2];
@@ -128,11 +132,25 @@ template Transfer(tree_depth) {
         output_range_checks[i].in <== output_values[i];
     }
 
+    // Constraint 6b: fee must fit in u128 (defense-in-depth; circuit is self-contained)
+    component fee_range_check = Num2Bits(128);
+    fee_range_check.in <== fee;
+
     // Constraint 7: all input and output notes must use the same asset_id
     input_asset_ids[0] === input_asset_ids[1];
     input_asset_ids[0] === output_asset_ids[0];
     input_asset_ids[0] === output_asset_ids[1];
+
+    // Constraint 8: public asset_id must match the notes' asset_id
+    asset_id === input_asset_ids[0];
+
+    // Constraint 9: input nullifiers must be distinct (prevents double-spending the same note
+    // in a single transaction; without this a prover can set input[0]=input[1] and get
+    // 2×value from one note while conservation holds and both pallet checks pass before insert)
+    component nullifiers_distinct = IsZero();
+    nullifiers_distinct.in <== nullifiers[0] - nullifiers[1];
+    nullifiers_distinct.out === 0;
 }
 
 // 2 inputs, 2 outputs, 20-level tree (matches pallet MAX_TREE_DEPTH)
-component main {public [merkle_root, nullifiers, commitments]} = Transfer(20);
+component main {public [merkle_root, nullifiers, commitments, asset_id, fee]} = Transfer(20);

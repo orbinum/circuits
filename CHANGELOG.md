@@ -5,7 +5,36 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.4] - 2026-03-19
+## [0.5.0] - 2026-04-12
+
+### Added
+
+- **Gasless fee signal in `unshield` and `transfer` circuits**:
+    - `circuits/unshield.circom`: new public input `fee`. Constraint 1 changed from `note_value === amount` to `note_value === amount + fee`, allowing the validator (block author) to collect a fee from the note value without requiring a signed extrinsic.
+    - `circuits/transfer.circom`: new public input `fee`. Conservation constraint changed from `input_sum === output_sum` to `input_sum === output_sum + fee`.
+    - Both circuits expose `fee` in their `main` component public signals.
+- **Fee range checks (defense-in-depth)**:
+    - `circuits/unshield.circom` (Constraint 3): `Num2Bits(128)` on `fee` prevents field-wraparound attacks where an out-of-range fee could satisfy conservation while output values stay in u128.
+    - `circuits/transfer.circom` (Constraint 6b): same `Num2Bits(128)` guard on `fee`.
+- **Distinct nullifiers check in `transfer`** (Constraint 9):
+    - Added `IsZero(nullifiers[0] - nullifiers[1]).out === 0` to prevent a prover from spending the same note twice in a single transaction. Without this constraint, setting `input[0] = input[1]` satisfies conservation and both pallet `Nullifiers::contains_key` checks pass before the first insert.
+    - Added `comparators.circom` include.
+- **New tests** (`test/unshield.test.ts`, `test/transfer.test.ts`):
+    - `unshield`: fee = 0, fee > 0, realistic 0.001 ORB fee, fee = full note value, rejects old pre-gasless witness, rejects amount + fee > note_value, accepts/rejects u128 max fee, rejects fee = 2^128.
+    - `transfer`: fee = 0, fee > 0, full-fee edge case, rejects pre-gasless balance, accepts/rejects u128 max fee, rejects fee = 2^128, accepts/rejects duplicate nullifiers.
+
+### Changed
+
+- **`circuits/unshield.circom`**: constraint numbering updated (3 through 7 shifted +1 due to new fee range check at position 3).
+- **`circuits/transfer.circom`**: constraint 6 split into 6 (values) + 6b (fee); constraint 9 added for distinct nullifiers.
+- **Artifacts recompiled** (`build/unshield_js/unshield.wasm`, `build/transfer_js/transfer.wasm`, `build/unshield.r1cs`, `build/transfer.r1cs`, `keys/unshield_pk.zkey`, `keys/transfer_pk.zkey`, `build/verification_key_unshield.json`, `build/verification_key_transfer.json`) to reflect new R1CS.
+- **`manifest.json`** regenerated with updated SHA-256 checksums and `package_version: "0.5.0"`.
+- **`package.json`**: version bump `0.4.4` → `0.5.0`.
+
+### Security
+
+- Fee range check (`Num2Bits(128)`) closes a field-arithmetic attack vector specific to the conservation constraint when `fee` is a public input.
+- Distinct-nullifiers constraint closes a double-spend vector in `transfer` where a single note could be consumed twice in one transaction.
 
 ### Added
 
