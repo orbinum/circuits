@@ -1,460 +1,627 @@
-import { buildPoseidon } from "circomlibjs";
-import assert from "assert";
+import path from "path";
+import fs from "fs";
+import { expect } from "chai";
+import { wasm as wasm_tester } from "circom_tester";
+import { buildPoseidon, buildEddsa } from "circomlibjs";
+import type { WasmTester } from "circom_tester";
 
-describe("Transfer Circuit Logic", function () {
-    this.timeout(60000);
+// ─── Constants ────────────────────────────────────────────────────────────────
 
+const TREE_DEPTH = 20;
+
+describe("Transfer Circuit (gasless)", function () {
+    this.timeout(180_000);
+
+    const circuitPath = path.join(__dirname, "..", "circuits", "transfer.circom");
+    const outputDir = path.join(__dirname, "..", "build");
+    const precompiledWasm = path.join(outputDir, "transfer_js", "transfer.wasm");
+
+    let circuit: WasmTester;
     let poseidon: any;
+    let eddsa: any;
+    let F: any;
 
-    before(async () => {
+    // Two test key pairs (Alice owns note 0, Bob owns note 1)
+    let alice: { privKey: Buffer; Ax: bigint; Ay: bigint };
+    let bob: { privKey: Buffer; Ax: bigint; Ay: bigint };
+
+    // ── Helpers ─────────────────────────────────────────────────────────────
+
+    function computeCommitment(
+        value: bigint,
+        assetId: bigint,
+        ownerAx: bigint,
+        blinding: bigint
+    ): bigint {
+        return F.toObject(poseidon([value, assetId, ownerAx, blinding]));
+    }
+
+    function computeNullifier(commitment: bigint, spendingKey: bigint): bigint {
+        return F.toObject(poseidon([commitment, spendingKey]));
+    }
+
+    /** Sparse Merkle proof builder. Only materialises the O(N·depth) non-zero nodes,
+     *  keeping runtime proportional to the number of leaves, not 2^depth. */
+    function buildMerkleProof(
+        leaves: bigint[],
+        leafIndex: number
+    ): { root: bigint; pathElements: bigint[]; pathIndices: number[] } {
+        const pathElements: bigint[] = [];
+        const pathIndices: number[] = [];
+        let level = new Map<number, bigint>();
+        for (let i = 0; i < leaves.length; i++) level.set(i, leaves[i]);
+        for (let d = 0; d < TREE_DEPTH; d++) {
+            const nodeIdx = leafIndex >> d;
+            const isRight = nodeIdx % 2 === 1;
+            pathIndices.push(isRight ? 1 : 0);
+            pathElements.push(level.get(isRight ? nodeIdx - 1 : nodeIdx + 1) ?? 0n);
+            const nextLevel = new Map<number, bigint>();
+            for (const [pos] of level) {
+                const parentPos = pos >> 1;
+                if (nextLevel.has(parentPos)) continue;
+                const l = level.get(parentPos * 2) ?? 0n;
+                const r = level.get(parentPos * 2 + 1) ?? 0n;
+                nextLevel.set(parentPos, F.toObject(poseidon([l, r])));
+            }
+            level = nextLevel;
+        }
+        return { root: level.get(0) ?? 0n, pathElements, pathIndices };
+    }
+
+    /** Generate an EdDSA Poseidon signature over a field element. */
+    function sign(privKey: Buffer, commitment: bigint): { R8x: bigint; R8y: bigint; S: bigint } {
+        const sig = eddsa.signPoseidon(privKey, F.e(commitment));
+        return {
+            R8x: F.toObject(sig.R8[0]),
+            R8y: F.toObject(sig.R8[1]),
+            S: sig.S,
+        };
+    }
+
+    /**
+     * Build a complete valid transfer circuit input.
+     * note0 (Alice) at index 0, note1 (Bob) at index 1 in the same tree.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    function buildInput(opts: {
+        value0: bigint;
+        value1: bigint;
+        outValue0: bigint;
+        outValue1: bigint;
+        fee: bigint;
+        assetId?: bigint;
+        blinding0?: bigint;
+        blinding1?: bigint;
+        spendingKey0?: bigint;
+        spendingKey1?: bigint;
+        outBlinding0?: bigint;
+        outBlinding1?: bigint;
+        outOwner0?: bigint;
+        outOwner1?: bigint;
+    }): any {
+        const assetId = opts.assetId ?? 0n;
+        const bl0 = opts.blinding0 ?? 0xaaaaaaaabbbbbbbbaaaaaaaabn;
+        const bl1 = opts.blinding1 ?? 0xccccccccddddddddccccccccdn;
+        const sk0 = opts.spendingKey0 ?? 0xdeadbeef0000001n;
+        const sk1 = opts.spendingKey1 ?? 0xdeadbeef0000002n;
+        const outBl0 = opts.outBlinding0 ?? 0x1111111100000001n;
+        const outBl1 = opts.outBlinding1 ?? 0x2222222200000002n;
+        const outOwner0 = opts.outOwner0 ?? alice.Ax;
+        const outOwner1 = opts.outOwner1 ?? bob.Ax;
+
+        const comm0 = computeCommitment(opts.value0, assetId, alice.Ax, bl0);
+        const comm1 = computeCommitment(opts.value1, assetId, bob.Ax, bl1);
+
+        const { root, pathElements: pe0, pathIndices: pi0 } = buildMerkleProof([comm0, comm1], 0);
+        const { pathElements: pe1, pathIndices: pi1 } = buildMerkleProof([comm0, comm1], 1);
+
+        const null0 = computeNullifier(comm0, sk0);
+        const null1 = computeNullifier(comm1, sk1);
+
+        const sigA = sign(alice.privKey, comm0);
+        const sigB = sign(bob.privKey, comm1);
+
+        const outComm0 = computeCommitment(opts.outValue0, assetId, outOwner0, outBl0);
+        const outComm1 = computeCommitment(opts.outValue1, assetId, outOwner1, outBl1);
+
+        return {
+            merkle_root: root.toString(),
+            nullifiers: [null0.toString(), null1.toString()],
+            commitments: [outComm0.toString(), outComm1.toString()],
+            asset_id: assetId.toString(),
+            fee: opts.fee.toString(),
+            input_values: [opts.value0.toString(), opts.value1.toString()],
+            input_asset_ids: [assetId.toString(), assetId.toString()],
+            input_blindings: [bl0.toString(), bl1.toString()],
+            spending_keys: [sk0.toString(), sk1.toString()],
+            input_owner_Ax: [alice.Ax.toString(), bob.Ax.toString()],
+            input_owner_Ay: [alice.Ay.toString(), bob.Ay.toString()],
+            input_sig_R8x: [sigA.R8x.toString(), sigB.R8x.toString()],
+            input_sig_R8y: [sigA.R8y.toString(), sigB.R8y.toString()],
+            input_sig_S: [sigA.S.toString(), sigB.S.toString()],
+            input_path_elements: [pe0.map(String), pe1.map(String)],
+            input_path_indices: [pi0, pi1],
+            output_values: [opts.outValue0.toString(), opts.outValue1.toString()],
+            output_asset_ids: [assetId.toString(), assetId.toString()],
+            output_owner_pubkeys: [outOwner0.toString(), outOwner1.toString()],
+            output_blindings: [outBl0.toString(), outBl1.toString()],
+        };
+    }
+
+    // ── Setup ─────────────────────────────────────────────────────────────────
+
+    before(async function () {
         poseidon = await buildPoseidon();
-    });
+        eddsa = await buildEddsa();
+        F = poseidon.F;
 
-    describe("Note Commitment", () => {
-        it("should compute note commitment correctly", () => {
-            const value = 100n;
-            const asset_id = 0n;
-            const owner_pubkey = 0x1234567890abcdefn;
-            const blinding = 0xfedcba0987654321n;
-
-            const commitment: string = poseidon.F.toString(
-                poseidon([value, asset_id, owner_pubkey, blinding])
+        alice = (() => {
+            const privKey = Buffer.from(
+                "0001020304050607080900010203040506070809000102030405060708090001",
+                "hex"
             );
-
-            console.log("  Note Commitment:", commitment);
-            assert(commitment !== "0", "Commitment should not be zero");
-        });
-
-        it("should produce different commitments for different values", () => {
-            const asset_id = 0n;
-            const owner_pubkey = 0x1234567890abcdefn;
-            const blinding = 0xfedcba0987654321n;
-
-            const c1: string = poseidon.F.toString(
-                poseidon([100n, asset_id, owner_pubkey, blinding])
+            const pub = eddsa.prv2pub(privKey);
+            return { privKey, Ax: F.toObject(pub[0]), Ay: F.toObject(pub[1]) };
+        })();
+        bob = (() => {
+            const privKey = Buffer.from(
+                "0102030405060708090001020304050607080900010203040506070809000102",
+                "hex"
             );
-            const c2: string = poseidon.F.toString(
-                poseidon([200n, asset_id, owner_pubkey, blinding])
-            );
-
-            assert(c1 !== c2, "Different values should produce different commitments");
-        });
-
-        it("should be deterministic (same inputs = same output)", () => {
-            const value = 100n;
-            const asset_id = 0n;
-            const owner_pubkey = 0x1234567890abcdefn;
-            const blinding = 0xfedcba0987654321n;
-
-            const c1: string = poseidon.F.toString(
-                poseidon([value, asset_id, owner_pubkey, blinding])
-            );
-            const c2: string = poseidon.F.toString(
-                poseidon([value, asset_id, owner_pubkey, blinding])
-            );
-
-            assert.strictEqual(c1, c2, "Should be deterministic");
-        });
-    });
-
-    describe("Nullifier", () => {
-        it("should compute nullifier correctly", () => {
-            const commitment = 0x123456n;
-            const spending_key = 0xdeadbeefn;
-
-            const nullifier: string = poseidon.F.toString(poseidon([commitment, spending_key]));
-
-            console.log("  Nullifier:", nullifier);
-            assert(nullifier !== "0", "Nullifier should not be zero");
-        });
-
-        it("should be unlinkable (different spending keys)", () => {
-            const commitment = 0x123456n;
-            const sk1 = 0xdeadbeefn;
-            const sk2 = 0xcafebaben;
-
-            const n1: string = poseidon.F.toString(poseidon([commitment, sk1]));
-            const n2: string = poseidon.F.toString(poseidon([commitment, sk2]));
-
-            assert(n1 !== n2, "Different spending keys should produce different nullifiers");
-        });
-    });
-
-    describe("Merkle Tree", () => {
-        it("should compute merkle root for 2-leaf tree", () => {
-            const leaf1 = 0x1111n;
-            const leaf2 = 0x2222n;
-
-            const root: string = poseidon.F.toString(poseidon([leaf1, leaf2]));
-
-            console.log("  Merkle Root:", root);
-            assert(root !== "0", "Root should not be zero");
-        });
-
-        it("should verify merkle path (depth 2)", () => {
-            // Build tree:
-            //       root
-            //      /    \
-            //    h01    h23
-            //   /  \   /  \
-            //  l0  l1 l2  l3
-
-            const l0 = 0x1111n;
-            const l1 = 0x2222n;
-            const l2 = 0x3333n;
-            const l3 = 0x4444n;
-
-            const h01 = poseidon([l0, l1]);
-            const h23 = poseidon([l2, l3]);
-            const root: string = poseidon.F.toString(poseidon([h01, h23]));
-
-            // Verify l0 is in tree
-            // Path: l0 -> h01 -> root
-            // Siblings: [l1, h23]
-            // Indices: [0, 0] (l0 is left child, h01 is left child)
-
-            const computed_h01 = poseidon([l0, l1]); // l0 + sibling[0]
-            const computed_root: string = poseidon.F.toString(
-                poseidon([computed_h01, h23]) // h01 + sibling[1]
-            );
-
-            assert.strictEqual(computed_root, root, "Should verify merkle path");
-        });
-    });
-
-    describe("Balance Conservation", () => {
-        it("should enforce balance equality", () => {
-            const input1 = 100n;
-            const input2 = 50n;
-            const output1 = 80n;
-            const output2 = 70n;
-
-            const input_sum = input1 + input2;
-            const output_sum = output1 + output2;
-
-            assert.strictEqual(input_sum, output_sum, "Balances should be equal");
-        });
-
-        it("should reject imbalanced transfer", () => {
-            const input_sum: bigint = 100n;
-            const output_sum: bigint = 110n;
-
-            assert(input_sum !== output_sum, "Should detect imbalance");
-        });
-
-        it("should support u128 values in transfer inputs and outputs", () => {
-            console.log("\n  === Testing u128 Range for Transfer (Num2Bits(128)) ===");
-
-            // Test large amounts in transfer circuit
-            const largeInput1 = 1000n * 10n ** 18n; // 1000 ORB
-            const largeInput2 = 500n * 10n ** 18n; // 500 ORB
-            const largeOutput1 = 800n * 10n ** 18n; // 800 ORB
-            const largeOutput2 = 700n * 10n ** 18n; // 700 ORB
-
-            const input_sum = largeInput1 + largeInput2;
-            const output_sum = largeOutput1 + largeOutput2;
-
-            console.log("  Input 1: 1000 ORB =", largeInput1.toString(), "wei");
-            console.log("  Input 2: 500 ORB  =", largeInput2.toString(), "wei");
-            console.log("  Output 1: 800 ORB =", largeOutput1.toString(), "wei");
-            console.log("  Output 2: 700 ORB =", largeOutput2.toString(), "wei");
-
-            assert.strictEqual(input_sum, output_sum, "Large u128 balances should be equal");
-            console.log("  ✓ u128 values supported in both inputs and outputs");
-        });
-
-        it("should handle maximum u128 values in transfer", () => {
-            console.log("\n  === Testing Maximum u128 Transfer ===");
-
-            // Maximum u128
-            const maxU128 = 2n ** 128n - 1n;
-            const halfMax = maxU128 / 2n;
-            const remainingHalf = maxU128 - halfMax;
-
-            // Transfer max value split into two outputs
-            const input1 = maxU128;
-            const output1 = halfMax;
-            const output2 = remainingHalf;
-
-            console.log("  Max u128:", maxU128.toString());
-            console.log("  Input: max u128");
-            console.log("  Output 1: half");
-            console.log("  Output 2: remaining");
-
-            assert.strictEqual(input1, output1 + output2, "Should split max u128 correctly");
-            console.log("  ✓ Maximum u128 transfer validated");
-        });
-
-        it("should create commitments with large u128 values", () => {
-            const largeValue = 10000n * 10n ** 18n; // 10,000 ORB
-            const asset_id = 0n;
-            const owner_pubkey = 0x1234567890abcdefn;
-            const blinding = 0xfedcba0987654321n;
-
-            const commitment: string = poseidon.F.toString(
-                poseidon([largeValue, asset_id, owner_pubkey, blinding])
-            );
-
-            console.log("\n  Testing large value commitment:");
-            console.log("  Value: 10,000 ORB =", largeValue.toString(), "wei");
-            console.log("  Commitment:", commitment.slice(0, 20) + "...");
-
-            assert(commitment !== "0", "Should create commitment with large u128 value");
-            console.log("  ✓ Large u128 commitment created successfully");
-        });
-
-        it("should verify u64 limit no longer applies", () => {
-            const u64_max = 2n ** 64n - 1n;
-            const exceeds_u64 = u64_max + 1000n * 10n ** 18n; // Much larger than u64
-
-            console.log("\n  === Verifying u64 Limitation Removed ===");
-            console.log("  Old u64 max:", u64_max.toString());
-            console.log("  Testing with:", exceeds_u64.toString());
-            console.log("  Difference:", (exceeds_u64 - u64_max).toString());
-
-            // Create transfer with amount exceeding old u64 limit
-            const input_sum = exceeds_u64;
-            const output_sum = exceeds_u64;
-
-            assert.strictEqual(input_sum, output_sum, "Should handle values >u64");
-            console.log("  ✓ Values exceeding u64 (18.4 ORB) now supported");
-            console.log("  ✓ u128 range (up to ~340 undecillion) available");
-        });
-    });
-
-    describe("Complete Transfer Example", () => {
-        it("should simulate valid transfer", () => {
-            console.log("\n  === Simulating Private Transfer ===");
-
-            // Alice has 2 notes worth 100 and 50
-            const input1_value = 100n;
-            const input2_value = 50n;
-            const asset_id = 0n;
-            const alice_pk = 0x1234567890abcdefn;
-
-            const input1_commitment: string = poseidon.F.toString(
-                poseidon([input1_value, asset_id, alice_pk, 0x1111n])
-            );
-            const input2_commitment: string = poseidon.F.toString(
-                poseidon([input2_value, asset_id, alice_pk, 0x2222n])
-            );
-
-            console.log("  Input 1 commitment:", input1_commitment.slice(0, 20) + "...");
-            console.log("  Input 2 commitment:", input2_commitment.slice(0, 20) + "...");
-
-            // Alice creates 2 output notes for Bob (80) and change (70)
-            const bob_pk = 0xfedcba0987654321n;
-            const output1_value = 80n;
-            const output2_value = 70n;
-
-            const output1_commitment: string = poseidon.F.toString(
-                poseidon([output1_value, asset_id, bob_pk, 0x3333n])
-            );
-            const output2_commitment: string = poseidon.F.toString(
-                poseidon([output2_value, asset_id, alice_pk, 0x4444n]) // Change to Alice
-            );
-
-            console.log("  Output 1 commitment:", output1_commitment.slice(0, 20) + "...");
-            console.log("  Output 2 commitment:", output2_commitment.slice(0, 20) + "...");
-
-            // Verify balance
-            const input_sum = input1_value + input2_value;
-            const output_sum = output1_value + output2_value;
-
-            assert.strictEqual(input_sum, output_sum, "Balance should be preserved");
-            console.log("  ✓ Balance preserved: 150 = 150");
-        });
-    });
-
-    describe("Multi-Asset Support", () => {
-        it("should allow transfer with asset_id = 1 (USDT)", () => {
-            console.log("\n  === Testing USDT Transfer (asset_id = 1) ===");
-
-            const asset_id = 1n; // USDT
-            const alice_pk = 0x1234567890abcdefn;
-            const bob_pk = 0xfedcba0987654321n;
-
-            // Alice has 2 USDT notes
-            const input1_value = 500n;
-            const input2_value = 300n;
-
-            const input1_commitment: string = poseidon.F.toString(
-                poseidon([input1_value, asset_id, alice_pk, 0x1111n])
-            );
-            const input2_commitment: string = poseidon.F.toString(
-                poseidon([input2_value, asset_id, alice_pk, 0x2222n])
-            );
-
-            console.log("  Input 1 (500 USDT):", input1_commitment.slice(0, 20) + "...");
-            console.log("  Input 2 (300 USDT):", input2_commitment.slice(0, 20) + "...");
-
-            // Alice transfers 600 USDT to Bob, 200 USDT change
-            const output1_value = 600n;
-            const output2_value = 200n;
-
-            const output1_commitment: string = poseidon.F.toString(
-                poseidon([output1_value, asset_id, bob_pk, 0x3333n])
-            );
-            const output2_commitment: string = poseidon.F.toString(
-                poseidon([output2_value, asset_id, alice_pk, 0x4444n])
-            );
-
-            console.log("  Output 1 (600 USDT to Bob):", output1_commitment.slice(0, 20) + "...");
-            console.log("  Output 2 (200 USDT change):", output2_commitment.slice(0, 20) + "...");
-
-            // Verify balance
-            const input_sum = input1_value + input2_value;
-            const output_sum = output1_value + output2_value;
-
-            assert.strictEqual(input_sum, output_sum, "Balance should be preserved");
-            console.log("  ✓ Balance preserved: 800 = 800");
-            console.log("  ✓ All notes use asset_id = 1 (USDT)");
-        });
-
-        it("should allow transfer with asset_id = 42 (Custom Token)", () => {
-            const asset_id = 42n; // Custom token
-            const owner_pk = 0xabcdefn;
-
-            const input1_value = 1000n;
-            const input2_value = 2000n;
-            const output1_value = 1500n;
-            const output2_value = 1500n;
-
-            const input1: string = poseidon.F.toString(
-                poseidon([input1_value, asset_id, owner_pk, 0xaa11n])
-            );
-            const input2: string = poseidon.F.toString(
-                poseidon([input2_value, asset_id, owner_pk, 0xbb22n])
-            );
-            const output1: string = poseidon.F.toString(
-                poseidon([output1_value, asset_id, owner_pk, 0xcc33n])
-            );
-            const output2: string = poseidon.F.toString(
-                poseidon([output2_value, asset_id, owner_pk, 0xdd44n])
-            );
-
-            assert(input1 !== "0", "Input 1 commitment valid");
-            assert(input2 !== "0", "Input 2 commitment valid");
-            assert(output1 !== "0", "Output 1 commitment valid");
-            assert(output2 !== "0", "Output 2 commitment valid");
-
-            const input_sum = input1_value + input2_value;
-            const output_sum = output1_value + output2_value;
-
-            assert.strictEqual(input_sum, output_sum, "Balance preserved for asset_id = 42");
-            console.log("  ✓ Custom token (asset_id = 42) transfer valid");
-        });
-
-        it("should validate asset consistency (all inputs/outputs must match)", () => {
-            console.log("\n  === Testing Asset Consistency ===");
-
-            const alice_pk = 0x1234n;
-
-            // Valid: all notes use asset_id = 1
-            const asset1 = 1n;
-            const input1_asset1 = poseidon.F.toString(poseidon([100n, asset1, alice_pk, 0x1n]));
-            const input2_asset1 = poseidon.F.toString(poseidon([50n, asset1, alice_pk, 0x2n]));
-            const output1_asset1 = poseidon.F.toString(poseidon([80n, asset1, alice_pk, 0x3n]));
-            const output2_asset1 = poseidon.F.toString(poseidon([70n, asset1, alice_pk, 0x4n]));
-
-            console.log("  ✓ All notes with asset_id = 1: VALID");
-
-            // Invalid scenario: mixing asset_id = 1 and asset_id = 2
-            // This should be rejected by the circuit (would fail constraint check)
-            const asset2 = 2n;
-            const input1_asset2 = poseidon.F.toString(
-                poseidon([100n, asset2, alice_pk, 0x1n]) // Different asset!
-            );
-
-            // Verify commitments are different when asset_id changes
-            assert(
-                input1_asset1 !== input1_asset2,
-                "Different asset_ids produce different commitments"
-            );
-
-            console.log("  ✓ Mixing assets would be rejected by circuit");
+            const pub = eddsa.prv2pub(privKey);
+            return { privKey, Ax: F.toObject(pub[0]), Ay: F.toObject(pub[1]) };
+        })();
+
+        if (!fs.existsSync(precompiledWasm)) {
             console.log(
-                "  ✓ Circuit enforces: input[0].asset === input[1].asset === output[0].asset === output[1].asset"
+                "  ⚠  Pre-compiled wasm not found. Run 'pnpm build-all' to enable circuit tests."
             );
+            return;
+        }
+        circuit = await wasm_tester(circuitPath, { output: outputDir, recompile: true });
+    });
+
+    // ── 1. Commitment arithmetic (no wasm needed) ─────────────────────────────
+
+    describe("Commitment arithmetic", () => {
+        it("is deterministic", () => {
+            const c1 = computeCommitment(100n, 0n, 0xabcdn, 0xef01n);
+            const c2 = computeCommitment(100n, 0n, 0xabcdn, 0xef01n);
+            expect(c1).to.equal(c2);
         });
 
-        it("should support high asset_id values (up to 2^32-1)", () => {
-            const max_asset_id = 4294967295n; // 2^32 - 1
-            const owner_pk = 0x999999n;
-            const value = 12345n;
-
-            const commitment: string = poseidon.F.toString(
-                poseidon([value, max_asset_id, owner_pk, 0xffffn])
-            );
-
-            assert(commitment !== "0", "Should support max asset_id");
-            console.log("  ✓ Max asset_id (2^32-1) supported");
+        it("changes with each field", () => {
+            const base = computeCommitment(100n, 0n, 0xabcdn, 0xef01n);
+            expect(computeCommitment(200n, 0n, 0xabcdn, 0xef01n)).not.to.equal(base);
+            expect(computeCommitment(100n, 1n, 0xabcdn, 0xef01n)).not.to.equal(base);
+            expect(computeCommitment(100n, 0n, 0x9999n, 0xef01n)).not.to.equal(base);
+            expect(computeCommitment(100n, 0n, 0xabcdn, 0x1234n)).not.to.equal(base);
         });
 
-        it("should produce different commitments for different asset_ids", () => {
-            const value = 100n;
-            const owner_pk = 0x1234n;
-            const blinding = 0x5678n;
-
-            const commit_native: string = poseidon.F.toString(
-                poseidon([value, 0n, owner_pk, blinding])
-            );
-            const commit_usdt: string = poseidon.F.toString(
-                poseidon([value, 1n, owner_pk, blinding])
-            );
-            const commit_dai: string = poseidon.F.toString(
-                poseidon([value, 2n, owner_pk, blinding])
-            );
-
-            // All should be different
-            assert(commit_native !== commit_usdt, "Native vs USDT different");
-            assert(commit_native !== commit_dai, "Native vs DAI different");
-            assert(commit_usdt !== commit_dai, "USDT vs DAI different");
-
-            console.log("  ✓ Different assets produce different commitments");
-            console.log("    Native (0):", commit_native.slice(0, 16) + "...");
-            console.log("    USDT (1):  ", commit_usdt.slice(0, 16) + "...");
-            console.log("    DAI (2):   ", commit_dai.slice(0, 16) + "...");
+        it("nullifiers differ per (commitment, spendingKey)", () => {
+            const c = computeCommitment(100n, 0n, 0xabcdn, 0xef01n);
+            expect(computeNullifier(c, 0xdeadn)).not.to.equal(computeNullifier(c, 0xbeefn));
         });
 
-        it("should simulate multi-asset private payments", () => {
-            console.log("\n  === Multi-Asset Payment Scenarios ===");
+        it("supports max u128 value", () => {
+            const MAX = 2n ** 128n - 1n;
+            const c = computeCommitment(MAX, 0n, 0xabcdn, 0xef01n);
+            expect(c).not.to.equal(0n);
+        });
+    });
 
-            const alice_pk = 0xaaaaaan;
-            const bob_pk = 0xbbbbbbn;
-            const charlie_pk = 0xccccccn;
+    // ── 2. Gasless fee constraint: input_sum === output_sum + fee (Constraint 5) ──
 
-            // Scenario 1: USDT payment
-            console.log("\n  Scenario 1: Alice sends 100 USDT to Bob");
-            const usdt_id = 1n;
-            const usdt_in = 150n;
-            const usdt_to_bob = 100n;
-            const usdt_change = 50n;
+    describe("Gasless fee constraint (Constraint 5)", () => {
+        it("accepts fee = 0 (input_sum = output_sum)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({
+                value0: 500n,
+                value1: 500n,
+                outValue0: 600n,
+                outValue1: 400n,
+                fee: 0n,
+            });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
 
-            assert.strictEqual(usdt_in, usdt_to_bob + usdt_change);
-            console.log("  ✓ 150 USDT → 100 (Bob) + 50 (change)");
+        it("accepts fee > 0: input_sum = output_sum + fee", async function () {
+            if (!circuit) return this.skip();
+            const fee = 1_000_000_000_000_000n; // 0.001 ORB
+            const inSum = 10_000_000_000_000_000_000n; // 10 ORB total input
+            const outA = inSum - fee;
+            const input = buildInput({
+                value0: inSum / 2n,
+                value1: inSum / 2n,
+                outValue0: outA,
+                outValue1: 0n,
+                fee,
+            });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
 
-            // Scenario 2: DAI payment
-            console.log("\n  Scenario 2: Bob sends 200 DAI to Charlie");
-            const dai_id = 2n;
-            const dai_in1 = 120n;
-            const dai_in2 = 80n;
-            const dai_to_charlie = 200n;
+        it("accepts fee = entire input (all to fee, output = 0 + 0)", async function () {
+            if (!circuit) return this.skip();
+            const total = 1000n;
+            const input = buildInput({
+                value0: 600n,
+                value1: 400n,
+                outValue0: 0n,
+                outValue1: 0n,
+                fee: total,
+            });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
 
-            assert.strictEqual(dai_in1 + dai_in2, dai_to_charlie);
-            console.log("  ✓ 120 + 80 DAI → 200 (Charlie)");
+        it("rejects: pre-gasless balance (output = input, fee = 1 → constraint failure)", async function () {
+            if (!circuit) return this.skip();
+            // input_sum=1000, output_sum=1000, fee=1 → 1000 ≠ 1001
+            const input = buildInput({
+                value0: 500n,
+                value1: 500n,
+                outValue0: 600n,
+                outValue1: 400n,
+                fee: 1n,
+            });
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
 
-            // Scenario 3: Native token payment
-            console.log("\n  Scenario 3: Charlie sends 500 ORB to Alice");
-            const native_id = 0n;
-            const native_in = 1000n;
-            const native_to_alice = 500n;
-            const native_change = 500n;
+        it("rejects: outputs exceed inputs (theft attempt)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({
+                value0: 100n,
+                value1: 100n,
+                outValue0: 150n,
+                outValue1: 100n,
+                fee: 0n,
+            });
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+    });
 
-            assert.strictEqual(native_in, native_to_alice + native_change);
-            console.log("  ✓ 1000 ORB → 500 (Alice) + 500 (change)");
+    // ── 3. EdDSA ownership (Constraint 3) ─────────────────────────────────────
 
-            console.log("\n  ✓ Multi-asset private payments enabled!");
+    describe("EdDSA ownership (Constraint 3)", () => {
+        it("accepts valid signatures from both owners", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({
+                value0: 300n,
+                value1: 200n,
+                outValue0: 499n,
+                outValue1: 0n,
+                fee: 1n,
+            });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("rejects tampered signature S component", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({
+                value0: 300n,
+                value1: 200n,
+                outValue0: 499n,
+                outValue1: 0n,
+                fee: 1n,
+            });
+            input.input_sig_S[0] = (BigInt(input.input_sig_S[0]) + 1n).toString();
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("rejects mismatched public key (wrong owner for note)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({
+                value0: 300n,
+                value1: 200n,
+                outValue0: 499n,
+                outValue1: 0n,
+                fee: 1n,
+            });
+            // Swap Alice's pubkey for Bob's — commitment was built with Alice's Ax, so this mismatches
+            input.input_owner_Ax[0] = bob.Ax.toString();
+            input.input_owner_Ay[0] = bob.Ay.toString();
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+    });
+
+    // ── 4. Nullifier integrity (Constraint 2) ─────────────────────────────────
+
+    describe("Nullifier integrity (Constraint 2)", () => {
+        it("rejects tampered public nullifier[0]", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({
+                value0: 200n,
+                value1: 300n,
+                outValue0: 498n,
+                outValue1: 0n,
+                fee: 2n,
+            });
+            input.nullifiers[0] = (BigInt(input.nullifiers[0]) + 1n).toString();
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("rejects wrong spending_key[1]", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({
+                value0: 200n,
+                value1: 300n,
+                outValue0: 498n,
+                outValue1: 0n,
+                fee: 2n,
+            });
+            input.spending_keys[1] = "999999999999999999";
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+    });
+
+    // ── 5. Merkle membership (Constraint 1) ───────────────────────────────────
+
+    describe("Merkle membership (Constraint 1)", () => {
+        it("rejects wrong Merkle root", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({
+                value0: 200n,
+                value1: 200n,
+                outValue0: 399n,
+                outValue1: 0n,
+                fee: 1n,
+            });
+            input.merkle_root = (BigInt(input.merkle_root) + 1n).toString();
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("rejects tampered path sibling", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({
+                value0: 200n,
+                value1: 200n,
+                outValue0: 399n,
+                outValue1: 0n,
+                fee: 1n,
+            });
+            input.input_path_elements[0][0] = (
+                BigInt(input.input_path_elements[0][0]) + 1n
+            ).toString();
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+    });
+
+    // ── 6. Output commitment verification (Constraint 4) ─────────────────────
+
+    describe("Output commitment verification (Constraint 4)", () => {
+        it("rejects tampered public output commitment", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({
+                value0: 300n,
+                value1: 200n,
+                outValue0: 499n,
+                outValue1: 0n,
+                fee: 1n,
+            });
+            input.commitments[0] = (BigInt(input.commitments[0]) + 1n).toString();
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+    });
+
+    // ── 7. Asset ID enforcement (Constraints 7 & 8) ───────────────────────────
+
+    describe("Asset ID enforcement (Constraints 7 & 8)", () => {
+        it("accepts non-native asset (USDT, asset_id = 1)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({
+                value0: 500n,
+                value1: 500n,
+                outValue0: 999n,
+                outValue1: 0n,
+                fee: 1n,
+                assetId: 1n,
+            });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("rejects public asset_id ≠ input note asset_id (Constraint 8)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({
+                value0: 500n,
+                value1: 500n,
+                outValue0: 999n,
+                outValue1: 0n,
+                fee: 1n,
+                assetId: 0n,
+            });
+            input.asset_id = "1"; // public claims 1, notes have 0
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("rejects mixed-asset inputs: input_asset_ids[1] ≠ input_asset_ids[0] (Constraint 7)", async function () {
+            if (!circuit) return this.skip();
+            // Build a valid 2-note input where note1 has a different asset_id (1 vs 0)
+            const input = buildInput({
+                value0: 500n,
+                value1: 500n,
+                outValue0: 999n,
+                outValue1: 0n,
+                fee: 1n,
+                assetId: 0n,
+            });
+            // Tamper note1's private asset_id — circuit enforces input_asset_ids[0] === input_asset_ids[1]
+            input.input_asset_ids[1] = "1";
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("rejects mixed-asset output: output_asset_ids[0] ≠ input_asset_ids[0] (Constraint 7)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({
+                value0: 500n,
+                value1: 500n,
+                outValue0: 999n,
+                outValue1: 0n,
+                fee: 1n,
+                assetId: 0n,
+            });
+            // Tamper one output note's private asset_id
+            input.output_asset_ids[0] = "1";
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("different asset_ids produce different commitments", () => {
+            const base = (id: bigint) => computeCommitment(100n, id, alice.Ax, 0x5678n);
+            expect(base(0n)).not.to.equal(base(1n));
+            expect(base(1n)).not.to.equal(base(2n));
+        });
+    });
+
+    // ── 8. Distinct nullifiers (Constraint 9) ───────────────────────────────
+
+    describe("Distinct nullifiers (Constraint 9)", () => {
+        it("accepts two different notes (nullifiers always distinct)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({
+                value0: 500n,
+                value1: 500n,
+                outValue0: 999n,
+                outValue1: 0n,
+                fee: 1n,
+            });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("rejects duplicate nullifiers (same note spent twice in one tx)", async function () {
+            if (!circuit) return this.skip();
+            // Both input notes are the same: 500 + 500 = 999 + 0 + 1, conservation holds.
+            // Without this constraint the circuit accepts and gives 2× value from one note.
+            const input = buildInput({
+                value0: 500n,
+                value1: 500n,
+                outValue0: 999n,
+                outValue1: 0n,
+                fee: 1n,
+            });
+            input.nullifiers[1] = input.nullifiers[0]; // same nullifier = same note
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+    });
+
+    // ── 9. u128 range check (Constraint 6 & 6b) ─────────────────────────────
+
+    describe("u128 range check (Constraint 6 & 6b)", () => {
+        it("accepts 1000 ORB input notes", async function () {
+            if (!circuit) return this.skip();
+            const ORB = 10n ** 18n;
+            const fee = 1_000_000_000_000_000n;
+            const halfIn = 500n * ORB;
+            const input = buildInput({
+                value0: halfIn,
+                value1: halfIn,
+                outValue0: 2n * halfIn - fee,
+                outValue1: 0n,
+                fee,
+            });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("accepts max u128 fee with matching inputs", async function () {
+            if (!circuit) return this.skip();
+            const MAX_FEE = 2n ** 128n - 1n;
+            const input = buildInput({
+                value0: MAX_FEE,
+                value1: 0n,
+                outValue0: 0n,
+                outValue1: 0n,
+                fee: MAX_FEE,
+            });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("rejects fee = 2^128 even when input/output values are valid u128", async function () {
+            if (!circuit) return this.skip();
+            const HALF = 2n ** 127n;
+            const input = buildInput({
+                value0: HALF,
+                value1: HALF,
+                outValue0: 0n,
+                outValue1: 0n,
+                fee: 0n,
+            });
+            input.fee = (2n ** 128n).toString();
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
         });
     });
 });

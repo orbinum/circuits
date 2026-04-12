@@ -1,426 +1,390 @@
+import path from "path";
+import fs from "fs";
+import { expect } from "chai";
+import { wasm as wasm_tester } from "circom_tester";
 import { buildPoseidon } from "circomlibjs";
-import assert from "assert";
+import type { WasmTester } from "circom_tester";
 
-describe("Unshield Circuit Logic", function () {
-    this.timeout(60000);
+// ─── Constants ────────────────────────────────────────────────────────────────
 
+const TREE_DEPTH = 20;
+
+describe("Unshield Circuit (gasless)", function () {
+    this.timeout(120_000);
+
+    const circuitPath = path.join(__dirname, "..", "circuits", "unshield.circom");
+    const outputDir = path.join(__dirname, "..", "build");
+    const precompiledWasm = path.join(outputDir, "unshield_js", "unshield.wasm");
+
+    let circuit: WasmTester;
     let poseidon: any;
     let F: any;
 
-    before(async () => {
-        poseidon = await buildPoseidon();
-        F = poseidon.F;
-    });
+    // ── Helpers ────────────────────────────────────────────────────────────────
 
-    // Helper: compute note commitment
     function computeCommitment(
         value: bigint,
         assetId: bigint,
         owner: bigint,
         blinding: bigint
-    ): string {
-        return F.toString(poseidon([value, assetId, owner, blinding]));
+    ): bigint {
+        return F.toObject(poseidon([value, assetId, owner, blinding]));
     }
 
-    // Helper: compute nullifier
-    function computeNullifier(commitment: string, spendingKey: bigint): string {
-        return F.toString(poseidon([BigInt(commitment), spendingKey]));
+    function computeNullifier(commitment: bigint, spendingKey: bigint): bigint {
+        return F.toObject(poseidon([commitment, spendingKey]));
     }
 
-    // Helper: compute merkle root for simple 2-level tree
-    function computeMerkleRoot(leaves: string[], depth: number = 2): string {
-        if (leaves.length === 0) return "0";
-
-        let level: bigint[] = leaves.map((l) => BigInt(l));
-
-        while (level.length > 1) {
-            const newLevel: any[] = [];
-            for (let i = 0; i < level.length; i += 2) {
-                const left = level[i];
-                const right = level[i + 1] || 0n;
-                newLevel.push(poseidon([left, right]));
+    /** Sparse Merkle proof builder. Only materialises the O(N·depth) non-zero nodes,
+     *  keeping runtime proportional to the number of leaves, not 2^depth. */
+    function buildMerkleProof(
+        leaves: bigint[],
+        leafIndex: number
+    ): { root: bigint; pathElements: bigint[]; pathIndices: number[] } {
+        const pathElements: bigint[] = [];
+        const pathIndices: number[] = [];
+        let level = new Map<number, bigint>();
+        for (let i = 0; i < leaves.length; i++) level.set(i, leaves[i]);
+        for (let d = 0; d < TREE_DEPTH; d++) {
+            const nodeIdx = leafIndex >> d;
+            const isRight = nodeIdx % 2 === 1;
+            pathIndices.push(isRight ? 1 : 0);
+            pathElements.push(level.get(isRight ? nodeIdx - 1 : nodeIdx + 1) ?? 0n);
+            const nextLevel = new Map<number, bigint>();
+            for (const [pos] of level) {
+                const parentPos = pos >> 1;
+                if (nextLevel.has(parentPos)) continue;
+                const l = level.get(parentPos * 2) ?? 0n;
+                const r = level.get(parentPos * 2 + 1) ?? 0n;
+                nextLevel.set(parentPos, F.toObject(poseidon([l, r])));
             }
-            level = newLevel;
+            level = nextLevel;
+        }
+        return { root: level.get(0) ?? 0n, pathElements, pathIndices };
+    }
+
+    /** Build a minimal valid circuit input. */
+    function buildInput(opts: {
+        noteValue: bigint;
+        amount: bigint;
+        fee: bigint;
+        assetId?: bigint;
+        owner?: bigint;
+        blinding?: bigint;
+        spendingKey?: bigint;
+        recipient?: bigint;
+        leafIndex?: number;
+    }) {
+        const assetId = opts.assetId ?? 0n;
+        const owner = opts.owner ?? 0x1234567890abcdefn;
+        const blinding = opts.blinding ?? 0xfedcba0987654321n;
+        const spendingKey = opts.spendingKey ?? 0xdeadbeefcafebaben;
+        const recipient = opts.recipient ?? 0xaabbccddee112233n;
+        const leafIndex = opts.leafIndex ?? 0;
+
+        const commitment = computeCommitment(opts.noteValue, assetId, owner, blinding);
+        const nullifier = computeNullifier(commitment, spendingKey);
+        // Place the commitment at leafIndex in the tree; fill preceding positions with zero
+        const leavesArr = new Array(leafIndex + 1).fill(0n);
+        leavesArr[leafIndex] = commitment;
+        const { root, pathElements, pathIndices } = buildMerkleProof(leavesArr, leafIndex);
+
+        return {
+            merkle_root: root.toString(),
+            nullifier: nullifier.toString(),
+            amount: opts.amount.toString(),
+            recipient: recipient.toString(),
+            asset_id: assetId.toString(),
+            fee: opts.fee.toString(),
+            note_value: opts.noteValue.toString(),
+            note_asset_id: assetId.toString(),
+            note_owner: owner.toString(),
+            note_blinding: blinding.toString(),
+            spending_key: spendingKey.toString(),
+            path_elements: pathElements.map((e) => e.toString()),
+            path_indices: pathIndices,
+        };
+    }
+
+    // ── Setup ──────────────────────────────────────────────────────────────────
+
+    before(async function () {
+        poseidon = await buildPoseidon();
+        F = poseidon.F;
+        if (!fs.existsSync(precompiledWasm)) {
+            console.log(
+                "  ⚠  Pre-compiled wasm not found. Run 'pnpm build-all' to enable circuit tests."
+            );
+            return;
+        }
+        circuit = await wasm_tester(circuitPath, { output: outputDir, recompile: false });
+    });
+
+    // ── 1. Commitment arithmetic (no wasm needed) ─────────────────────────────
+
+    describe("Commitment arithmetic", () => {
+        it("is deterministic", () => {
+            const c1 = computeCommitment(1000n, 0n, 0x1234n, 0x5678n);
+            const c2 = computeCommitment(1000n, 0n, 0x1234n, 0x5678n);
+            expect(c1).to.equal(c2);
+        });
+
+        it("changes with each field", () => {
+            const base = computeCommitment(1000n, 0n, 0x1234n, 0x5678n);
+            expect(computeCommitment(2000n, 0n, 0x1234n, 0x5678n)).to.not.equal(base);
+            expect(computeCommitment(1000n, 1n, 0x1234n, 0x5678n)).to.not.equal(base);
+            expect(computeCommitment(1000n, 0n, 0x9999n, 0x5678n)).to.not.equal(base);
+            expect(computeCommitment(1000n, 0n, 0x1234n, 0x9999n)).to.not.equal(base);
+        });
+
+        it("nullifiers differ per (commitment, spendingKey)", () => {
+            const c = computeCommitment(1000n, 0n, 0x1234n, 0x5678n);
+            expect(computeNullifier(c, 0xdeadn)).to.not.equal(computeNullifier(c, 0xbeefn));
+        });
+
+        it("supports max u128 value", () => {
+            const MAX = 2n ** 128n - 1n;
+            const c = computeCommitment(MAX, 0n, 0x1234n, 0x5678n);
+            expect(c).to.not.equal(0n);
+        });
+    });
+
+    // ── 2. Gasless fee constraint: note_value === amount + fee ─────────────────
+
+    describe("Gasless fee constraint (Constraint 1)", () => {
+        it("note_value = amount + fee (fee = 0)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 1000n, amount: 1000n, fee: 0n });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("note_value = amount + fee (fee > 0)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 101n, amount: 100n, fee: 1n });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("note_value = amount + fee (realistic: 0.001 ORB fee)", async function () {
+            if (!circuit) return this.skip();
+            const FEE = 1_000_000_000_000_000n;
+            const NOTE = 10_000_000_000_000_000_000n; // 10 ORB
+            const input = buildInput({ noteValue: NOTE, amount: NOTE - FEE, fee: FEE });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("fee = entire note value (amount = 0, edge case)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 500n, amount: 0n, fee: 500n });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("rejects: old behaviour amount = note_value when fee > 0", async function () {
+            if (!circuit) return this.skip();
+            // Pre-gasless: amount == note_value. Now: amount + fee == note_value.
+            // If fee=1 and amount=note_value, amount+fee overflows constraint.
+            const input = buildInput({ noteValue: 1000n, amount: 1000n, fee: 1n });
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("rejects: amount + fee > note_value", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 100n, amount: 90n, fee: 20n });
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("rejects: amount > note_value (overspend)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 100n, amount: 200n, fee: 0n });
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+    });
+
+    // ── 3. Merkle membership (Constraint 4) ───────────────────────────────────
+
+    describe("Merkle membership (Constraint 4)", () => {
+        it("accepts valid proof at index 0", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 1000n, amount: 999n, fee: 1n });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("accepts valid proof at index 5", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 1000n, amount: 999n, fee: 1n, leafIndex: 5 });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("rejects wrong Merkle root", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 1000n, amount: 999n, fee: 1n });
+            input.merkle_root = (BigInt(input.merkle_root) + 1n).toString();
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("rejects wrong commitment (tampered owner)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 1000n, amount: 999n, fee: 1n });
+            // Change owner in the witness private inputs (commitment was built with original owner)
+            input.note_owner = "99999999999999999";
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+    });
+
+    // ── 4. Nullifier integrity (Constraint 5) ─────────────────────────────────
+
+    describe("Nullifier integrity (Constraint 5)", () => {
+        it("rejects tampered public nullifier", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 1000n, amount: 999n, fee: 1n });
+            input.nullifier = (BigInt(input.nullifier) + 1n).toString();
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("rejects wrong spending_key", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({
+                noteValue: 500n,
+                amount: 499n,
+                fee: 1n,
+                spendingKey: 0xdeadn,
+            });
+            input.spending_key = "999999999"; // different key → different nullifier
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+    });
+
+    // ── 5. Asset ID enforcement (Constraint 6) ────────────────────────────────
+
+    describe("Asset ID enforcement (Constraint 6)", () => {
+        it("accepts matching public asset_id and note asset_id", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 500n, amount: 499n, fee: 1n, assetId: 1n });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("rejects public asset_id ≠ note asset_id", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 500n, amount: 499n, fee: 1n, assetId: 1n });
+            input.asset_id = "2"; // public says 2, note has 1
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+    });
+
+    // ── 6. u128 range check (Constraints 2 & 3) ─────────────────────────────────
+
+    describe("u128 range check (Constraints 2 & 3)", () => {
+        it("accepts max u128 note value", async function () {
+            if (!circuit) return this.skip();
+            const MAX = 2n ** 128n - 1n;
+            const FEE = 1n;
+            const input = buildInput({ noteValue: MAX, amount: MAX - FEE, fee: FEE });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("accepts 1000 ORB (exceeds old u64 limit)", async function () {
+            if (!circuit) return this.skip();
+            const NOTE = 1000n * 10n ** 18n;
+            const FEE = 1_000_000_000_000_000n;
+            const input = buildInput({ noteValue: NOTE, amount: NOTE - FEE, fee: FEE });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("accepts max u128 fee (fee = 2^128 - 1)", async function () {
+            if (!circuit) return this.skip();
+            const MAX_FEE = 2n ** 128n - 1n;
+            const input = buildInput({ noteValue: MAX_FEE, amount: 0n, fee: MAX_FEE });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("rejects fee = 2^128 (exceeds u128)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 0n, amount: 0n, fee: 0n });
+            input.fee = (2n ** 128n).toString();
+            input.note_value = (2n ** 128n).toString();
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+    });
+
+    // ── 7. Multi-asset support ─────────────────────────────────────────────────
+
+    describe("Multi-asset support", () => {
+        for (const [label, assetId] of [
+            ["native (0)", 0n],
+            ["USDT (1)", 1n],
+            ["max u32 (4294967295)", 4294967295n],
+        ] as const) {
+            it(`accepts asset_id ${label}`, async function () {
+                if (!circuit) return this.skip();
+                const input = buildInput({
+                    noteValue: 1000n,
+                    amount: 999n,
+                    fee: 1n,
+                    assetId: BigInt(assetId),
+                });
+                const w = await circuit.calculateWitness(input);
+                await circuit.checkConstraints(w);
+            });
         }
 
-        return F.toString(level[0]);
-    }
-
-    describe("Note Commitment for Unshield", () => {
-        it("should compute commitment correctly", () => {
-            const value = 1000n;
-            const assetId = 0n;
-            const owner = 0x1234567890abcdef1234567890abcdef12345678n;
-            const blinding = 0xfedcba0987654321fedcba0987654321fedcba09n;
-
-            const commitment = computeCommitment(value, assetId, owner, blinding);
-
-            console.log("  Commitment:", commitment);
-            assert(commitment !== "0", "Commitment should not be zero");
-        });
-
-        it("should be deterministic", () => {
-            const value = 1000n;
-            const assetId = 0n;
-            const owner = 0x1234n;
-            const blinding = 0x5678n;
-
-            const c1 = computeCommitment(value, assetId, owner, blinding);
-            const c2 = computeCommitment(value, assetId, owner, blinding);
-
-            assert.strictEqual(c1, c2, "Same inputs should produce same commitment");
-        });
-    });
-
-    describe("Nullifier for Unshield", () => {
-        it("should compute nullifier correctly", () => {
-            const commitment = computeCommitment(1000n, 0n, 0x1234n, 0x5678n);
-            const spendingKey = 0xdeadbeefcafebaben;
-
-            const nullifier = computeNullifier(commitment, spendingKey);
-
-            console.log("  Nullifier:", nullifier);
-            assert(nullifier !== "0", "Nullifier should not be zero");
-        });
-
-        it("should be different for different spending keys", () => {
-            const commitment = computeCommitment(1000n, 0n, 0x1234n, 0x5678n);
-
-            const n1 = computeNullifier(commitment, 0xdeadbeefn);
-            const n2 = computeNullifier(commitment, 0xcafebaben);
-
-            assert(n1 !== n2, "Different spending keys should produce different nullifiers");
-        });
-
-        it("should be different for different commitments", () => {
-            const spendingKey = 0xdeadbeefn;
-
-            const c1 = computeCommitment(1000n, 0n, 0x1234n, 0x5678n);
-            const c2 = computeCommitment(2000n, 0n, 0x1234n, 0x5678n);
-
-            const n1 = computeNullifier(c1, spendingKey);
-            const n2 = computeNullifier(c2, spendingKey);
-
-            assert(n1 !== n2, "Different commitments should produce different nullifiers");
-        });
-    });
-
-    describe("Amount Verification", () => {
-        it("should match amount to note value", () => {
-            const noteValue = 1000n;
-            const withdrawAmount = 1000n;
-
-            assert.strictEqual(noteValue, withdrawAmount, "Amount should equal note value");
-        });
-
-        it("should reject mismatched amount", () => {
-            const noteValue: bigint = 1000n;
-            const withdrawAmount: bigint = 1500n; // Trying to withdraw more
-
-            assert(noteValue !== withdrawAmount, "Should detect amount mismatch");
-        });
-
-        it("should support u128 maximum value (2^128 - 1)", () => {
-            console.log("\n  === Testing u128 Range (Num2Bits(128)) ===");
-
-            // Maximum u128: 340282366920938463463374607431768211455
-            const maxU128 = 2n ** 128n - 1n;
-            const noteValue = maxU128;
-            const assetId = 0n;
-            const owner = 0x1234n;
-            const blinding = 0x5678n;
-
-            const commitment = computeCommitment(noteValue, assetId, owner, blinding);
-            console.log("  Max u128 value:", maxU128.toString());
-            console.log("  Commitment created:", commitment.slice(0, 20) + "...");
-
-            assert(commitment !== "0", "Should handle max u128 value");
-            console.log("  ✓ u128 maximum value supported");
-        });
-
-        it("should support large ORB amounts (>18.4 ORB)", () => {
-            console.log("\n  === Testing Large Amounts (>u64 limit) ===");
-
-            // Previous u64 limit: 2^64 - 1 = 18446744073709551615 wei ≈ 18.4 ORB
-            const u64_max = 2n ** 64n - 1n;
-
-            // Test with 1000 ORB = 10^21 wei (exceeds old u64 limit)
-            const largeAmount = 1000n * 10n ** 18n; // 1000 ORB
-            const assetId = 0n;
-            const owner = 0xabcdn;
-            const blinding = 0xef01n;
-
-            console.log("  u64 max (old limit):", u64_max.toString());
-            console.log("  Testing with:", largeAmount.toString(), "wei (1000 ORB)");
-            console.log("  Exceeds u64 by:", (largeAmount - u64_max).toString(), "wei");
-
-            const commitment = computeCommitment(largeAmount, assetId, owner, blinding);
-            assert(commitment !== "0", "Should handle amounts >18.4 ORB");
-
-            console.log("  ✓ 1000 ORB (10^21 wei) supported with u128");
-            console.log("  ✓ Old u64 limit (18.4 ORB) no longer applies");
-        });
-
-        it("should support realistic large amounts", () => {
-            // Test various large amounts that would fail with u64
-            const amounts = [
-                { value: 100n * 10n ** 18n, label: "100 ORB" },
-                { value: 10000n * 10n ** 18n, label: "10,000 ORB" },
-                { value: 1000000n * 10n ** 18n, label: "1 Million ORB" },
-            ];
-
-            console.log("\n  Testing realistic large amounts:");
-            amounts.forEach(({ value, label }) => {
-                const commitment = computeCommitment(value, 0n, 0x1234n, 0x5678n);
-                assert(commitment !== "0", `Should support ${label}`);
-                console.log(`  ✓ ${label}: ${value.toString()} wei`);
-            });
-        });
-    });
-
-    describe("Merkle Membership Proof", () => {
-        it("should verify commitment exists in tree", () => {
-            // Create a note
-            const noteValue = 1000n;
-            const assetId = 0n;
-            const owner = 0x1234n;
-            const blinding = 0x5678n;
-            const commitment = computeCommitment(noteValue, assetId, owner, blinding);
-
-            // Create simple tree with this commitment
-            const otherCommitment = computeCommitment(2000n, 0n, 0xabcdn, 0xef01n);
-
-            // Build merkle root
-            const root = computeMerkleRoot([commitment, otherCommitment]);
-
-            console.log("  Tree root:", root);
-
-            // Verify path: commitment is at index 0 (left)
-            // Sibling at level 0: otherCommitment
-            const computedRoot = F.toString(
-                poseidon([BigInt(commitment), BigInt(otherCommitment)])
-            );
-
-            assert.strictEqual(computedRoot, root, "Should verify merkle path");
-        });
-
-        it("should build tree with multiple commitments", () => {
-            const commitments: string[] = [
-                computeCommitment(1000n, 0n, 0x1111n, 0xaan),
-                computeCommitment(2000n, 0n, 0x2222n, 0xbbn),
-                computeCommitment(3000n, 0n, 0x3333n, 0xccn),
-                computeCommitment(4000n, 0n, 0x4444n, 0xddn),
-            ];
-
-            const root = computeMerkleRoot(commitments);
-
-            console.log("  Multi-leaf tree root:", root);
-            assert(root !== "0", "Root should not be zero");
-        });
-    });
-
-    describe("Complete Unshield Example", () => {
-        it("should simulate valid unshield", () => {
-            console.log("\n  === Simulating Unshield Transaction ===");
-
-            // Alice has a private note worth 1000 tokens
-            const noteValue = 1000n;
-            const assetId = 0n;
-            const alice_pk = 0x1234567890abcdefn;
-            const blinding = 0xfedcba0987654321n;
-            const spending_key = 0xdeadbeefcafebaben;
-
-            // Compute commitment
-            const commitment = computeCommitment(noteValue, assetId, alice_pk, blinding);
-            console.log("  Note commitment:", commitment.slice(0, 20) + "...");
-
-            // Compute nullifier (to prevent double-spending)
-            const nullifier = computeNullifier(commitment, spending_key);
-            console.log("  Nullifier:", nullifier.slice(0, 20) + "...");
-
-            // Add to merkle tree
-            const otherCommitments = [
-                computeCommitment(2000n, 0n, 0x5555n, 0x1111n),
-                computeCommitment(3000n, 0n, 0x6666n, 0x2222n),
-            ];
-
-            const root = computeMerkleRoot([commitment, ...otherCommitments]);
-            console.log("  Merkle root:", root.slice(0, 20) + "...");
-
-            // Alice wants to unshield (withdraw) to public balance
-            const withdrawAmount = 1000n;
-            const recipientAddress = "0xAlicePublicAddress";
-
-            assert.strictEqual(noteValue, withdrawAmount, "Withdraw amount must match note value");
-
-            console.log("  ✓ Unshield valid: 1000 tokens");
-            console.log("  ✓ Recipient:", recipientAddress);
-            console.log("  ✓ Nullifier prevents double-spend");
-        });
-    });
-
-    describe("Multi-Asset Unshield Support", () => {
-        it("should unshield USDT (asset_id = 1)", () => {
-            console.log("\n  === Testing USDT Unshield (asset_id = 1) ===");
-
-            // Alice has a private USDT note
-            const noteValue = 500n;
-            const assetId = 1n; // USDT
-            const alice_pk = 0x1234567890abcdefn;
-            const blinding = 0xfedcba0987654321n;
-            const spending_key = 0xdeadbeefcafebaben;
-
-            // Compute commitment for USDT note
-            const commitment = computeCommitment(noteValue, assetId, alice_pk, blinding);
-            console.log("  USDT Note commitment:", commitment.slice(0, 20) + "...");
-
-            // Compute nullifier
-            const nullifier = computeNullifier(commitment, spending_key);
-            console.log("  Nullifier:", nullifier.slice(0, 20) + "...");
-
-            // Add to merkle tree
-            const otherCommitments = [
-                computeCommitment(1000n, 1n, 0x5555n, 0x1111n),
-                computeCommitment(2000n, 1n, 0x6666n, 0x2222n),
-            ];
-
-            const root = computeMerkleRoot([commitment, ...otherCommitments]);
-            console.log("  Merkle root:", root.slice(0, 20) + "...");
-
-            // Unshield to public balance
-            const withdrawAmount = 500n;
-            const recipientAddress = "0xAlicePublicAddress";
-
-            assert.strictEqual(noteValue, withdrawAmount, "Withdraw amount must match note value");
-            assert.strictEqual(assetId, 1n, "Should be USDT");
-
-            console.log("  ✓ Unshield valid: 500 USDT");
-            console.log("  ✓ Asset ID: 1 (USDT)");
-            console.log("  ✓ Recipient:", recipientAddress);
-        });
-
-        it("should unshield DAI (asset_id = 2)", () => {
-            console.log("\n  === Testing DAI Unshield (asset_id = 2) ===");
-
-            const noteValue = 1000n;
-            const assetId = 2n; // DAI
-            const owner_pk = 0xabcdefn;
-            const blinding = 0x123456n;
-
-            const commitment = computeCommitment(noteValue, assetId, owner_pk, blinding);
-            console.log("  DAI Note commitment:", commitment.slice(0, 20) + "...");
-
-            assert(commitment !== "0", "Commitment should be valid");
-            console.log("  ✓ DAI note created with asset_id = 2");
-        });
-
-        it("should unshield custom token (asset_id = 42)", () => {
-            const noteValue = 12345n;
-            const assetId = 42n; // Custom token
-            const owner_pk = 0x9999n;
-            const blinding = 0xaaaan;
-
-            const commitment = computeCommitment(noteValue, assetId, owner_pk, blinding);
-
-            assert(commitment !== "0", "Custom token commitment valid");
-            console.log("  ✓ Custom token (asset_id = 42) unshield supported");
-        });
-
-        it("should support high asset_id values in unshield", () => {
-            const max_asset_id = 4294967295n; // 2^32 - 1
-            const noteValue = 100n;
-            const owner_pk = 0xffffn;
-            const blinding = 0xeeeeen;
-
-            const commitment = computeCommitment(noteValue, max_asset_id, owner_pk, blinding);
-
-            assert(commitment !== "0", "Max asset_id should work");
-            console.log("  ✓ Max asset_id (2^32-1) supported in unshield");
-        });
-
-        it("should produce different nullifiers for different asset notes", () => {
-            const owner_pk = 0x1234n;
-            const blinding = 0x5678n;
-            const spending_key = 0xdeadbeefn;
-            const value = 100n;
-
-            // Create notes with different asset_ids
-            const commit_native = computeCommitment(value, 0n, owner_pk, blinding);
-            const commit_usdt = computeCommitment(value, 1n, owner_pk, blinding);
-            const commit_dai = computeCommitment(value, 2n, owner_pk, blinding);
-
-            // Compute nullifiers
-            const null_native = computeNullifier(commit_native, spending_key);
-            const null_usdt = computeNullifier(commit_usdt, spending_key);
-            const null_dai = computeNullifier(commit_dai, spending_key);
-
-            // All should be different (different commitments → different nullifiers)
-            assert(null_native !== null_usdt, "Native vs USDT nullifier different");
-            assert(null_native !== null_dai, "Native vs DAI nullifier different");
-            assert(null_usdt !== null_dai, "USDT vs DAI nullifier different");
-
-            console.log("  ✓ Different asset notes produce unique nullifiers");
-            console.log("    Native nullifier:", null_native.slice(0, 16) + "...");
-            console.log("    USDT nullifier:  ", null_usdt.slice(0, 16) + "...");
-            console.log("    DAI nullifier:   ", null_dai.slice(0, 16) + "...");
-        });
-
-        it("should simulate multi-asset unshield scenarios", () => {
-            console.log("\n  === Multi-Asset Unshield Scenarios ===");
-
-            const alice_pk = 0x111111n;
-            const bob_pk = 0x222222n;
-            const spending_key = 0xdeadbeefn;
-
-            // Scenario 1: Unshield 100 USDT
-            console.log("\n  Scenario 1: Alice unshields 100 USDT");
-            const usdt_note = computeCommitment(100n, 1n, alice_pk, 0xaa11n);
-            const usdt_nullifier = computeNullifier(usdt_note, spending_key);
-            console.log("  ✓ USDT note commitment:", usdt_note.slice(0, 20) + "...");
-            console.log("  ✓ Nullifier:", usdt_nullifier.slice(0, 20) + "...");
-
-            // Scenario 2: Unshield 500 DAI
-            console.log("\n  Scenario 2: Bob unshields 500 DAI");
-            const dai_note = computeCommitment(500n, 2n, bob_pk, 0xbb22n);
-            const dai_nullifier = computeNullifier(dai_note, spending_key);
-            console.log("  ✓ DAI note commitment:", dai_note.slice(0, 20) + "...");
-            console.log("  ✓ Nullifier:", dai_nullifier.slice(0, 20) + "...");
-
-            // Scenario 3: Unshield 1000 Native tokens
-            console.log("\n  Scenario 3: Alice unshields 1000 ORB (native)");
-            const native_note = computeCommitment(1000n, 0n, alice_pk, 0xcc33n);
-            const native_nullifier = computeNullifier(native_note, spending_key);
-            console.log("  ✓ Native note commitment:", native_note.slice(0, 20) + "...");
-            console.log("  ✓ Nullifier:", native_nullifier.slice(0, 20) + "...");
-
-            // Verify all commitments are unique
-            assert(usdt_note !== dai_note, "USDT vs DAI commitments different");
-            assert(usdt_note !== native_note, "USDT vs Native commitments different");
-            assert(dai_note !== native_note, "DAI vs Native commitments different");
-
-            console.log("\n  ✓ Multi-asset unshield fully supported!");
-            console.log("  ✓ Each asset type produces unique commitments");
-            console.log("  ✓ Nullifiers prevent double-spending across all assets");
-        });
-
-        it("should validate amount consistency across different assets", () => {
-            const owner_pk = 0xababn;
-            const blinding = 0xcdcdn;
-
-            // Same value, different assets should produce different commitments
-            const value = 1000n;
-
-            const c1 = computeCommitment(value, 0n, owner_pk, blinding);
-            const c2 = computeCommitment(value, 1n, owner_pk, blinding);
-            const c3 = computeCommitment(value, 2n, owner_pk, blinding);
-
-            assert(
-                c1 !== c2 && c2 !== c3 && c1 !== c3,
-                "Same value with different assets must produce different commitments"
-            );
-
-            console.log("  ✓ Amount consistency validated across assets");
-            console.log("  ✓ Asset ID is part of commitment calculation");
+        it("different asset_ids produce different commitments", () => {
+            const base = (id: bigint) => computeCommitment(100n, id, 0x1234n, 0x5678n);
+            expect(base(0n)).to.not.equal(base(1n));
+            expect(base(1n)).to.not.equal(base(2n));
         });
     });
 });
