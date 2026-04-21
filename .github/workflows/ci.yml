@@ -76,10 +76,6 @@ jobs:
     - name: Run tests
       run: npm test
     
-    - name: Run benchmarks
-      run: npm run bench
-      continue-on-error: true  # Benchmarks may fail if input files are not generated
-
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -91,13 +87,6 @@ jobs:
           build/**/*.json
         retention-days: 7
     
-    - name: Upload benchmark results
-      uses: actions/upload-artifact@v4
-      with:
-        name: benchmark-results
-        path: build/benchmark_results_*.json
-        retention-days: 30
-
   security:
     runs-on: ubuntu-latest
     steps:
