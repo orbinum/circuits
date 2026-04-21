@@ -13,13 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `package.json`: added `packageManager` field (`pnpm@10.32.1`); replaced `npm run` with `pnpm run` in composite scripts (`compile`, `setup`, `build-all:manifest`); `clean` script now removes `pnpm-lock.yaml` instead of `package-lock.json`.
     - `pnpm-lock.yaml` added; `package-lock.json` removed.
 - **CI pipeline** (`.github/workflows/ci.yml`):
-    - Added `pnpm/action-setup@v4` step (version: latest) in both `test` and `security` jobs, before the Node.js setup step.
+    - Added `pnpm/action-setup@v4` step (no explicit `version`; resolved from `packageManager` in `package.json`) in both `build` and `security` jobs, before the Node.js setup step.
     - Changed `cache: 'npm'` → `cache: 'pnpm'` in `actions/setup-node`.
     - `npm ci` → `pnpm install --frozen-lockfile`.
     - All `npm run <script>` invocations → `pnpm run <script>`.
     - `npm audit` → `pnpm audit`.
 - **Release pipeline** (`.github/workflows/release.yml`):
-    - Added `pnpm/action-setup@v4` step (version: latest) before the Node.js setup step.
+    - Added `pnpm/action-setup@v4` step (no explicit `version`; resolved from `packageManager` in `package.json`) before the Node.js setup step.
     - Changed `cache: "npm"` → `cache: "pnpm"` in `actions/setup-node`.
     - `npm ci` → `pnpm install --frozen-lockfile`.
     - All `npm run <script>` invocations → `pnpm run <script>`.
