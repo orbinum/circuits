@@ -9,6 +9,7 @@ This directory contains detailed technical documentation for each zero-knowledge
 - **[Disclosure](disclosure.md)** - Selective disclosure of note properties with privacy preservation
 - **[Transfer](transfer.md)** - Private token transfers with EdDSA ownership verification
 - **[Unshield](unshield.md)** - Convert private notes to public tokens (withdrawal)
+- **[Private Link](private-link.md)** - Prove knowledge of a private cross-chain wallet link without revealing the address
 
 ### Supporting Components
 
@@ -36,7 +37,7 @@ All circuits use the **Groth16** proving system and are compiled with **Circom 2
     nullifier = Poseidon(commitment, spending_key)
     ```
 
-4. **Range Checks**: All value fields are constrained to 64-bit unsigned integers (u64)
+4. **Range Checks**: All value fields are constrained to 128-bit unsigned integers (u128, matching the runtime `Balance` type)
 
 5. **Merkle Tree**: 20-level binary Merkle tree for commitment storage
 
@@ -62,11 +63,12 @@ Each circuit document includes:
 
 ## Circuit Statistics
 
-| Circuit    | Constraints | Public Inputs | Private Inputs | Tree Depth |
-| ---------- | ----------- | ------------- | -------------- | ---------- |
-| Disclosure | ~8,500      | 4             | 9              | N/A        |
-| Transfer   | ~32,000     | 5             | 28             | 20         |
-| Unshield   | ~12,000     | 5             | 8              | 20         |
+| Circuit      | Constraints | Public Inputs | Private Inputs       | Tree Depth |
+| ------------ | ----------- | ------------- | -------------------- | ---------- |
+| Disclosure   | ~1,584      | 4             | 7                    | N/A        |
+| Transfer     | ~32,000     | 7             | 15 (+40 Merkle path) | 20         |
+| Unshield     | ~5,000      | 6             | 7 (+40 Merkle path)  | 20         |
+| Private Link | ~5          | 2             | 3                    | N/A        |
 
 _Note: Constraint counts are approximate and may vary with compiler optimizations._
 
@@ -83,6 +85,5 @@ Each circuit produces the following artifacts:
 ## Additional Resources
 
 - [Architecture Documentation](../ARCHITECTURE.md)
-- [API Documentation](../api/)
 - [Arkworks Integration Guide](../guides/arkworks-integration.md)
 - [Build Scripts](../../scripts/build/)

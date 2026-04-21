@@ -21,48 +21,52 @@ The Unshield circuit converts a private note to public tokens. It proves that a 
 
 ## Public Inputs (Visible On-Chain)
 
-| Input         | Type  | Description                                   |
-| ------------- | ----- | --------------------------------------------- |
-| `merkle_root` | Field | Current Merkle tree root                      |
-| `nullifier`   | Field | Nullifier to prevent double-spend             |
-| `amount`      | u64   | Amount being withdrawn (publicly revealed)    |
-| `recipient`   | Field | Recipient address (publicly revealed)         |
-| `asset_id`    | u32   | Asset ID being unshielded (publicly revealed) |
+| Input         | Type  | Description                                                |
+| ------------- | ----- | ---------------------------------------------------------- |
+| `merkle_root` | Field | Current Merkle tree root                                   |
+| `nullifier`   | Field | Nullifier to prevent double-spend                          |
+| `amount`      | Field | Net withdrawal amount (recipient receives this)            |
+| `recipient`   | Field | Recipient address (validated non-zero in runtime)          |
+| `asset_id`    | Field | Asset ID being unshielded (publicly revealed)              |
+| `fee`         | Field | Gasless fee deducted from note value; paid to block author |
 
 ## Private Inputs (Known Only to Prover)
 
 | Input               | Type      | Description                                   |
 | ------------------- | --------- | --------------------------------------------- |
-| `note_value`        | u64       | Value in the note (must equal amount)         |
-| `note_asset_id`     | u32       | Asset ID in note (must match public asset_id) |
+| `note_value`        | Field     | Value in the note (must equal amount + fee)   |
+| `note_asset_id`     | Field     | Asset ID in note (must match public asset_id) |
 | `note_owner`        | Field     | Owner public key                              |
-| `note_blinding`     | u256      | Random blinding factor                        |
+| `note_blinding`     | Field     | Random blinding factor                        |
 | `spending_key`      | Field     | Secret key to compute nullifier               |
 | `path_elements[20]` | Field[20] | Sibling hashes for Merkle proof               |
 | `path_indices[20]`  | u8[20]    | Path directions (0=left, 1=right)             |
 
 ## Constraints
 
-### 1. Amount Matches Note Value
+### 1. Amount + Fee Matches Note Value
 
-The publicly revealed amount must equal the note's value.
+The note value must cover both the net withdrawal amount and the fee.
 
 ```circom
-amount === note_value;
+note_value === amount + fee;
 ```
 
-**Purpose**: Prevents withdrawing more (or less) than deposited.
+**Purpose**: Prevents withdrawing more (or less) than the note covers after fee deduction.
 
-### 2. Range Check
+### 2. Range Checks
 
-Ensure note_value is within u64 range (0 to 2^64-1).
+Ensure `note_value` and `fee` are within u128 range (matches runtime `Balance` type).
 
 ```circom
-component value_range_check = Num2Bits(64);
+component value_range_check = Num2Bits(128);
 value_range_check.in <== note_value;
+
+component fee_range_check = Num2Bits(128);
+fee_range_check.in <== fee;
 ```
 
-**Purpose**: Prevents overflow attacks and ensures value is valid u64.
+**Purpose**: Prevents overflow attacks and ensures values match the runtime `Balance` type.
 
 ### 3. Note Commitment Computation
 
@@ -136,11 +140,11 @@ note_asset_id === asset_id;
 ## Circuit Parameters
 
 - **Tree Depth**: 20 levels (supports up to 2^20 = 1,048,576 notes)
-- **Constraints**: ~12,000
-- **Public Inputs**: 5
-- **Private Inputs**: 8 (+ 40 for Merkle proof)
-- **Proving Time**: ~800ms (local machine)
-- **Verification Time**: ~10ms
+- **Constraints**: ~5,000
+- **Public Inputs**: 6 (merkle_root, nullifier, amount, recipient, asset_id, fee)
+- **Private Inputs**: 7 signals (+ 40 for Merkle proof path)
+- **Proving Time**: ~250ms (local machine)
+- **Verification Time**: ~5ms
 
 ## Usage Examples
 
@@ -153,12 +157,13 @@ const input = {
     // Public - Visible on-chain
     merkle_root: currentRoot,
     nullifier: computedNullifier,
-    amount: 100n,
+    amount: 99n, // net withdrawal (note_value - fee)
     recipient: alicePublicAddress,
     asset_id: 0n, // Native token
+    fee: 1n, // Fee paid to block author
 
     // Private - Only Alice knows
-    note_value: 100n,
+    note_value: 100n, // amount + fee
     note_asset_id: 0n,
     note_owner: alicePubkey,
     note_blinding: randomBlinding,
@@ -193,9 +198,10 @@ const input = {
     // Public
     merkle_root: currentRoot,
     nullifier: computedNullifier,
-    amount: 500n,
+    amount: 498n,
     recipient: alicePublicAddress,
     asset_id: 42n, // Custom asset
+    fee: 2n,
 
     // Private
     note_value: 500n,
@@ -336,15 +342,15 @@ const spendingKey = deriveKey(masterSeed, "spending", noteIndex);
 
 ### Constraint Count Analysis
 
-| Section                | Constraints |
-| ---------------------- | ----------- |
-| Amount Check           | 1           |
-| Range Check (Num2Bits) | ~3,000      |
-| Commitment Computation | ~2,000      |
-| Merkle Verification    | ~4,000      |
-| Nullifier Computation  | ~2,000      |
-| Asset ID Check         | 1           |
-| **Total**              | **~12,000** |
+| Section                 | Constraints |
+| ----------------------- | ----------- |
+| Amount + Fee Check      | 1           |
+| Range Checks (Num2Bits) | ~6,400      |
+| Commitment Computation  | ~200        |
+| Merkle Verification     | ~4,000      |
+| Nullifier Computation   | ~150        |
+| Asset ID Check          | 1           |
+| **Total**               | **~5,000**  |
 
 ### Trusted Setup
 

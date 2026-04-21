@@ -9,30 +9,35 @@ The Transfer circuit enables private token transfers with zero-knowledge proofs.
 1. Input notes exist in the Merkle tree
 2. The user owns the input notes (via EdDSA signature)
 3. Output notes are computed correctly
-4. Value is conserved (inputs sum equals outputs sum)
-5. No value overflow occurs
+4. Value is conserved (inputs sum equals outputs sum plus fee)
+5. No value overflow occurs (u128 range)
 6. All notes use the same asset ID
+7. Both input nullifiers are distinct (no self-double-spend)
 
 ## Circuit Statement
 
-> "I own two notes in the Merkle tree, and I'm spending them to create two new notes, while conserving the total value and maintaining asset consistency"
+> "I own two notes in the Merkle tree, and I'm spending them to create two new notes, while conserving the total value (minus an optional gasless fee paid to the block author) and maintaining asset consistency"
 
 ## Security Properties
 
 - **Double-Spend Prevention**: Nullifiers ensure each note can only be spent once
+- **Distinct Nullifiers**: Both input nullifiers must differ, preventing double-spending of the same note within a single transaction
 - **Ownership Proof**: EdDSA signatures prove note ownership without revealing the spending key
-- **Value Conservation**: Total input value equals total output value
+- **Value Conservation**: Total input value equals total output value plus fee
 - **Merkle Membership**: Input notes must exist in the commitment tree
-- **Range Safety**: All values are constrained to u64 range (no overflow)
+- **Range Safety**: All values and the fee are constrained to u128 range (no overflow; matches the runtime `Balance` type)
 - **Asset Consistency**: All notes in a transaction must use the same asset
+- **Public Asset Binding**: The public `asset_id` signal is constrained to equal the asset used in all notes
 
 ## Public Inputs (Visible On-Chain)
 
-| Input            | Type     | Description                          |
-| ---------------- | -------- | ------------------------------------ |
-| `merkle_root`    | Field    | Current Merkle tree root             |
-| `nullifiers[2]`  | Field[2] | Nullifiers for the two input notes   |
-| `commitments[2]` | Field[2] | Commitments for the two output notes |
+| Input            | Type     | Description                                               |
+| ---------------- | -------- | --------------------------------------------------------- |
+| `merkle_root`    | Field    | Current Merkle tree root                                  |
+| `nullifiers[2]`  | Field[2] | Nullifiers for the two input notes                        |
+| `commitments[2]` | Field[2] | Commitments for the two output notes                      |
+| `asset_id`       | Field    | Asset being transferred (must match all note asset IDs)   |
+| `fee`            | Field    | Gasless fee deducted from input sum; paid to block author |
 
 ## Private Inputs (Known Only to Prover)
 
@@ -40,9 +45,9 @@ The Transfer circuit enables private token transfers with zero-knowledge proofs.
 
 | Input                | Type     | Description                            |
 | -------------------- | -------- | -------------------------------------- |
-| `input_values[2]`    | u64[2]   | Values of input notes                  |
-| `input_asset_ids[2]` | u32[2]   | Asset IDs of input notes               |
-| `input_blindings[2]` | u256[2]  | Blinding factors for input commitments |
+| `input_values[2]`    | u128[2]  | Values of input notes                  |
+| `input_asset_ids[2]` | Field[2] | Asset IDs of input notes               |
+| `input_blindings[2]` | Field[2] | Blinding factors for input commitments |
 | `spending_keys[2]`   | Field[2] | Secret keys to compute nullifiers      |
 
 ### EdDSA Ownership Proof
@@ -66,10 +71,10 @@ The Transfer circuit enables private token transfers with zero-knowledge proofs.
 
 | Input                     | Type     | Description                             |
 | ------------------------- | -------- | --------------------------------------- |
-| `output_values[2]`        | u64[2]   | Values of output notes                  |
-| `output_asset_ids[2]`     | u32[2]   | Asset IDs of output notes               |
-| `output_owner_pubkeys[2]` | Field[2] | Public keys of output note owners       |
-| `output_blindings[2]`     | u256[2]  | Blinding factors for output commitments |
+| `output_values[2]`        | u128[2]  | Values of output notes                  |
+| `output_asset_ids[2]`     | Field[2] | Asset IDs of output notes               |
+| `output_owner_pubkeys[2]` | Field[2] | Public keys of output note owners (Ax)  |
+| `output_blindings[2]`     | Field[2] | Blinding factors for output commitments |
 
 ## Constraints
 
@@ -184,10 +189,10 @@ for (var i = 0; i < 2; i++) {
 
 ### 5. Balance Conservation
 
-Proves that total input value equals total output value.
+Proves that total input value equals total output value plus the fee paid to the block author.
 
 ```
-input_values[0] + input_values[1] == output_values[0] + output_values[1]
+input_values[0] + input_values[1] == output_values[0] + output_values[1] + fee
 ```
 
 **Circuit Logic**:
@@ -199,23 +204,32 @@ signal output_sum;
 input_sum <== input_values[0] + input_values[1];
 output_sum <== output_values[0] + output_values[1];
 
-input_sum === output_sum;
+input_sum === output_sum + fee;
 ```
 
 ### 6. Range Checks
 
-Ensures all values are within u64 range (0 to 2^64-1) to prevent overflow.
+Ensures all note values are within u128 range (0 to 2^128-1), matching the runtime `Balance` type, to prevent overflow attacks.
 
 **Circuit Logic**:
 
 ```circom
 for (var i = 0; i < 2; i++) {
-    input_range_checks[i] = Num2Bits(64);
+    input_range_checks[i] = Num2Bits(128);
     input_range_checks[i].in <== input_values[i];
 
-    output_range_checks[i] = Num2Bits(64);
+    output_range_checks[i] = Num2Bits(128);
     output_range_checks[i].in <== output_values[i];
 }
+```
+
+### 6b. Fee Range Check
+
+Ensures the fee also fits within u128 range (defense-in-depth).
+
+```circom
+component fee_range_check = Num2Bits(128);
+fee_range_check.in <== fee;
 ```
 
 ### 7. Asset Consistency
@@ -230,12 +244,32 @@ input_asset_ids[0] === output_asset_ids[1];
 
 **Note**: The circuit accepts any asset ID. The runtime validates which assets are allowed.
 
+### 8. Public Asset ID Binding
+
+Ensures the public `asset_id` signal matches the asset used in all notes.
+
+```circom
+asset_id === input_asset_ids[0];
+```
+
+This constraint, combined with Constraint 7, guarantees that the on-chain public `asset_id` cannot differ from the notes' actual asset.
+
+### 9. Distinct Nullifiers
+
+Prevents a prover from using the same input note twice in a single transaction. Without this, a prover could set both inputs to the same note—value conservation would still hold but they would extract double the value before the pallet can insert either nullifier.
+
+```circom
+component nullifiers_distinct = IsZero();
+nullifiers_distinct.in <== nullifiers[0] - nullifiers[1];
+nullifiers_distinct.out === 0;  // IsZero output is 1 when input == 0, so this requires they differ
+```
+
 ## Circuit Parameters
 
 - **Tree Depth**: 20 levels (supports up to 2^20 = 1,048,576 notes)
 - **Constraints**: ~32,000
-- **Public Inputs**: 5 (1 merkle_root + 2 nullifiers + 2 commitments)
-- **Private Inputs**: 28
+- **Public Inputs**: 7 (`merkle_root` + 2 `nullifiers` + 2 `commitments` + `asset_id` + `fee`)
+- **Private Inputs**: 15 scalars + 40 Merkle path elements (2×20)
 - **Proving Time**: ~2-3 seconds (local machine)
 - **Verification Time**: ~15ms
 
@@ -251,9 +285,11 @@ const input = {
     merkle_root: currentRoot,
     nullifiers: [nullifier1, nullifier2],
     commitments: [outputCommitment1, outputCommitment2],
+    asset_id: 0n, // Native token
+    fee: 1n, // 1 unit fee to block author
 
     // Private - Input Notes (Alice owns both)
-    input_values: [60n, 40n], // Total: 100
+    input_values: [60n, 41n], // Total: 101 = 100 (outputs) + 1 (fee)
     input_asset_ids: [0n, 0n], // Native token
     input_blindings: [blinding1, blinding2],
     spending_keys: [spendingKey1, spendingKey2],
@@ -287,9 +323,11 @@ const input = {
     merkle_root: currentRoot,
     nullifiers: [nullifier1, nullifier2],
     commitments: [outputCommitment1, outputCommitment2],
+    asset_id: 0n,
+    fee: 1n,
 
     // Private inputs
-    input_values: [60n, 40n], // Total: 100
+    input_values: [60n, 41n], // Total: 101 = 30 + 70 (outputs) + 1 (fee)
     output_values: [30n, 70n], // 30 to Bob, 70 change to Alice
 
     output_owner_pubkeys: [bobPubkey, alicePubkey],
@@ -307,6 +345,8 @@ const input = {
     merkle_root: currentRoot,
     nullifiers: [nullifier1, dummyNullifier],
     commitments: [outputCommitment1, outputCommitment2],
+    asset_id: 0n,
+    fee: 0n,
 
     // Private inputs
     input_values: [100n, 0n], // One note with 100, one dummy
@@ -487,14 +527,14 @@ const proof = merkleTree.getProof(leafIndex);
 
 ### Issue: Balance Not Conserved
 
-**Cause**: Input sum ≠ output sum
+**Cause**: Input sum ≠ output sum + fee
 
 **Solution**:
 
 ```typescript
 const inputSum = input_values[0] + input_values[1];
 const outputSum = output_values[0] + output_values[1];
-assert(inputSum === outputSum, "Balance not conserved");
+assert(inputSum === outputSum + fee, "Balance not conserved: inputs must equal outputs + fee");
 ```
 
 ## Related Documentation
@@ -502,5 +542,5 @@ assert(inputSum === outputSum, "Balance not conserved");
 - [Note Circuit](note.md) - NoteCommitment and Nullifier components
 - [Merkle Tree Circuit](merkle-tree.md) - MerkleTreeVerifier component
 - [Unshield Circuit](unshield.md) - Related circuit for withdrawals
-- [API: Generate Transfer Input](../api/generate-transfer-input.md)
-- [API: Generate Transfer Proof](../api/generate-transfer-proof.md)
+- [Architecture](../ARCHITECTURE.md) - System-level design
+- [Quick Start Guide](../guides/quick-start.md)
