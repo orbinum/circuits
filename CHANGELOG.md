@@ -5,6 +5,38 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-04-21
+
+### Changed
+
+- **Package manager migrated from npm to pnpm**:
+    - `package.json`: added `packageManager` field (`pnpm@10.32.1`); replaced `npm run` with `pnpm run` in composite scripts (`compile`, `setup`, `build-all:manifest`); `clean` script now removes `pnpm-lock.yaml` instead of `package-lock.json`.
+    - `pnpm-lock.yaml` added; `package-lock.json` removed.
+- **CI pipeline** (`.github/workflows/ci.yml`):
+    - Added `pnpm/action-setup@v4` step (version: latest) in both `test` and `security` jobs, before the Node.js setup step.
+    - Changed `cache: 'npm'` → `cache: 'pnpm'` in `actions/setup-node`.
+    - `npm ci` → `pnpm install --frozen-lockfile`.
+    - All `npm run <script>` invocations → `pnpm run <script>`.
+    - `npm audit` → `pnpm audit`.
+- **Release pipeline** (`.github/workflows/release.yml`):
+    - Added `pnpm/action-setup@v4` step (version: latest) before the Node.js setup step.
+    - Changed `cache: "npm"` → `cache: "pnpm"` in `actions/setup-node`.
+    - `npm ci` → `pnpm install --frozen-lockfile`.
+    - All `npm run <script>` invocations → `pnpm run <script>`.
+    - `npm publish` → `pnpm publish --no-git-checks`.
+- **Dev dependency updates** (`package.json`):
+    - `@types/chai`: `^4.3.11` → `^4.3.20`
+    - `@types/mocha`: `^10.0.6` → `^10.0.10`
+    - `@types/node`: `^20.10.0` → `^20.19.39`
+    - `chai`: `^4.3.10` → `^4.5.0`
+    - `ffjavascript`: `^0.2.60` → `^0.2.63`
+    - `husky`: `^9.0.11` → `^9.1.7`
+    - `lint-staged`: `^15.2.0` → `^15.5.2`
+    - `mocha`: `^10.2.0` → `^10.8.2`
+    - `prettier`: `^3.2.4` → `^3.8.3`
+    - `snarkjs`: `^0.7.0` → `^0.7.6`
+    - `typescript`: `^5.3.3` → `^5.9.3`
+
 ## [0.5.0] - 2026-04-12
 
 ### Added
