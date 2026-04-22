@@ -3,7 +3,11 @@
 [![npm version](https://img.shields.io/npm/v/@orbinum/circuits.svg)](https://www.npmjs.com/package/@orbinum/circuits)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-Zero-Knowledge circuits for Orbinum privacy blockchain using Circom and Groth16.
+Zero-Knowledge circuits for Orbinum privacy blockchain.
+
+**Stack**: Circom 2.0 · Groth16 · BN254 · Poseidon (circomlib) · BabyPbk key derivation (BabyJubJub) · snarkjs + arkworks
+
+**Privacy model**: UTXO-based note scheme, 2-in / 2-out with dummy input support (Zcash Sapling technique). Multi-asset (`asset_id` per note). Gasless fee embedded in the circuit proof. Merkle tree depth 20 (up to 1,048,576 notes). All value ranges enforced as u128 (matches Substrate `Balance`).
 
 ## Installation
 
@@ -20,7 +24,7 @@ This installs pre-compiled circuit artifacts ready to use. See [npm package docu
 ```bash
 git clone https://github.com/orbinum/circuits
 cd circuits
-npm run build-all
+pnpm run build-all
 ```
 
 ## Quick Start
@@ -28,7 +32,7 @@ npm run build-all
 Build everything from scratch with one command:
 
 ```bash
-npm run build-all
+pnpm run build-all
 ```
 
 This automatically:
@@ -38,12 +42,12 @@ This automatically:
 - Downloads Powers of Tau (72MB, one-time)
 - Generates cryptographic keys (proving + verifying keys)
 - Converts to compatible formats
-- Generates `manifest.json` with SHA-256 hashes for artifacts (when using `npm run build-all:manifest`)
+- Generates `manifest.json` with SHA-256 hashes for artifacts (when using `pnpm run build-all:manifest`)
 
 ### Generate Artifact Manifest (NPM/CDN sync)
 
 ```bash
-npm run manifest
+pnpm run manifest
 ```
 
 This creates `manifest.json` at repo root with:
@@ -144,8 +148,8 @@ cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
   keys/disclosure_pk.zkey \
   keys/disclosure_pk.ark
 
-# Or via npm
-npm run convert:disclosure
+# Or via pnpm
+pnpm run convert:disclosure
 ```
 
 ### Download Release Artifacts
@@ -169,7 +173,7 @@ cp build/disclosure_js/disclosure.wasm /path/to/your/rust/project/
 ### Run All Tests
 
 ```bash
-npm test
+pnpm test
 ```
 
 **Test Suites:**
@@ -181,12 +185,12 @@ npm test
 - `note.test.ts` - Note commitment schemes
 - `poseidon_*.test.ts` - Hash function compatibility
 
-**Expected:** ~86 tests passing in 7 seconds
+**Expected:** 129 tests passing in ~45 seconds
 
 ### Run Specific Test
 
 ```bash
-npm test -- --grep "disclosure"
+pnpm test -- --grep "disclosure"
 ```
 
 ## Benchmarks
@@ -196,7 +200,7 @@ npm test -- --grep "disclosure"
 Generate test inputs first:
 
 ```bash
-npm run gen-input:disclosure
+pnpm run gen-input:disclosure
 ```
 
 This creates 4 test scenarios:
@@ -210,13 +214,13 @@ This creates 4 test scenarios:
 
 ```bash
 # Disclosure circuit
-npm run bench:disclosure
+pnpm run bench:disclosure
 
 # Transfer circuit (coming soon)
-npm run bench:transfer
+pnpm run bench:transfer
 
 # All circuits
-npm run bench
+pnpm run bench
 ```
 
 **Metrics measured:**
@@ -247,7 +251,7 @@ Complete automated workflows from compilation to proof generation.
 ### Disclosure Circuit
 
 ```bash
-npm run e2e:disclosure
+pnpm run e2e:disclosure
 ```
 
 **What it does:**
@@ -267,7 +271,7 @@ npm run e2e:disclosure
 ### Transfer Circuit
 
 ```bash
-npm run e2e:transfer
+pnpm run e2e:transfer
 ```
 
 ## Development Workflow
@@ -279,23 +283,23 @@ npm run e2e:transfer
 rm -rf keys/ build/ node_modules/
 
 # Rebuild everything
-npm run build-all
+pnpm run build-all
 ```
 
 ### Individual Build Steps
 
 ```bash
 # Step 1: Compile circuit
-npm run compile:disclosure
+pnpm run compile:disclosure
 
 # Step 2: Generate keys (requires compilation)
-npm run setup:disclosure
+pnpm run setup:disclosure
 
 # Step 3: Convert to compatible format (optional)
-npm run convert:discord
+pnpm run convert:discord
 
 # Or run all steps together
-npm run full-build:disclosure
+pnpm run full-build:disclosure
 ```
 
 ### Generate WASM for Rust (Witness Calculator)
@@ -328,67 +332,148 @@ let wasm_bytes = std::fs::read("circuits/build/disclosure_js/disclosure.wasm")?;
 let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 ```
 
-**Note:** WASM is also generated automatically with `npm run build-all`.
+**Note:** WASM is also generated automatically with `pnpm run build-all`.
 
 ### Generate Test Inputs
 
 ```bash
 # Disclosure circuit (4 scenarios)
-npm run gen-input:disclosure
+pnpm run gen-input:disclosure
 
 # Transfer circuit
-npm run gen-input:transfer
+pnpm run gen-input:transfer
 ```
 
 ### Generate Proofs
 
 ```bash
 # Disclosure proofs
-npm run prove:disclosure
+pnpm run prove:disclosure
 
 # Transfer proofs
-npm run prove:transfer
+pnpm run prove:transfer
 ```
 
 ## Circuit Specifications
 
-### Disclosure Circuit
+### Transfer Circuit — `circuits/transfer.circom`
 
-**Purpose:** Selective disclosure of encrypted memo fields
+**Purpose:** Private token transfer: 2 input notes → 2 output notes
+
+**Statistics:**
+
+- Constraints: 33,687
+- Private inputs: 9 scalars + 40 Merkle path elements (2×20)
+- Public inputs: 7 (`merkle_root`, `nullifiers[2]`, `commitments[2]`, `asset_id`, `fee`)
+- Tree depth: 20
+
+**Features:**
+
+- Merkle membership proof (real inputs only; dummy inputs exempt via `IsZero`)
+- BabyPbk key derivation: `BabyPbk(spending_key)` derives `ownerPk (Ax)` inside the circuit, proving discrete log ownership — replaces EdDSA, saves ~6,000 constraints (Constraint 3)
+- Nullifier derivation: `Poseidon(commitment, spending_key)` (real inputs only)
+- Dummy input support: `input_values[i] == 0` bypasses Merkle, nullifier, and ownership checks
+- Dummy nullifier binding: `nullifiers[i] * is_dummy[i].out === 0` (Constraint 9)
+- Distinct nullifiers when both inputs are real: `IsZero(n0-n1) * both_real === 0` (Constraint 10)
+- Value conservation: `Σinput = Σoutput + fee` (fee is a public signal, cryptographically bound to the proof)
+- u128 range checks on all input values, output values, and fee
+- Asset ID consistency across all 4 notes; public `asset_id` bound to note asset IDs
+
+### Unshield Circuit — `circuits/unshield.circom`
+
+**Purpose:** Withdraw a private note to a public account
+
+**Statistics:**
+
+- Constraints: 16,033
+- Private inputs: 5 scalars + 20 Merkle path elements
+- Public inputs: 6 (`merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, `fee`)
+- Tree depth: 20
+
+**Features:**
+
+- Note value conservation: `note_value === amount + fee`
+- Merkle membership proof for the input note
+- Nullifier derivation: `Poseidon(commitment, spending_key)`
+- u128 range checks on `note_value` and `fee`
+- Asset ID binding between private note and public `asset_id`
+- `recipient` is a public signal (validated non-zero in the pallet)
+
+### Disclosure Circuit — `circuits/disclosure.circom`
+
+**Purpose:** Selective on-chain disclosure of note fields without revealing the spending key
 
 **Statistics:**
 
 - Constraints: 1,584
-- Private inputs: 8
-- Public inputs: 4
-- Wires: 1,586
+- Private inputs: 7 (`value`, `asset_id`, `owner_pubkey`, `blinding`, `disclose_value`, `disclose_asset_id`, `disclose_owner`)
+- Public inputs: 4 (`commitment`, `revealed_value`, `revealed_asset_id`, `revealed_owner_hash`)
 
 **Features:**
 
-- Commitment verification
-- Selective field revelation
-- Viewing key authentication
-- Zero-knowledge privacy
+- Commitment preimage proof: `commitment === Poseidon(value, asset_id, owner_pubkey, blinding)`
+- Selective field revelation controlled by boolean masks (`disclose_*`)
+- Owner revealed as `Poseidon(owner_pubkey)` instead of raw pubkey (privacy-preserving)
+- Boolean mask constraints: `disclose_* * (disclose_* - 1) === 0`
+
+### Private Link Circuit — `circuits/private_link.circom`
+
+**Purpose:** Prove knowledge of an external wallet address linked to an on-chain commitment, without revealing the address
+
+**Statistics:**
+
+- Constraints: 487
+- Private inputs: 3 (`chain_id_fe`, `address_fe`, `blinding_fe`)
+- Public inputs: 2 (`commitment`, `call_hash_fe`)
+
+**Features:**
+
+- Commitment scheme: `Poseidon(Poseidon(chain_id_fe, address_fe), blinding_fe)`
+- Proof bound to a specific call via `call_hash_sq <== call_hash_fe * call_hash_fe` (quadratic constraint; survives `--O1` simplification, prevents replay across different calls)
+
+## Security Properties
+
+The following properties are enforced at the circuit level (R1CS constraints). They hold for any honest or adversarial prover — soundness is guaranteed by the Groth16 argument.
+
+**Dummy input soundness**: `IsZero(input_values[i])` is deterministic in R1CS. A prover cannot set `is_dummy.out = 1` without `input_values[i]` being provably zero. Technique from Zcash Sapling.
+
+**Dummy nullifier binding** (Constraint 9 in `transfer`): `nullifiers[i] * is_dummy[i].out === 0`. A prover cannot supply a real nullifier in a dummy slot while bypassing Merkle membership and ownership checks.
+
+**Distinct nullifiers when both real** (Constraint 10 in `transfer`): `IsZero(nullifiers[0] - nullifiers[1]).out * both_real === 0`. Prevents spending the same note twice in one transaction. Conditioned on `both_real` so a 1-real + 1-dummy input is accepted without false rejection.
+
+**Merkle path index binary** (in `merkle_tree.circom`): `path_index[i] * (path_index[i] - 1) === 0`. Prevents malformed Merkle proofs with non-binary path indices.
+
+**Fee binding in `transfer` and `unshield`**: `fee` is a public input included in the conservation constraint. The pallet cannot alter the fee after the proof is generated — any change invalidates the proof.
+
+**Quadratic call hash in `private_link`**: The quadratic `call_hash_sq` constraint survives linear simplification (`--O1`). Without it, `call_hash_fe` would have a zero coefficient in `gamma_abc`, making the proof replayable across different calls.
+
+**Anti-spam (pallet, two layers)**: `pallet-shielded-pool` rejects any `private_transfer` where all nullifiers are zero (both inputs dummy) — (1) in `validate_unsigned` (tx pool, `InvalidTransaction::Custom(2)`) and (2) in `execute` (`Error::InvalidAmount`). Prevents free Merkle tree inflation without a valid spend.
 
 ## Project Structure
 
 ```
 circuits/
-├── circuits/          # Circom source files
-│   └── disclosure.circom
-├── build/            # Compiled artifacts
-│   ├── disclosure_js/
-│   │   └── disclosure.wasm
+├── circuits/                  # Circom source files
+│   ├── transfer.circom        # 2-in/2-out private transfer (33,687 constraints)
+│   ├── unshield.circom        # Private → public withdrawal (16,033 constraints)
+│   ├── disclosure.circom      # Selective field disclosure (1,584 constraints)
+│   ├── private_link.circom    # Cross-chain identity link (487 constraints)
+│   ├── note.circom            # NoteCommitment + Nullifier templates
+│   ├── merkle_tree.circom     # MerkleTreeVerifier template
+│   └── poseidon_wrapper.circom
+├── build/                     # Compiled artifacts
+│   ├── transfer_js/transfer.wasm
+│   ├── disclosure_js/disclosure.wasm
 │   └── verification_key_*.json
-├── keys/             # Cryptographic keys
-│   ├── disclosure_pk.zkey
-│   └── disclosure_pk.ark
-├── test/             # Test suites
-├── benches/          # Performance benchmarks
-├── scripts/          # Build and generation scripts
-│   ├── build/        # Compilation scripts
-│   ├── generators/   # Input/proof generators
-│   └── e2e-*.ts      # End-to-end workflows
+├── keys/                      # Cryptographic keys
+│   ├── *_pk.zkey              # snarkjs proving keys
+│   └── *_pk.ark               # arkworks proving keys (serialized)
+├── test/                      # Test suites (129 tests)
+├── benches/                   # Performance benchmarks
+├── scripts/                   # Build and generation scripts
+│   ├── build/                 # Compilation scripts
+│   ├── generators/            # Input/proof generators
+│   └── e2e-*.ts               # End-to-end workflows
 └── package.json
 ```
 
@@ -408,7 +493,7 @@ All requirements are checked automatically by build scripts.
 Run input generator first:
 
 ```bash
-npm run gen-input:disclosure
+pnpm run gen-input:disclosure
 ```
 
 ### "Powers of Tau download failed"
@@ -427,7 +512,7 @@ circom --version  # Should be >= 2.2.0
 
 ```bash
 rm -rf keys/ build/ node_modules/
-npm run build-all
+pnpm run build-all
 ```
 
 ## Performance Reference

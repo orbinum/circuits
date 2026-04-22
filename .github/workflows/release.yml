@@ -9,7 +9,6 @@ on:
             - "circuits/**"
             - "scripts/**"
             - "npm/**"
-            - "Makefile"
             - ".github/workflows/release.yml"
 
 permissions:

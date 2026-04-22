@@ -5,6 +5,81 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-04-22
+
+### Added
+
+- **`BabyPbk(spending_key)` constraint in `transfer.circom` and `unshield.circom`**: the prover must now demonstrate knowledge of the discrete logarithm of the `ownerPk` embedded in each input note commitment. This closes the formal soundness gap where `note_owner`/`input_owner_Ax` were unconstrained relative to `spending_key`.
+- **Dummy input support in `transfer.circom`** (Zcash Sapling technique): when a user has only one note, the second input slot can carry `value = 0`. The circuit bypasses Merkle membership and nullifier derivation for dummy slots, while still enforcing value conservation.
+- **Constraint 0 (`IsZero` detection)**: `IsZero(input_values[i])` determines `is_dummy[i].out` deterministically in R1CS. A prover cannot claim `is_dummy = 1` for a note with positive value — soundness is guaranteed by R1CS arithmetic.
+- **Constraint 9 (`nullifiers[i] * is_dummy[i].out === 0`)**: forces the dummy nullifier to zero. A prover cannot supply a real nullifier in the dummy slot while bypassing Merkle checks.
+- **`buildDummyInput()` test helper** (`test/transfer.test.ts`): constructs a valid 1-real + 1-dummy input with all-zero Merkle path for the dummy slot.
+- **New test section 10 "Dummy note (Constraints 9 & 10)"** (7 tests):
+    - Accepts 1 real note + dummy (value=0, nullifier=0).
+    - Accepts corrupted Merkle path on dummy slot (path is ignored by the circuit).
+    - Rejects dummy with non-zero nullifier (Constraint 9).
+    - Accepts different fee values with dummy input.
+    - Rejects wrong spending key for the real note in a 1-real+dummy scenario (Constraint 2 remains active for real inputs).
+    - Rejects tampered Merkle root for the real note in a 1-real+dummy scenario (Constraint 1 remains active for real inputs).
+    - Accepts dummy as `input[0]`, real as `input[1]` (symmetric position coverage).
+- **`scripts/utils/lint-circom.sh`** (extended): two-phase linter for `.circom` files. Phase 1 — static checks: `pragma circom` presence, non-empty file, unconstrained assignments (`<--`). Phase 2 — compiler validation: invokes `circom 2.2.3` on all top-level circuits (`component main`) to validate syntax and semantics; skipped gracefully when `circom` is not in `PATH`.
+
+### Changed
+
+- **`transfer.circom` — EdDSA replaced by BabyPbk (net −~6,000 constraints)**:
+    - Removed: `include "eddsaposeidon.circom"`, 10 private input signals (`input_owner_Ax[2]`, `input_owner_Ay[2]`, `input_sig_R8x[2]`, `input_sig_R8y[2]`, `input_sig_S[2]`), and 2× `EdDSAPoseidonVerifier` components (~6,000 constraints).
+    - Added: `include "babyjub.circom"`, 2× `BabyPbk(spending_keys[i])` components (~5,000 constraints). The derived `Ax` is used in `NoteCommitment` (Constraint 1). Ownership proof is now the discrete log relation: the prover knows `sk` such that `BabyPbk(sk).Ax == ownerPk`.
+    - **Constraint count**: 33,687.
+    - **API change**: 10 fewer private inputs. Callers no longer provide EdDSA keypairs or signatures.
+- **`unshield.circom` — `note_owner` removed, derived from `spending_key`**:
+    - Removed: `signal input note_owner` (was the raw `ownerPk` x-coordinate, unconstrained relative to `spending_key`).
+    - Added: `BabyPbk(spending_key)` component (Constraint 0); `key_derivation.Ax` is used in `NoteCommitment` instead of `note_owner`.
+    - **Constraint count**: 16,033.
+    - **API change**: 1 fewer private input (`note_owner`).
+- **`test/transfer.test.ts`**:
+    - Import: `buildEddsa` → `buildBabyjub`.
+    - `alice`/`bob` keypairs: no longer derived from EdDSA key buffers; `Ax` now comes from `babyJub.mulPointEscalar(Base8, SK_DEFAULT)`.
+    - Added `computeOwnerAx(sk)` helper.
+    - Removed `sign()` helper.
+    - `buildInput` and `buildDummyInput`: removed EdDSA fields; input note commitments computed with `computeOwnerAx(sk)`.
+    - Section 3 renamed "Key derivation: BabyPbk(spending_key) → ownerPk (Constraint 3)"; tests updated to verify wrong spending_key causes Merkle failure (wrong Ax → wrong commitment → proof fails).
+    - "Symmetric positions" test (section 10) updated to remove EdDSA fields.
+- **`test/unshield.test.ts`**:
+    - Import: added `buildBabyjub`.
+    - Added `computeOwnerAx(sk)` helper.
+    - `buildInput`: removed `owner` parameter; `owner` now derived from `spendingKey` via `computeOwnerAx`. Removed `note_owner` from returned object.
+    - `recompile: false` → `recompile: true` (circuit changed).
+    - "Tampered owner" test → "tampered spending_key → wrong Ax → commitment mismatch" (same coverage, correct for new API).
+- **Constraint 1** (Merkle membership): changed from `merkle_verifiers[i].root === merkle_root` to `merkle_diffs[i] * (1 - is_dummy[i].out) === 0`. Dummy inputs are now exempt from Merkle membership.
+- **Constraint 2** (Nullifier derivation): changed from `nullifier_computers[i].nullifier === nullifiers[i]` to `nullifier_diffs[i] * (1 - is_dummy[i].out) === 0`. Dummy inputs are now exempt from nullifier correctness check.
+- **Constraint 10** (formerly Constraint 9 — distinct nullifiers): conditioned on both inputs being real: `IsZero(n0 - n1) * both_real === 0` where `both_real = (1 - is_dummy[0].out) * (1 - is_dummy[1].out)`. Correctly handles 1-real+1-dummy without false rejections.
+- **Existing test "accepts max u128 fee"**: fixed to use `buildDummyInput` instead of `buildInput({value1: 0n})`. The old call activated `is_dummy[1]` via the circuit but passed a non-zero nullifier, violating Constraint 9 after it was introduced.
+- **`package.json`**: version bump `0.5.1` → `0.6.0`.
+- **Artifacts recompiled** (`build/transfer_js/transfer.wasm`, `build/transfer.r1cs`, `keys/transfer_pk.zkey`, `build/verification_key_transfer.json`) to reflect the updated R1CS.
+
+### Removed
+
+- **`scripts/generators/`** (entire directory): `generate_input.ts` (rewritten for BabyPbk before removal — EdDSA fields dropped, `ownerAx` derived from `Base8 * sk`, `asset_id` and `fee` added to output JSON), `generate_unshield_and_private_link_input.js` (updated for BabyPbk before removal — `note_owner` removed, `ownerAx` derived, `fee` added), `generate_disclosure_input.ts`, `generate_proof.ts`, `generate_disclosure_proof.ts`, `proof_wrapper.ts`, `eddsa_signer.ts`. Input generation and proof scripts are no longer part of the package — the test suite covers all circuit validation directly.
+- **`scripts/e2e/`** (entire directory): `e2e-disclosure.ts`, `e2e-transfer.ts`.
+- **`scripts/utils/check-artifacts.ts`** and **`scripts/utils/health-check.sh`**: removed. (`lint-circom.sh` and `generate-manifest.ts` were recreated and extended — see Added.)
+- **`scripts/build/extract-vk.rs`**: standalone Rust script, unused by the build pipeline.
+- **`scripts/build/generate-metadata.sh`**: not part of the build pipeline.
+- **`scripts/README.md`**: removed with the utility scripts.
+- **`Makefile`**: removed; all workflows use `pnpm` scripts directly. Reference removed from `.github/workflows/release.yml` path triggers.
+- **`.husky/`** (pre-commit, commit-msg): Husky git hooks removed.
+- **`package.json` scripts removed**: `build-all:manifest`, `gen-input:*`, `prove`, `prove:*`, `e2e:*`, `health`, `check-artifacts`, `check-artifacts:build`, `check-artifacts:cdn`, `check-artifacts:npm`, `prepare`.
+- **`package.json` devDependencies removed**: `husky`, `lint-staged`.
+- **`package.json` `lint-staged` block** removed.
+
+### Security
+
+- **Critical soundness gap closed**: `transfer.circom` and `unshield.circom` previously accepted any `(ownerPk, spending_key)` pair as long as the commitment was in the Merkle tree and the nullifier was correctly derived from `spending_key`. The absence of `BabyPbk` meant a prover could supply an unrelated `ownerPk` — impossible to exploit in practice (needs Merkle preimage) but a formal weakness. Now `ownerPk` is computed deterministically from `spending_key` inside the circuit.
+- The new design matches TC Nova's key derivation model and is strictly stronger than the EdDSA approach: BabyPbk proves the discrete log relation directly, whereas EdDSA only proves knowledge of a signature (which is a weaker interactive proof of key ownership).
+- Dummy nullifier binding (Constraint 9) closes a soundness gap where a prover could supply a real nullifier in the dummy slot to spend a note without a Merkle membership proof.
+- The pallet (`pallet-shielded-pool`) rejects any `private_transfer` transaction where all nullifiers are zero (both inputs dummy), preventing free Merkle tree inflation. Enforced in both `validate_unsigned` (tx pool, `InvalidTransaction::Custom(2)`) and `execute` (extrinsic, `Error::InvalidAmount`).
+
+---
+
 ## [0.5.1] - 2026-04-21
 
 ### Changed
