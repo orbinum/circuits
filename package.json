@@ -32,20 +32,20 @@
     "lint:circom": "bash scripts/utils/lint-circom.sh"
   },
   "devDependencies": {
-    "@types/chai": "^4.3.20",
+    "@types/chai": "^5.2.3",
     "@types/circomlibjs": "^0.1.6",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^20.19.39",
+    "@types/node": "^25.6.0",
     "@types/snarkjs": "^0.7.9",
-    "chai": "^4.5.0",
-    "circom_tester": "^0.0.19",
+    "chai": "^6.2.2",
+    "circom_tester": "^0.0.24",
     "circomlib": "^2.0.5",
-    "ffjavascript": "^0.2.63",
-    "mocha": "^10.8.2",
+    "ffjavascript": "^0.3.1",
+    "mocha": "^11.7.5",
     "prettier": "^3.8.3",
     "snarkjs": "^0.7.6",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.3"
   },
   "engines": {
     "node": ">=18.0.0"
