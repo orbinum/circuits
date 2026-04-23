@@ -10,18 +10,20 @@ Orbinum Circuits is a Zero-Knowledge proof system for privacy-preserving blockch
 orbinum-circuits/
 ├── .github/                    # GitHub configuration
 │   ├── workflows/              # CI/CD pipelines
+│   │   ├── ci.yml              # Build, test, security audit
+│   │   └── release.yml         # Release & publish
 │   ├── ISSUE_TEMPLATE/         # Issue templates
 │   ├── PULL_REQUEST_TEMPLATE.md
 │   └── PRE_COMMIT.md          # Pre-commit documentation
 │
-├── circuits/                   # Circom circuit definitions
-│   ├── core/                   # Core circuit components
-│   │   ├── merkle_tree.circom
-│   │   ├── note.circom
-│   │   └── poseidon_wrapper.circom
+├── circuits/                   # Circom circuit definitions (flat)
 │   ├── disclosure.circom       # Selective disclosure
-│   ├── transfer.circom         # Private transfers
-│   └── unshield.circom        # Asset unshielding
+│   ├── merkle_tree.circom      # Merkle tree component
+│   ├── note.circom             # Note commitment
+│   ├── poseidon_wrapper.circom # Poseidon hash wrapper
+│   ├── private_link.circom     # Private note linking
+│   ├── transfer.circom         # Private transfers (2-in/2-out, supports dummy inputs)
+│   └── unshield.circom         # Asset unshielding
 │
 ├── scripts/                    # Automation scripts
 │   ├── build/                  # Build pipeline
@@ -29,57 +31,89 @@ orbinum-circuits/
 │   │   ├── setup.sh
 │   │   ├── full-pipeline.sh
 │   │   ├── convert-to-ark.sh
+│   │   ├── convert-to-ark.rs   # Rust script (.zkey → .ark)
+│   │   ├── extract-vk.rs       # Rust script (extract verifying key)
 │   │   └── generate-metadata.sh
 │   ├── generators/             # Input/proof generators
 │   │   ├── generate_disclosure_input.ts
 │   │   ├── generate_disclosure_proof.ts
 │   │   ├── generate_input.ts
 │   │   ├── generate_proof.ts
+│   │   ├── generate_unshield_and_private_link_input.js
 │   │   ├── proof_wrapper.ts
 │   │   └── eddsa_signer.ts
 │   ├── e2e/                    # End-to-end tests
 │   │   ├── e2e-disclosure.ts
 │   │   └── e2e-transfer.ts
 │   ├── utils/                  # Utilities
+│   │   ├── check-artifacts.ts
+│   │   ├── generate-manifest.ts
 │   │   ├── health-check.sh
 │   │   └── lint-circom.sh
-│   ├── build-all.sh           # Main build script
-│   └── README.md              # Scripts documentation
+│   ├── build-all.sh            # Main build script
+│   └── README.md
 │
-├── test/                       # Test suite
-│   ├── circuits/               # Circuit-specific tests
-│   │   ├── disclosure.test.ts
-│   │   ├── transfer.test.ts
-│   │   └── unshield.test.ts
-│   ├── components/             # Component tests
-│   │   ├── merkle_tree.test.ts
-│   │   ├── note.test.ts
-│   │   └── poseidon_wrapper.test.ts
-│   └── helpers/                # Test utilities
+├── test/                       # Test suite (flat)
+│   ├── disclosure.test.ts
+│   ├── merkle_tree.test.ts
+│   ├── note.test.ts
+│   ├── poseidon_compat.test.ts
+│   ├── poseidon_wrapper.test.ts
+│   ├── private_link.test.ts
+│   ├── transfer.test.ts
+│   ├── unshield.test.ts
+│   └── test-utils.ts           # Shared test helpers
 │
 ├── benches/                    # Performance benchmarks
+│   ├── run-all.bench.ts
 │   ├── disclosure.bench.ts
 │   ├── transfer.bench.ts
+│   ├── types.ts
 │   └── utils.ts
+│
+├── npm/                        # npm package template
+│   ├── index.js
+│   ├── index.d.ts
+│   ├── package.json.template
+│   └── README.md
 │
 ├── build/                      # Build artifacts (gitignored)
 │   ├── *_js/                   # WASM witness calculators
 │   ├── *.r1cs                  # Constraint systems
+│   ├── *.sym                   # Debug symbols
 │   └── verification_key_*.json # Verifying keys
 │
 ├── keys/                       # Cryptographic keys (gitignored)
-│   └── *_pk.zkey              # Proving keys
+│   ├── *_pk.zkey               # Proving keys (snarkjs)
+│   └── *_pk.ark                # Proving keys (arkworks)
+│
+├── dist/                       # TypeScript compilation output
 │
 ├── docs/                       # Documentation
-│   ├── architecture/           # Architecture docs
+│   ├── ARCHITECTURE.md
 │   ├── circuits/               # Circuit specifications
+│   │   ├── disclosure.md
+│   │   ├── merkle-tree.md
+│   │   ├── note.md
+│   │   ├── poseidon-wrapper.md
+│   │   ├── transfer.md
+│   │   └── unshield.md
 │   └── guides/                 # User guides
+│       ├── quick-start.md
+│       ├── arkworks-integration.md
+│       └── pre-push-check-rapido.md
 │
 ├── types/                      # TypeScript type definitions
+│   └── circom_tester.d.ts
 │
-└── config/                     # Configuration files
-    ├── circuits.config.json   # Circuit parameters
-    └── build.config.json      # Build configuration
+├── config/                     # Configuration files
+│   ├── circuits.config.json    # Circuit parameters
+│   └── build.config.json       # Build configuration
+│
+├── manifest.json               # Published artifact manifest
+├── package.json
+├── pnpm-lock.yaml
+└── tsconfig.json
 
 ```
 
@@ -89,10 +123,12 @@ orbinum-circuits/
 
 **Purpose**: Define zero-knowledge circuits in Circom
 
-**Organization**:
+**Organization** (flat — all `.circom` files at root level):
 
-- `core/`: Reusable circuit components (merkle trees, cryptographic primitives)
-- Root level: Main application circuits (disclosure, transfer, unshield)
+- `merkle_tree.circom`, `note.circom`, `poseidon_wrapper.circom`: Reusable components
+- `disclosure.circom`, `transfer.circom`, `unshield.circom`, `private_link.circom`: Application circuits
+
+`transfer.circom` implements a 2-in/2-out scheme with **dummy input support**: when a user has only one note, the second input slot carries `value = 0` and bypasses Merkle membership and nullifier derivation (Zcash Sapling technique). Ownership is proven via `BabyPbk(spending_key)` — no EdDSA signatures required. The dummy nullifier is forced to zero by the circuit (Constraint 9). The pallet rejects transactions where both nullifiers are zero (anti-spam).
 
 **Dependencies**:
 
@@ -108,7 +144,9 @@ orbinum-circuits/
 - `compile.sh`: Circom compilation (circom → R1CS + WASM)
 - `setup.sh`: Trusted setup (Powers of Tau → proving/verifying keys)
 - `full-pipeline.sh`: Complete build automation
-- `convert-to-ark.sh`: Convert keys to arkworks format
+- `convert-to-ark.sh` / `convert-to-ark.rs`: Convert `.zkey` to `.ark` (arkworks format)
+- `extract-vk.rs`: Extract verifying key from `.zkey` via Rust script
+- `generate-metadata.sh`: Generate circuit metadata
 
 **Workflow**:
 
@@ -120,11 +158,13 @@ orbinum-circuits/
 
 **Purpose**: Comprehensive circuit validation
 
-**Test Levels**:
+**Test files** (flat structure):
 
-1. **Unit Tests** (`components/`): Individual circuit components
-2. **Integration Tests** (`circuits/`): Complete circuits
-3. **End-to-End Tests** (`scripts/e2e/`): Full proof lifecycle
+- `disclosure.test.ts`, `transfer.test.ts`, `unshield.test.ts`, `private_link.test.ts`: Application circuit tests
+- `merkle_tree.test.ts`, `note.test.ts`, `poseidon_wrapper.test.ts`, `poseidon_compat.test.ts`: Component tests
+- `test-utils.ts`: Shared test helpers
+
+**End-to-End Tests** (`scripts/e2e/`): Full proof lifecycle
 
 **Tools**:
 
@@ -135,6 +175,12 @@ orbinum-circuits/
 ### 4. **Benchmarking** (`benches/`)
 
 **Purpose**: Performance measurement and optimization
+
+**Files**:
+
+- `run-all.bench.ts`: Runs all benchmarks sequentially
+- `disclosure.bench.ts`, `transfer.bench.ts`: Per-circuit benchmarks
+- `types.ts`, `utils.ts`: Shared benchmark helpers
 
 **Metrics**:
 
@@ -150,19 +196,30 @@ orbinum-circuits/
 
 **Generators**:
 
-- `generate_input.ts`: Create valid circuit inputs
-- `generate_proof.ts`: Generate ZK proofs
+- `generate_input.ts`: Create valid transfer circuit inputs
+- `generate_disclosure_input.ts`: Create disclosure circuit inputs
+- `generate_proof.ts` / `generate_disclosure_proof.ts`: Generate ZK proofs
+- `generate_unshield_and_private_link_input.js`: Inputs for unshield + private link
 - `proof_wrapper.ts`: Proof serialization/deserialization
+- `eddsa_signer.ts`: EdDSA signature helper (legacy; ownership is now proven via `BabyPbk` in `transfer` and `unshield`)
 
-### 6. **Documentation** (`docs/`)
+### 6. **npm Package** (`npm/`)
+
+**Purpose**: Distributable npm package template for `@orbinum/circuits`
+
+- `index.js` / `index.d.ts`: Package entry point and TypeScript types
+- `package.json.template`: Version-stamped during release
+- Published to npm registry and Cloudflare R2 on each release
+
+### 7. **Documentation** (`docs/`)
 
 **Purpose**: Comprehensive project documentation
 
 **Structure**:
 
-- **Architecture**: System design and component interactions
-- **Circuits**: Circuit specifications and constraint analysis
-- **Guides**: Setup, development, and deployment guides
+- **ARCHITECTURE.md**: System design and component interactions (this file)
+- **circuits/**: Specifications for disclosure, transfer, unshield, note, merkle-tree, poseidon-wrapper
+- **guides/**: Quick start, arkworks integration, pre-push checks
 
 ## Data Flow
 
@@ -218,13 +275,15 @@ orbinum-circuits/
 
 ### Generated Files
 
-| File        | Purpose               | Size   | Location      |
-| ----------- | --------------------- | ------ | ------------- |
-| `*.r1cs`    | Constraint system     | ~200KB | `build/`      |
-| `*.sym`     | Symbols for debugging | ~130KB | `build/`      |
-| `*.wasm`    | Witness calculator    | ~2MB   | `build/*_js/` |
-| `*_pk.zkey` | Proving key           | ~700KB | `keys/`       |
-| `vk_*.json` | Verifying key         | ~3KB   | `build/`      |
+| File                      | Purpose                    | Location      |
+| ------------------------- | -------------------------- | ------------- |
+| `*.r1cs`                  | Constraint system          | `build/`      |
+| `*.sym`                   | Symbols for debugging      | `build/`      |
+| `*_js/*.wasm`             | Witness calculator         | `build/*_js/` |
+| `*_pk.zkey`               | Proving key (snarkjs)      | `keys/`       |
+| `*_pk.ark`                | Proving key (arkworks)     | `keys/`       |
+| `verification_key_*.json` | Verifying key              | `build/`      |
+| `manifest.json`           | Artifact manifest + hashes | root          |
 
 ### Artifact Lifecycle
 
@@ -261,19 +320,19 @@ orbinum-circuits/
 ```bash
 # 1. Clone and install
 git clone <repo>
-npm install
+pnpm install
 
 # 2. Build circuits
-npm run build-all
+pnpm run build-all
 
 # 3. Run tests
-npm test
+pnpm test
 
 # 4. Run benchmarks
-npm run bench
+pnpm run bench
 
 # 5. Format code
-npm run format
+pnpm run format
 ```
 
 ### Adding New Circuits
@@ -325,12 +384,21 @@ npm run format
 {
     "disclosure": {
         "merkleDepth": 20,
-        "maxAssets": 8
+        "maxAssets": 8,
+        "constraints": 1584
     },
     "transfer": {
         "merkleDepth": 20,
         "inputNotes": 2,
-        "outputNotes": 2
+        "outputNotes": 2,
+        "maxAssets": 8
+    },
+    "unshield": {
+        "merkleDepth": 20,
+        "maxAssets": 8
+    },
+    "private_link": {
+        "merkleDepth": 20
     }
 }
 ```
@@ -339,19 +407,26 @@ npm run format
 
 ```json
 {
-    "optimization": "O1",
-    "ptauSize": 16,
-    "parallelBuilds": true
+    "compiler": {
+        "version": "2.2.3",
+        "optimization": "O1",
+        "outputFormats": ["r1cs", "wasm", "sym"]
+    },
+    "setup": {
+        "ptauSize": 16,
+        "ceremony": { "type": "development" }
+    }
 }
 ```
 
 ## Performance Targets
 
-| Circuit    | Constraints | Proof Time | Verify Time |
-| ---------- | ----------- | ---------- | ----------- |
-| Disclosure | ~1,600      | <150ms     | <5ms        |
-| Transfer   | ~10,000     | <500ms     | <5ms        |
-| Unshield   | ~5,000      | <250ms     | <5ms        |
+| Circuit      | Constraints | Proof Time | Verify Time |
+| ------------ | ----------- | ---------- | ----------- |
+| Disclosure   | 1,584       | <150ms     | <5ms        |
+| Transfer     | 33,687      | <3s        | <15ms       |
+| Unshield     | 16,033      | <1s        | <15ms       |
+| Private Link | 487         | <100ms     | <5ms        |
 
 ## Versioning Strategy
 

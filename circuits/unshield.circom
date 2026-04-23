@@ -3,11 +3,13 @@ pragma circom 2.0.0;
 include "./note.circom";
 include "./merkle_tree.circom";
 include "./poseidon_wrapper.circom";
+include "../node_modules/circomlib/circuits/babyjub.circom";
 include "../node_modules/circomlib/circuits/bitify.circom";
 
 // Unshield: withdraws a private note to a public account.
 // Proves note existence in the Merkle tree, nullifier correctness,
-// and that the revealed amount matches the note value.
+// and that the revealed amount matches the note value minus fee.
+// Ownership is proven via BabyPbk(spending_key) → ownerPk (Constraint 0).
 template Unshield(tree_depth) {
     // Public inputs
     signal input merkle_root;
@@ -20,7 +22,6 @@ template Unshield(tree_depth) {
     // Private inputs
     signal input note_value;
     signal input note_asset_id;
-    signal input note_owner;
     signal input note_blinding;
     signal input spending_key;
 
@@ -39,11 +40,18 @@ template Unshield(tree_depth) {
     component fee_range_check = Num2Bits(128);
     fee_range_check.in <== fee;
 
-    // Constraint 4: compute note commitment
+    // Constraint 0: derive owner public key from spending_key via BabyJubJub scalar multiplication.
+    // Binds note ownership to the spending key — the prover must know the discrete log of the
+    // owner_pubkey embedded in the note commitment. Defined before Constraint 4 because the
+    // derived Ax is needed in NoteCommitment.
+    component key_derivation = BabyPbk();
+    key_derivation.in <== spending_key;
+
+    // Constraint 4: compute note commitment (owner pubkey derived from spending_key)
     component commitment_computer = NoteCommitment();
     commitment_computer.value <== note_value;
     commitment_computer.asset_id <== note_asset_id;
-    commitment_computer.owner_pubkey <== note_owner;
+    commitment_computer.owner_pubkey <== key_derivation.Ax;
     commitment_computer.blinding <== note_blinding;
 
     signal computed_commitment;

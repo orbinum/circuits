@@ -30,11 +30,10 @@ The Selective Disclosure circuit enables users to prove ownership of a note and 
 
 | Input               | Type  | Description                                     |
 | ------------------- | ----- | ----------------------------------------------- |
-| `value`             | u64   | Actual note value                               |
-| `asset_id`          | u32   | Actual asset ID                                 |
+| `value`             | Field | Actual note value                               |
+| `asset_id`          | Field | Actual asset ID                                 |
 | `owner_pubkey`      | Field | Owner's public key                              |
-| `blinding`          | u256  | Blinding factor for commitment                  |
-| `viewing_key`       | Field | Viewing key to prove ownership                  |
+| `blinding`          | Field | Blinding factor for commitment                  |
 | `disclose_value`    | bool  | Disclosure mask: reveal value? (1=yes, 0=no)    |
 | `disclose_asset_id` | bool  | Disclosure mask: reveal asset ID? (1=yes, 0=no) |
 | `disclose_owner`    | bool  | Disclosure mask: reveal owner? (1=yes, 0=no)    |
@@ -61,24 +60,7 @@ note_commitment.blinding <== blinding;
 note_commitment.commitment === commitment;
 ```
 
-### 2. Viewing Key Verification
-
-Proves that the prover knows the correct viewing key, preventing unauthorized disclosure.
-
-```
-viewing_key = Poseidon(owner_pubkey)
-```
-
-**Circuit Logic**:
-
-```circom
-component vk_hasher = Poseidon(1);
-vk_hasher.inputs[0] <== owner_pubkey;
-
-vk_hasher.out === viewing_key;
-```
-
-### 3. Boolean Constraints
+### 2. Boolean Constraints
 
 Ensures disclosure masks are binary (0 or 1).
 
@@ -88,7 +70,7 @@ disclose_asset_id * (disclose_asset_id - 1) === 0;
 disclose_owner * (disclose_owner - 1) === 0;
 ```
 
-### 4. Selective Reveal - Value
+### 3. Selective Reveal - Value
 
 Conditionally reveals or hides the note value.
 
@@ -107,7 +89,7 @@ value_selector.false_value <== 0;
 revealed_value === value_selector.out;
 ```
 
-### 5. Selective Reveal - Asset ID
+### 4. Selective Reveal - Asset ID
 
 Conditionally reveals or hides the asset ID.
 
@@ -115,7 +97,7 @@ Conditionally reveals or hides the asset ID.
 revealed_asset_id = disclose_asset_id ? asset_id : 0
 ```
 
-### 6. Selective Reveal - Owner
+### 5. Selective Reveal - Owner
 
 Conditionally reveals or hides the owner's identity (as a hash).
 
@@ -154,11 +136,11 @@ template Selector() {
 
 ## Circuit Parameters
 
-- **Constraints**: ~8,500
+- **Constraints**: ~1,584
 - **Public Inputs**: 4
-- **Private Inputs**: 9
-- **Proving Time**: ~500ms (local machine)
-- **Verification Time**: ~10ms
+- **Private Inputs**: 7 (4 note fields + 3 disclosure masks)
+- **Proving Time**: ~150ms (local machine)
+- **Verification Time**: ~5ms
 
 ## Usage Examples
 
@@ -177,7 +159,6 @@ const input = {
     asset_id: note.asset_id,
     owner_pubkey: note.ownerPubkey,
     blinding: note.blinding,
-    viewing_key: viewingKey,
     disclose_value: 1,
     disclose_asset_id: 0,
     disclose_owner: 0,
@@ -201,7 +182,6 @@ const input = {
     asset_id: note.asset_id,
     owner_pubkey: note.ownerPubkey,
     blinding: note.blinding,
-    viewing_key: viewingKey,
     disclose_value: 1,
     disclose_asset_id: 1,
     disclose_owner: 1,
@@ -223,7 +203,6 @@ const input = {
     asset_id: note.asset_id,
     owner_pubkey: note.ownerPubkey,
     blinding: note.blinding,
-    viewing_key: viewingKey,
     disclose_value: 0,
     disclose_asset_id: 0,
     disclose_owner: 0,
@@ -239,16 +218,6 @@ const input = {
 5. **Transparent Donations**: Reveal value and owner for donation transparency
 
 ## Security Considerations
-
-### Viewing Key Management
-
-The viewing key is derived from the owner's public key:
-
-```
-viewing_key = Poseidon(owner_pubkey)
-```
-
-**Critical**: The viewing key should be kept secret. Anyone with access to the viewing key can generate disclosure proofs for the note.
 
 ### Information Leakage
 
@@ -285,13 +254,12 @@ The circuit works with any asset ID. The runtime is responsible for validating:
 
 | Section                 | Constraints |
 | ----------------------- | ----------- |
-| Commitment Verification | ~2,000      |
-| Viewing Key Hash        | ~2,000      |
+| Commitment Verification | ~200        |
 | Boolean Constraints     | 3           |
-| Value Selector          | ~1,500      |
-| Asset ID Selector       | ~1,500      |
-| Owner Hash + Selector   | ~3,500      |
-| **Total**               | **~8,500**  |
+| Value Selector          | ~6          |
+| Asset ID Selector       | ~6          |
+| Owner Hash + Selector   | ~200        |
+| **Total**               | **~1,584**  |
 
 ### Trusted Setup
 
@@ -304,13 +272,13 @@ The circuit works with any asset ID. The runtime is responsible for validating:
 Run disclosure circuit tests:
 
 ```bash
-npm test -- test/disclosure.test.ts
+pnpm test -- test/disclosure.test.ts
 ```
 
 Run end-to-end disclosure test:
 
 ```bash
-npm run test:e2e:disclosure
+pnpm run e2e:disclosure
 ```
 
 ## Build Artifacts
@@ -318,7 +286,7 @@ npm run test:e2e:disclosure
 Generate disclosure circuit artifacts:
 
 ```bash
-npm run build:disclosure
+pnpm run full-build:disclosure
 ```
 
 This produces:

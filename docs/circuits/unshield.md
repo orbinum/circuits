@@ -12,64 +12,77 @@ The Unshield circuit converts a private note to public tokens. It proves that a 
 
 ## Security Properties
 
-- **Ownership Proof**: Must prove knowledge of the note's spending key
+- **Ownership Proof**: `BabyPbk(spending_key)` derives `ownerPk (Ax)` inside the circuit, proving knowledge of the discrete logarithm of the `ownerPk` embedded in the note commitment
 - **Double-Spend Prevention**: Nullifier ensures the note can only be unshielded once
 - **Merkle Membership**: Note must exist in the commitment tree
-- **Amount Integrity**: Revealed amount must match note's value
+- **Amount Integrity**: Revealed amount must match note's value minus fee
 - **Asset Consistency**: Revealed asset ID must match note's asset
-- **Range Safety**: Value is constrained to u64 range
+- **Range Safety**: Value and fee are constrained to u128 range (matches runtime `Balance`)
 
 ## Public Inputs (Visible On-Chain)
 
-| Input         | Type  | Description                                   |
-| ------------- | ----- | --------------------------------------------- |
-| `merkle_root` | Field | Current Merkle tree root                      |
-| `nullifier`   | Field | Nullifier to prevent double-spend             |
-| `amount`      | u64   | Amount being withdrawn (publicly revealed)    |
-| `recipient`   | Field | Recipient address (publicly revealed)         |
-| `asset_id`    | u32   | Asset ID being unshielded (publicly revealed) |
+| Input         | Type  | Description                                                |
+| ------------- | ----- | ---------------------------------------------------------- |
+| `merkle_root` | Field | Current Merkle tree root                                   |
+| `nullifier`   | Field | Nullifier to prevent double-spend                          |
+| `amount`      | Field | Net withdrawal amount (recipient receives this)            |
+| `recipient`   | Field | Recipient address (validated non-zero in runtime)          |
+| `asset_id`    | Field | Asset ID being unshielded (publicly revealed)              |
+| `fee`         | Field | Gasless fee deducted from note value; paid to block author |
 
 ## Private Inputs (Known Only to Prover)
 
-| Input               | Type      | Description                                   |
-| ------------------- | --------- | --------------------------------------------- |
-| `note_value`        | u64       | Value in the note (must equal amount)         |
-| `note_asset_id`     | u32       | Asset ID in note (must match public asset_id) |
-| `note_owner`        | Field     | Owner public key                              |
-| `note_blinding`     | u256      | Random blinding factor                        |
-| `spending_key`      | Field     | Secret key to compute nullifier               |
-| `path_elements[20]` | Field[20] | Sibling hashes for Merkle proof               |
-| `path_indices[20]`  | u8[20]    | Path directions (0=left, 1=right)             |
+| Input               | Type      | Description                                                         |
+| ------------------- | --------- | ------------------------------------------------------------------- |
+| `note_value`        | Field     | Value in the note (must equal amount + fee)                         |
+| `note_asset_id`     | Field     | Asset ID in note (must match public asset_id)                       |
+| `note_blinding`     | Field     | Random blinding factor                                              |
+| `spending_key`      | Field     | Secret key — derives `ownerPk` via `BabyPbk` and computes nullifier |
+| `path_elements[20]` | Field[20] | Sibling hashes for Merkle proof                                     |
+| `path_indices[20]`  | u8[20]    | Path directions (0=left, 1=right)                                   |
 
 ## Constraints
 
-### 1. Amount Matches Note Value
+### 0. BabyPbk Key Derivation (Ownership Proof)
 
-The publicly revealed amount must equal the note's value.
+Derives the owner public key from the spending key inside the circuit. The prover must know `spending_key` such that `BabyPbk(spending_key).Ax == ownerPk`. This is the discrete log relation on BabyJubJub.
 
 ```circom
-amount === note_value;
+component key_derivation = BabyPbk();
+key_derivation.in <== spending_key;
+// key_derivation.Ax is the owner pubkey used in NoteCommitment (Constraint 3)
 ```
 
-**Purpose**: Prevents withdrawing more (or less) than deposited.
+### 1. Amount + Fee Matches Note Value
 
-### 2. Range Check
-
-Ensure note_value is within u64 range (0 to 2^64-1).
+The note value must cover both the net withdrawal amount and the fee.
 
 ```circom
-component value_range_check = Num2Bits(64);
+note_value === amount + fee;
+```
+
+**Purpose**: Prevents withdrawing more (or less) than the note covers after fee deduction.
+
+### 2. Range Checks
+
+Ensure `note_value` and `fee` are within u128 range (matches runtime `Balance` type).
+
+```circom
+component value_range_check = Num2Bits(128);
 value_range_check.in <== note_value;
+
+component fee_range_check = Num2Bits(128);
+fee_range_check.in <== fee;
 ```
 
-**Purpose**: Prevents overflow attacks and ensures value is valid u64.
+**Purpose**: Prevents overflow attacks and ensures values match the runtime `Balance` type.
 
 ### 3. Note Commitment Computation
 
-Compute the commitment that should be in the Merkle tree.
+Compute the commitment that should be in the Merkle tree. The owner pubkey is derived from `spending_key` via BabyPbk (Constraint 0) — it is no longer an explicit private input.
 
 ```
-commitment = Poseidon(note_value, note_asset_id, note_owner, note_blinding)
+commitment = Poseidon(note_value, note_asset_id, BabyPbk(spending_key).Ax, note_blinding)
 ```
 
 **Circuit Logic**:
@@ -78,7 +91,7 @@ commitment = Poseidon(note_value, note_asset_id, note_owner, note_blinding)
 component commitment_computer = NoteCommitment();
 commitment_computer.value <== note_value;
 commitment_computer.asset_id <== note_asset_id;
-commitment_computer.owner_pubkey <== note_owner;
+commitment_computer.owner_pubkey <== key_derivation.Ax;  // derived, not a private input
 commitment_computer.blinding <== note_blinding;
 
 signal computed_commitment;
@@ -136,11 +149,11 @@ note_asset_id === asset_id;
 ## Circuit Parameters
 
 - **Tree Depth**: 20 levels (supports up to 2^20 = 1,048,576 notes)
-- **Constraints**: ~12,000
-- **Public Inputs**: 5
-- **Private Inputs**: 8 (+ 40 for Merkle proof)
-- **Proving Time**: ~800ms (local machine)
-- **Verification Time**: ~10ms
+- **Constraints**: 16,033
+- **Public Inputs**: 6 (merkle_root, nullifier, amount, recipient, asset_id, fee)
+- **Private Inputs**: 6 signals (+ 40 for Merkle proof path)
+- **Proving Time**: ~750ms (local machine)
+- **Verification Time**: ~15ms
 
 ## Usage Examples
 
@@ -153,16 +166,16 @@ const input = {
     // Public - Visible on-chain
     merkle_root: currentRoot,
     nullifier: computedNullifier,
-    amount: 100n,
+    amount: 99n, // net withdrawal (note_value - fee)
     recipient: alicePublicAddress,
     asset_id: 0n, // Native token
+    fee: 1n, // Fee paid to block author
 
     // Private - Only Alice knows
-    note_value: 100n,
+    note_value: 100n, // amount + fee
     note_asset_id: 0n,
-    note_owner: alicePubkey,
     note_blinding: randomBlinding,
-    spending_key: aliceSpendingKey,
+    spending_key: aliceSpendingKey, // ownerPk derived inside circuit via BabyPbk(spending_key).Ax
 
     // Merkle proof
     path_elements: merkleProof.pathElements,
@@ -193,9 +206,10 @@ const input = {
     // Public
     merkle_root: currentRoot,
     nullifier: computedNullifier,
-    amount: 500n,
+    amount: 498n,
     recipient: alicePublicAddress,
     asset_id: 42n, // Custom asset
+    fee: 2n,
 
     // Private
     note_value: 500n,
@@ -245,7 +259,7 @@ if !is_recent_root(merkle_root, MAX_HISTORY) {
 
 ### Amount Range
 
-While the circuit ensures `note_value` is u64, the runtime should additionally check:
+While the circuit ensures `note_value` is u128, the runtime should additionally check:
 
 - Minimum unshield amount (to prevent dust attacks)
 - Maximum unshield amount (if needed for security)
@@ -301,9 +315,8 @@ const circuitInput = {
 
     note_value: note.value,
     note_asset_id: note.asset_id,
-    note_owner: note.owner_pubkey,
     note_blinding: note.blinding,
-    spending_key: spendingKey,
+    spending_key: spendingKey, // ownerPk computed as BabyPbk(spending_key).Ax inside circuit
 
     path_elements: merkleProof.pathElements,
     path_indices: merkleProof.pathIndices,
@@ -336,15 +349,16 @@ const spendingKey = deriveKey(masterSeed, "spending", noteIndex);
 
 ### Constraint Count Analysis
 
-| Section                | Constraints |
-| ---------------------- | ----------- |
-| Amount Check           | 1           |
-| Range Check (Num2Bits) | ~3,000      |
-| Commitment Computation | ~2,000      |
-| Merkle Verification    | ~4,000      |
-| Nullifier Computation  | ~2,000      |
-| Asset ID Check         | 1           |
-| **Total**              | **~12,000** |
+| Section                  | Constraints |
+| ------------------------ | ----------- |
+| BabyPbk (key derivation) | ~2,500      |
+| Amount + Fee Check       | 1           |
+| Range Checks (Num2Bits)  | ~12,800     |
+| Commitment Computation   | ~200        |
+| Merkle Verification      | ~400        |
+| Nullifier Computation    | ~150        |
+| Asset ID Check           | 1           |
+| **Total**                | **16,033**  |
 
 ### Trusted Setup
 
@@ -365,7 +379,7 @@ const spendingKey = deriveKey(masterSeed, "spending", noteIndex);
 Run unshield circuit tests:
 
 ```bash
-npm test -- test/unshield.test.ts
+pnpm test -- test/unshield.test.ts
 ```
 
 ## Build Artifacts
@@ -373,7 +387,7 @@ npm test -- test/unshield.test.ts
 Generate unshield circuit artifacts:
 
 ```bash
-npm run build:unshield
+pnpm run build:unshield
 ```
 
 This produces:

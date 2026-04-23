@@ -2,7 +2,7 @@ import path from "path";
 import fs from "fs";
 import { expect } from "chai";
 import { wasm as wasm_tester } from "circom_tester";
-import { buildPoseidon } from "circomlibjs";
+import { buildPoseidon, buildBabyjub } from "circomlibjs";
 import type { WasmTester } from "circom_tester";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -18,6 +18,7 @@ describe("Unshield Circuit (gasless)", function () {
 
     let circuit: WasmTester;
     let poseidon: any;
+    let babyJub: any;
     let F: any;
 
     // ── Helpers ────────────────────────────────────────────────────────────────
@@ -33,6 +34,12 @@ describe("Unshield Circuit (gasless)", function () {
 
     function computeNullifier(commitment: bigint, spendingKey: bigint): bigint {
         return F.toObject(poseidon([commitment, spendingKey]));
+    }
+
+    /** Derive Baby JubJub owner public key (Ax) from a spending key scalar. Mirrors BabyPbk in circuit. */
+    function computeOwnerAx(sk: bigint): bigint {
+        const point = babyJub.mulPointEscalar(babyJub.Base8, sk);
+        return F.toObject(point[0]);
     }
 
     /** Sparse Merkle proof builder. Only materialises the O(N·depth) non-zero nodes,
@@ -69,18 +76,19 @@ describe("Unshield Circuit (gasless)", function () {
         amount: bigint;
         fee: bigint;
         assetId?: bigint;
-        owner?: bigint;
         blinding?: bigint;
         spendingKey?: bigint;
         recipient?: bigint;
         leafIndex?: number;
     }) {
         const assetId = opts.assetId ?? 0n;
-        const owner = opts.owner ?? 0x1234567890abcdefn;
         const blinding = opts.blinding ?? 0xfedcba0987654321n;
         const spendingKey = opts.spendingKey ?? 0xdeadbeefcafebaben;
         const recipient = opts.recipient ?? 0xaabbccddee112233n;
         const leafIndex = opts.leafIndex ?? 0;
+
+        // Derive owner pubkey from spending_key — matches circuit's BabyPbk(spending_key).Ax
+        const owner = computeOwnerAx(spendingKey);
 
         const commitment = computeCommitment(opts.noteValue, assetId, owner, blinding);
         const nullifier = computeNullifier(commitment, spendingKey);
@@ -98,7 +106,6 @@ describe("Unshield Circuit (gasless)", function () {
             fee: opts.fee.toString(),
             note_value: opts.noteValue.toString(),
             note_asset_id: assetId.toString(),
-            note_owner: owner.toString(),
             note_blinding: blinding.toString(),
             spending_key: spendingKey.toString(),
             path_elements: pathElements.map((e) => e.toString()),
@@ -110,6 +117,7 @@ describe("Unshield Circuit (gasless)", function () {
 
     before(async function () {
         poseidon = await buildPoseidon();
+        babyJub = await buildBabyjub();
         F = poseidon.F;
         if (!fs.existsSync(precompiledWasm)) {
             console.log(
@@ -117,7 +125,7 @@ describe("Unshield Circuit (gasless)", function () {
             );
             return;
         }
-        circuit = await wasm_tester(circuitPath, { output: outputDir, recompile: false });
+        circuit = await wasm_tester(circuitPath, { output: outputDir, recompile: true });
     });
 
     // ── 1. Commitment arithmetic (no wasm needed) ─────────────────────────────
@@ -247,11 +255,12 @@ describe("Unshield Circuit (gasless)", function () {
             }
         });
 
-        it("rejects wrong commitment (tampered owner)", async function () {
+        it("rejects wrong commitment (tampered spending_key → wrong Ax → commitment mismatch)", async function () {
             if (!circuit) return this.skip();
             const input = buildInput({ noteValue: 1000n, amount: 999n, fee: 1n });
-            // Change owner in the witness private inputs (commitment was built with original owner)
-            input.note_owner = "99999999999999999";
+            // Change spending_key: circuit derives different Ax, builds different commitment,
+            // Merkle check fails (derived commitment not in tree)
+            input.spending_key = "99999999999999999";
             try {
                 await circuit.calculateWitness(input);
                 expect.fail("Should have thrown");
