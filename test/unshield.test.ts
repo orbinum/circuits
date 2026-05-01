@@ -5,6 +5,22 @@ import { wasm as wasm_tester } from "circom_tester";
 import { buildPoseidon, buildBabyjub } from "circomlibjs";
 import type { WasmTester } from "circom_tester";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface BuildInputOpts {
+    noteValue: bigint;
+    amount: bigint;
+    fee: bigint;
+    changeValue?: bigint; // default 0n (total unshield)
+    changeBlinding?: bigint;
+    changeOwnerPubkey?: bigint; // default: same owner as input note
+    assetId?: bigint;
+    blinding?: bigint;
+    spendingKey?: bigint;
+    recipient?: bigint;
+    leafIndex?: number;
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const TREE_DEPTH = 20;
@@ -71,21 +87,13 @@ describe("Unshield Circuit (gasless)", function () {
     }
 
     /** Build a minimal valid circuit input. */
-    function buildInput(opts: {
-        noteValue: bigint;
-        amount: bigint;
-        fee: bigint;
-        assetId?: bigint;
-        blinding?: bigint;
-        spendingKey?: bigint;
-        recipient?: bigint;
-        leafIndex?: number;
-    }) {
+    function buildInput(opts: BuildInputOpts) {
         const assetId = opts.assetId ?? 0n;
         const blinding = opts.blinding ?? 0xfedcba0987654321n;
         const spendingKey = opts.spendingKey ?? 0xdeadbeefcafebaben;
         const recipient = opts.recipient ?? 0xaabbccddee112233n;
         const leafIndex = opts.leafIndex ?? 0;
+        const changeValue = opts.changeValue ?? 0n;
 
         // Derive owner pubkey from spending_key — matches circuit's BabyPbk(spending_key).Ax
         const owner = computeOwnerAx(spendingKey);
@@ -97,6 +105,21 @@ describe("Unshield Circuit (gasless)", function () {
         leavesArr[leafIndex] = commitment;
         const { root, pathElements, pathIndices } = buildMerkleProof(leavesArr, leafIndex);
 
+        // Change note defaults: same owner, fresh blinding
+        const changeOwnerPubkey = opts.changeOwnerPubkey ?? owner;
+        const changeBlinding = opts.changeBlinding ?? 0xabcdef1234567890n;
+
+        // change_commitment: 0 if no change, else NoteCommitment(changeValue, assetId, changeOwnerPubkey, changeBlinding)
+        let changeCommitment = 0n;
+        if (changeValue > 0n) {
+            changeCommitment = computeCommitment(
+                changeValue,
+                assetId,
+                changeOwnerPubkey,
+                changeBlinding
+            );
+        }
+
         return {
             merkle_root: root.toString(),
             nullifier: nullifier.toString(),
@@ -104,10 +127,14 @@ describe("Unshield Circuit (gasless)", function () {
             recipient: recipient.toString(),
             asset_id: assetId.toString(),
             fee: opts.fee.toString(),
+            change_commitment: changeCommitment.toString(),
             note_value: opts.noteValue.toString(),
             note_asset_id: assetId.toString(),
             note_blinding: blinding.toString(),
             spending_key: spendingKey.toString(),
+            change_value: changeValue.toString(),
+            change_blinding: changeBlinding.toString(),
+            change_owner_pubkey: changeOwnerPubkey.toString(),
             path_elements: pathElements.map((e) => e.toString()),
             path_indices: pathIndices,
         };
@@ -157,24 +184,24 @@ describe("Unshield Circuit (gasless)", function () {
         });
     });
 
-    // ── 2. Gasless fee constraint: note_value === amount + fee ─────────────────
+    // ── 2. Conservation of value: note_value === amount + fee + change_value ────
 
-    describe("Gasless fee constraint (Constraint 1)", () => {
-        it("note_value = amount + fee (fee = 0)", async function () {
+    describe("Conservation of value (Constraint 1)", () => {
+        it("total unshield: note_value = amount + fee, change_value = 0 (fee = 0)", async function () {
             if (!circuit) return this.skip();
             const input = buildInput({ noteValue: 1000n, amount: 1000n, fee: 0n });
             const w = await circuit.calculateWitness(input);
             await circuit.checkConstraints(w);
         });
 
-        it("note_value = amount + fee (fee > 0)", async function () {
+        it("total unshield: note_value = amount + fee (fee > 0)", async function () {
             if (!circuit) return this.skip();
             const input = buildInput({ noteValue: 101n, amount: 100n, fee: 1n });
             const w = await circuit.calculateWitness(input);
             await circuit.checkConstraints(w);
         });
 
-        it("note_value = amount + fee (realistic: 0.001 ORB fee)", async function () {
+        it("total unshield: realistic 0.001 ORB fee", async function () {
             if (!circuit) return this.skip();
             const FEE = 1_000_000_000_000_000n;
             const NOTE = 10_000_000_000_000_000_000n; // 10 ORB
@@ -183,18 +210,56 @@ describe("Unshield Circuit (gasless)", function () {
             await circuit.checkConstraints(w);
         });
 
-        it("fee = entire note value (amount = 0, edge case)", async function () {
+        it("total unshield: fee = entire note value (amount = 0)", async function () {
             if (!circuit) return this.skip();
             const input = buildInput({ noteValue: 500n, amount: 0n, fee: 500n });
             const w = await circuit.calculateWitness(input);
             await circuit.checkConstraints(w);
         });
 
-        it("rejects: old behaviour amount = note_value when fee > 0", async function () {
+        it("partial unshield: amount = 50, fee = 1, change = 49, note = 100", async function () {
             if (!circuit) return this.skip();
-            // Pre-gasless: amount == note_value. Now: amount + fee == note_value.
-            // If fee=1 and amount=note_value, amount+fee overflows constraint.
-            const input = buildInput({ noteValue: 1000n, amount: 1000n, fee: 1n });
+            const input = buildInput({ noteValue: 100n, amount: 50n, fee: 1n, changeValue: 49n });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("partial unshield: amount = 1, fee = 0, change = note-1", async function () {
+            if (!circuit) return this.skip();
+            const NOTE = 1_000_000n;
+            const input = buildInput({
+                noteValue: NOTE,
+                amount: 1n,
+                fee: 0n,
+                changeValue: NOTE - 1n,
+            });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("partial unshield: realistic — withdraw 5 ORB from 10 ORB note", async function () {
+            if (!circuit) return this.skip();
+            const ORB = 10n ** 18n;
+            const NOTE = 10n * ORB;
+            const AMOUNT = 5n * ORB;
+            const FEE = 1_000_000_000_000_000n;
+            const CHANGE = NOTE - AMOUNT - FEE;
+            const input = buildInput({
+                noteValue: NOTE,
+                amount: AMOUNT,
+                fee: FEE,
+                changeValue: CHANGE,
+            });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("rejects: amount + fee + change_value > note_value", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 100n, amount: 50n, fee: 1n, changeValue: 60n }); // 111 > 100
+            // Override the conservation: make note_value inconsistent
+            // We need to keep note_value as 100 but amount+fee+change = 111
+            // buildInput sets note_value = 100, but the constraint requires 100 === 50+1+60 = 111
             try {
                 await circuit.calculateWitness(input);
                 expect.fail("Should have thrown");
@@ -203,9 +268,10 @@ describe("Unshield Circuit (gasless)", function () {
             }
         });
 
-        it("rejects: amount + fee > note_value", async function () {
+        it("rejects: amount = note_value when fee > 0 and change = 0 (old over-spend pattern)", async function () {
             if (!circuit) return this.skip();
-            const input = buildInput({ noteValue: 100n, amount: 90n, fee: 20n });
+            // noteValue=1000, amount=1000, fee=1, change=0 → 1000 ≠ 1001
+            const input = buildInput({ noteValue: 1000n, amount: 1000n, fee: 1n });
             try {
                 await circuit.calculateWitness(input);
                 expect.fail("Should have thrown");
@@ -226,9 +292,9 @@ describe("Unshield Circuit (gasless)", function () {
         });
     });
 
-    // ── 3. Merkle membership (Constraint 4) ───────────────────────────────────
+    // ── 3. Merkle membership (Constraint 5) ───────────────────────────────────
 
-    describe("Merkle membership (Constraint 4)", () => {
+    describe("Merkle membership (Constraint 5)", () => {
         it("accepts valid proof at index 0", async function () {
             if (!circuit) return this.skip();
             const input = buildInput({ noteValue: 1000n, amount: 999n, fee: 1n });
@@ -270,9 +336,9 @@ describe("Unshield Circuit (gasless)", function () {
         });
     });
 
-    // ── 4. Nullifier integrity (Constraint 5) ─────────────────────────────────
+    // ── 4. Nullifier integrity (Constraint 6) ─────────────────────────────────
 
-    describe("Nullifier integrity (Constraint 5)", () => {
+    describe("Nullifier integrity (Constraint 6)", () => {
         it("rejects tampered public nullifier", async function () {
             if (!circuit) return this.skip();
             const input = buildInput({ noteValue: 1000n, amount: 999n, fee: 1n });
@@ -303,9 +369,9 @@ describe("Unshield Circuit (gasless)", function () {
         });
     });
 
-    // ── 5. Asset ID enforcement (Constraint 6) ────────────────────────────────
+    // ── 5. Asset ID enforcement (Constraint 7) ────────────────────────────────
 
-    describe("Asset ID enforcement (Constraint 6)", () => {
+    describe("Asset ID enforcement (Constraint 7)", () => {
         it("accepts matching public asset_id and note asset_id", async function () {
             if (!circuit) return this.skip();
             const input = buildInput({ noteValue: 500n, amount: 499n, fee: 1n, assetId: 1n });
@@ -394,6 +460,226 @@ describe("Unshield Circuit (gasless)", function () {
             const base = (id: bigint) => computeCommitment(100n, id, 0x1234n, 0x5678n);
             expect(base(0n)).to.not.equal(base(1n));
             expect(base(1n)).to.not.equal(base(2n));
+        });
+    });
+
+    // ── 8. Change note commitment (Constraint 8) ──────────────────────────────
+
+    describe("Change note commitment (Constraint 8)", () => {
+        // ── 8a: total unshield (change_value == 0) ────────────────────────────
+
+        it("total unshield: change_commitment = 0 is accepted", async function () {
+            if (!circuit) return this.skip();
+            // change_value = 0 by default → change_commitment = 0
+            const input = buildInput({ noteValue: 100n, amount: 99n, fee: 1n });
+            expect(input.change_value).to.equal("0");
+            expect(input.change_commitment).to.equal("0");
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("total unshield: rejects non-zero change_commitment when change_value = 0 (Constraint 8b)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 100n, amount: 99n, fee: 1n });
+            // Force a non-zero change_commitment while keeping change_value = 0
+            input.change_commitment = "12345678901234567890";
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        // ── 8b: partial unshield (change_value > 0) ───────────────────────────
+
+        it("partial unshield: correct change_commitment is accepted (Constraint 8a)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 100n, amount: 50n, fee: 1n, changeValue: 49n });
+            expect(input.change_value).to.equal("49");
+            expect(input.change_commitment).to.not.equal("0");
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("partial unshield: tampered change_commitment is rejected (Constraint 8a)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 100n, amount: 50n, fee: 1n, changeValue: 49n });
+            input.change_commitment = (BigInt(input.change_commitment) + 1n).toString();
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("partial unshield: change_commitment = 0 when change_value > 0 is rejected (Constraint 8a)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 100n, amount: 50n, fee: 1n, changeValue: 49n });
+            // Zero out the public change_commitment — must be rejected
+            input.change_commitment = "0";
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("partial unshield: wrong change_blinding produces wrong commitment → rejected", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({
+                noteValue: 200n,
+                amount: 100n,
+                fee: 1n,
+                changeValue: 99n,
+                changeBlinding: 0x1111n,
+            });
+            // Tamper the private blinding after computing the public commitment
+            input.change_blinding = "9999999999999";
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("partial unshield: wrong change_owner_pubkey produces wrong commitment → rejected", async function () {
+            if (!circuit) return this.skip();
+            const sk = 0xdeadbeefcafebaben;
+            const owner = computeOwnerAx(sk);
+            // Build input with the correct owner
+            const input = buildInput({
+                noteValue: 200n,
+                amount: 100n,
+                fee: 1n,
+                changeValue: 100n,
+                changeOwnerPubkey: owner,
+                spendingKey: sk,
+            });
+            // Tamper the private change_owner_pubkey after computing the commitment
+            input.change_owner_pubkey = (owner + 1n).toString();
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("partial unshield: change_commitment forged with wrong asset_id → rejected (Constraint 8a)", async function () {
+            if (!circuit) return this.skip();
+            // The circuit pins the change commitment to note_asset_id (== public asset_id, Constraint 7).
+            // A change_commitment computed with any other asset_id must be rejected.
+            const ASSET = 1n;
+            const input = buildInput({
+                noteValue: 100n,
+                amount: 50n,
+                fee: 1n,
+                changeValue: 49n,
+                assetId: ASSET,
+            });
+            // Forge the public change_commitment using asset_id = 0 instead of 1
+            const changeOwnerPubkey = BigInt(input.change_owner_pubkey);
+            const changeBlinding = BigInt(input.change_blinding);
+            const forged = computeCommitment(
+                49n,
+                0n /* wrong asset */,
+                changeOwnerPubkey,
+                changeBlinding
+            );
+            input.change_commitment = forged.toString();
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        // ── 8c: same owner for change note (self-change) ─────────────────────
+
+        it("partial unshield: change note to same owner is accepted", async function () {
+            if (!circuit) return this.skip();
+            const sk = 0xabcdef1234567890n;
+            const owner = computeOwnerAx(sk);
+            const input = buildInput({
+                noteValue: 1000n,
+                amount: 600n,
+                fee: 1n,
+                changeValue: 399n,
+                changeOwnerPubkey: owner, // same owner = self-change
+                spendingKey: sk,
+            });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("partial unshield: change note to different owner is accepted", async function () {
+            if (!circuit) return this.skip();
+            const sk = 0xabcdef1234567890n;
+            const otherOwner = computeOwnerAx(0x9988776655443322n); // different key
+            const input = buildInput({
+                noteValue: 1000n,
+                amount: 600n,
+                fee: 1n,
+                changeValue: 399n,
+                changeOwnerPubkey: otherOwner, // different owner
+                spendingKey: sk,
+            });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        // ── 8d: change_value range checks (Constraint 9) ─────────────────────
+
+        it("change_value range: accepts max u128 change (note_value = max u128)", async function () {
+            if (!circuit) return this.skip();
+            const MAX = 2n ** 128n - 1n;
+            // note_value = MAX, amount = 0, fee = 0, change = MAX
+            // Conservation: MAX === 0 + 0 + MAX ✓
+            // Both note_value and change_value pass Num2Bits(128) since MAX = 2^128 - 1 fits exactly.
+            const input = buildInput({ noteValue: MAX, amount: 0n, fee: 0n, changeValue: MAX });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("change_value range: rejects change_value = 2^128 (exceeds u128)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 0n, amount: 0n, fee: 0n });
+            // change_value = 2^128: both conservation (0 ≠ 2^128) and Num2Bits(128) fail.
+            input.change_value = (2n ** 128n).toString();
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+    });
+
+    // ── 9. Public signals set (Constraint 8 — public API) ─────────────────────
+
+    describe("Public signals", () => {
+        it("total unshield exposes change_commitment = 0 as public signal", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 100n, amount: 99n, fee: 1n });
+            const w = await circuit.calculateWitness(input);
+            // Public signals: [1, merkle_root, nullifier, amount, recipient, asset_id, fee, change_commitment]
+            // change_commitment is the 8th public signal (index 7 after the constant 1)
+            // We verify indirectly: constraint check passes and change_commitment is 0
+            await circuit.checkConstraints(w);
+            expect(input.change_commitment).to.equal("0");
+        });
+
+        it("partial unshield exposes correct non-zero change_commitment as public signal", async function () {
+            if (!circuit) return this.skip();
+            const input = buildInput({ noteValue: 100n, amount: 50n, fee: 1n, changeValue: 49n });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+            expect(input.change_commitment).to.not.equal("0");
         });
     });
 });
