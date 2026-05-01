@@ -37,7 +37,7 @@ ark-circom --version
 
 ```bash
 # This now includes .ark conversion
-npm run build-all
+pnpm run build-all
 ```
 
 The pipeline will automatically:
@@ -52,10 +52,10 @@ Convert a specific circuit:
 
 ```bash
 # Disclosure circuit
-npm run convert:disclosure
+pnpm run convert:disclosure
 
 # Transfer circuit
-npm run convert:transfer
+pnpm run convert:transfer
 
 # Or use the script directly
 bash scripts/build/convert-to-ark.sh disclosure

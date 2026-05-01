@@ -49,7 +49,7 @@ cd circuits
 ### 2. Install Dependencies
 
 ```bash
-npm install
+pnpm install
 ```
 
 This will:
@@ -65,7 +65,7 @@ This will:
 Build everything from scratch:
 
 ```bash
-npm run build-all
+pnpm run build-all
 ```
 
 This automatically:
@@ -86,7 +86,7 @@ For more control, build circuits individually:
 
 ```bash
 # Compile disclosure circuit
-npm run compile:disclosure
+pnpm run compile:disclosure
 
 # Output:
 # - build/disclosure.r1cs (208KB)
@@ -98,7 +98,7 @@ npm run compile:disclosure
 
 ```bash
 # Generate proving and verifying keys
-npm run setup:disclosure
+pnpm run setup:disclosure
 
 # Output:
 # - keys/disclosure_pk.zkey (689KB)
@@ -109,7 +109,7 @@ npm run setup:disclosure
 
 ```bash
 # Run tests
-npm test -- --grep "disclosure"
+pnpm test -- --grep "disclosure"
 ```
 
 ## Your First Proof
@@ -117,7 +117,7 @@ npm test -- --grep "disclosure"
 ### 1. Generate Test Input
 
 ```bash
-npm run gen-input:disclosure
+pnpm run gen-input:disclosure
 ```
 
 This creates sample inputs in `build/input_*.json`:
@@ -130,7 +130,7 @@ This creates sample inputs in `build/input_*.json`:
 ### 2. Generate Proof
 
 ```bash
-npm run prove:disclosure
+pnpm run prove:disclosure
 ```
 
 This generates:
@@ -159,19 +159,19 @@ npx snarkjs groth16 verify \
 ### Run All Tests
 
 ```bash
-npm test
+pnpm test
 ```
 
-**Expected**: ~86 tests passing in 7 seconds
+**Expected**: 129 tests passing in ~27 seconds
 
 ### Run Specific Tests
 
 ```bash
 # Test a specific circuit
-npm test -- --grep "disclosure"
+pnpm test -- --grep "disclosure"
 
 # Test a specific component
-npm test -- --grep "merkle"
+pnpm test -- --grep "merkle"
 ```
 
 ### Test Coverage
@@ -179,8 +179,8 @@ npm test -- --grep "merkle"
 | Test Suite            | Tests | Purpose                     |
 | --------------------- | ----- | --------------------------- |
 | `disclosure.test.ts`  | 12    | Selective disclosure logic  |
-| `transfer.test.ts`    | 18    | Private transfer validation |
-| `unshield.test.ts`    | 8     | Asset unshielding           |
+| `transfer.test.ts`    | 79    | Private transfer validation |
+| `unshield.test.ts`    | 38    | Asset unshielding           |
 | `merkle_tree.test.ts` | 15    | Merkle proof verification   |
 | `note.test.ts`        | 10    | Note commitments            |
 | `poseidon_*.test.ts`  | 23    | Hash function tests         |
@@ -191,10 +191,10 @@ npm test -- --grep "merkle"
 
 ```bash
 # Benchmark disclosure circuit
-npm run bench:disclosure
+pnpm run bench:disclosure
 
 # Benchmark all circuits
-npm run bench
+pnpm run bench
 ```
 
 ### Typical Results
@@ -214,7 +214,7 @@ Results saved to: `build/benchmark_results_disclosure.json`
 ### Clean Build Artifacts
 
 ```bash
-npm run clean
+pnpm run clean
 ```
 
 Removes:
@@ -227,16 +227,16 @@ Removes:
 
 ```bash
 # Auto-format all files
-npm run format
+pnpm run format
 
 # Check formatting without changes
-npm run format:check
+pnpm run format:check
 ```
 
 ### Lint Circuits
 
 ```bash
-npm run lint:circom
+pnpm run lint:circom
 ```
 
 ## Project Structure
@@ -288,7 +288,7 @@ Increase Node.js memory:
 
 ```bash
 export NODE_OPTIONS="--max-old-space-size=8192"
-npm run build-all
+pnpm run build-all
 ```
 
 #### "PTAU download failed"
@@ -305,14 +305,14 @@ wget https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_16.ptau -
 
 ```bash
 # Ensure circuits are built
-npm run build-all
+pnpm run build-all
 
 # Clear node_modules and reinstall
-rm -rf node_modules package-lock.json
-npm install
+rm -rf node_modules pnpm-lock.yaml
+pnpm install
 
 # Run tests with verbose output
-npm test -- --reporter spec
+pnpm test -- --reporter spec
 ```
 
 ### Getting Help

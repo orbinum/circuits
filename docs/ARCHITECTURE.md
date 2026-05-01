@@ -22,7 +22,7 @@ orbinum-circuits/
 │   ├── note.circom             # Note commitment
 │   ├── poseidon_wrapper.circom # Poseidon hash wrapper
 │   ├── private_link.circom     # Private note linking
-│   ├── transfer.circom         # Private transfers
+│   ├── transfer.circom         # Private transfers (2-in/2-out, supports dummy inputs)
 │   └── unshield.circom         # Asset unshielding
 │
 ├── scripts/                    # Automation scripts
@@ -128,6 +128,8 @@ orbinum-circuits/
 - `merkle_tree.circom`, `note.circom`, `poseidon_wrapper.circom`: Reusable components
 - `disclosure.circom`, `transfer.circom`, `unshield.circom`, `private_link.circom`: Application circuits
 
+`transfer.circom` implements a 2-in/2-out scheme with **dummy input support**: when a user has only one note, the second input slot carries `value = 0` and bypasses Merkle membership and nullifier derivation (Zcash Sapling technique). Ownership is proven via `BabyPbk(spending_key)` — no EdDSA signatures required. The dummy nullifier is forced to zero by the circuit (Constraint 9). The pallet rejects transactions where both nullifiers are zero (anti-spam).
+
 **Dependencies**:
 
 - `circomlib` for standard cryptographic primitives
@@ -199,7 +201,7 @@ orbinum-circuits/
 - `generate_proof.ts` / `generate_disclosure_proof.ts`: Generate ZK proofs
 - `generate_unshield_and_private_link_input.js`: Inputs for unshield + private link
 - `proof_wrapper.ts`: Proof serialization/deserialization
-- `eddsa_signer.ts`: EdDSA signature helper
+- `eddsa_signer.ts`: EdDSA signature helper (legacy; ownership is now proven via `BabyPbk` in `transfer` and `unshield`)
 
 ### 6. **npm Package** (`npm/`)
 
@@ -421,10 +423,10 @@ pnpm run format
 
 | Circuit      | Constraints | Proof Time | Verify Time |
 | ------------ | ----------- | ---------- | ----------- |
-| Disclosure   | ~1,584      | <150ms     | <5ms        |
-| Transfer     | ~32,000     | <500ms     | <5ms        |
-| Unshield     | ~5,000      | <250ms     | <5ms        |
-| Private Link | ~5,000      | <250ms     | <5ms        |
+| Disclosure   | 1,584       | <150ms     | <5ms        |
+| Transfer     | 33,687      | <3s        | <15ms       |
+| Unshield     | 16,033      | <1s        | <15ms       |
+| Private Link | 487         | <100ms     | <5ms        |
 
 ## Versioning Strategy
 

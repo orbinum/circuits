@@ -23,7 +23,7 @@ echo ""
 # Check if node_modules exists
 if [ ! -d "node_modules" ]; then
     echo -e "${BLUE}[Step 1/4]${NC} Installing dependencies..."
-    npm install
+    pnpm install
     echo ""
 else
     echo -e "${GREEN}[Step 1/4]${NC} Dependencies already installed ✓"
@@ -39,7 +39,7 @@ for i in "${!CIRCUITS[@]}"; do
     
     echo -e "${BLUE}[Step $STEP/5]${NC} Building ${CIRCUIT} circuit..."
     echo ""
-    npm run full-build:${CIRCUIT//_/-}
+    pnpm run full-build:${CIRCUIT//_/-}
     echo ""
 done
 

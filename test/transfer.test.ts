@@ -2,7 +2,7 @@ import path from "path";
 import fs from "fs";
 import { expect } from "chai";
 import { wasm as wasm_tester } from "circom_tester";
-import { buildPoseidon, buildEddsa } from "circomlibjs";
+import { buildPoseidon, buildBabyjub } from "circomlibjs";
 import type { WasmTester } from "circom_tester";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -18,12 +18,16 @@ describe("Transfer Circuit (gasless)", function () {
 
     let circuit: WasmTester;
     let poseidon: any;
-    let eddsa: any;
+    let babyJub: any;
     let F: any;
 
-    // Two test key pairs (Alice owns note 0, Bob owns note 1)
-    let alice: { privKey: Buffer; Ax: bigint; Ay: bigint };
-    let bob: { privKey: Buffer; Ax: bigint; Ay: bigint };
+    // Default spending keys (same values as buildInput/buildDummyInput defaults)
+    const SK0_DEFAULT = 0xdeadbeef0000001n;
+    const SK1_DEFAULT = 0xdeadbeef0000002n;
+
+    // Output note owner pubkeys (derived from default spending keys via BabyPbk)
+    let alice: { Ax: bigint };
+    let bob: { Ax: bigint };
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -38,6 +42,12 @@ describe("Transfer Circuit (gasless)", function () {
 
     function computeNullifier(commitment: bigint, spendingKey: bigint): bigint {
         return F.toObject(poseidon([commitment, spendingKey]));
+    }
+
+    /** Derive Baby JubJub owner public key (Ax) from a spending key scalar. Mirrors BabyPbk in circuit. */
+    function computeOwnerAx(sk: bigint): bigint {
+        const point = babyJub.mulPointEscalar(babyJub.Base8, sk);
+        return F.toObject(point[0]);
     }
 
     /** Sparse Merkle proof builder. Only materialises the O(N·depth) non-zero nodes,
@@ -66,16 +76,6 @@ describe("Transfer Circuit (gasless)", function () {
             level = nextLevel;
         }
         return { root: level.get(0) ?? 0n, pathElements, pathIndices };
-    }
-
-    /** Generate an EdDSA Poseidon signature over a field element. */
-    function sign(privKey: Buffer, commitment: bigint): { R8x: bigint; R8y: bigint; S: bigint } {
-        const sig = eddsa.signPoseidon(privKey, F.e(commitment));
-        return {
-            R8x: F.toObject(sig.R8[0]),
-            R8y: F.toObject(sig.R8[1]),
-            S: sig.S,
-        };
     }
 
     /**
@@ -109,17 +109,18 @@ describe("Transfer Circuit (gasless)", function () {
         const outOwner0 = opts.outOwner0 ?? alice.Ax;
         const outOwner1 = opts.outOwner1 ?? bob.Ax;
 
-        const comm0 = computeCommitment(opts.value0, assetId, alice.Ax, bl0);
-        const comm1 = computeCommitment(opts.value1, assetId, bob.Ax, bl1);
+        // Derive owner pubkeys from spending keys — matches circuit's BabyPbk(spending_key).Ax
+        const owner0Ax = computeOwnerAx(sk0);
+        const owner1Ax = computeOwnerAx(sk1);
+
+        const comm0 = computeCommitment(opts.value0, assetId, owner0Ax, bl0);
+        const comm1 = computeCommitment(opts.value1, assetId, owner1Ax, bl1);
 
         const { root, pathElements: pe0, pathIndices: pi0 } = buildMerkleProof([comm0, comm1], 0);
         const { pathElements: pe1, pathIndices: pi1 } = buildMerkleProof([comm0, comm1], 1);
 
         const null0 = computeNullifier(comm0, sk0);
         const null1 = computeNullifier(comm1, sk1);
-
-        const sigA = sign(alice.privKey, comm0);
-        const sigB = sign(bob.privKey, comm1);
 
         const outComm0 = computeCommitment(opts.outValue0, assetId, outOwner0, outBl0);
         const outComm1 = computeCommitment(opts.outValue1, assetId, outOwner1, outBl1);
@@ -134,13 +135,67 @@ describe("Transfer Circuit (gasless)", function () {
             input_asset_ids: [assetId.toString(), assetId.toString()],
             input_blindings: [bl0.toString(), bl1.toString()],
             spending_keys: [sk0.toString(), sk1.toString()],
-            input_owner_Ax: [alice.Ax.toString(), bob.Ax.toString()],
-            input_owner_Ay: [alice.Ay.toString(), bob.Ay.toString()],
-            input_sig_R8x: [sigA.R8x.toString(), sigB.R8x.toString()],
-            input_sig_R8y: [sigA.R8y.toString(), sigB.R8y.toString()],
-            input_sig_S: [sigA.S.toString(), sigB.S.toString()],
             input_path_elements: [pe0.map(String), pe1.map(String)],
             input_path_indices: [pi0, pi1],
+            output_values: [opts.outValue0.toString(), opts.outValue1.toString()],
+            output_asset_ids: [assetId.toString(), assetId.toString()],
+            output_owner_pubkeys: [outOwner0.toString(), outOwner1.toString()],
+            output_blindings: [outBl0.toString(), outBl1.toString()],
+        };
+    }
+
+    /**
+     * Build a transfer circuit input with one real note (Alice, index 0) and one dummy note
+     * (input_values[1] = 0). The dummy bypasses Merkle, nullifier derivation, and EdDSA checks.
+     * The dummy nullifier must be supplied as 0 in the public inputs.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    function buildDummyInput(opts: {
+        value0: bigint;
+        outValue0: bigint;
+        outValue1: bigint;
+        fee: bigint;
+        assetId?: bigint;
+        blinding0?: bigint;
+        spendingKey0?: bigint;
+        outBlinding0?: bigint;
+        outBlinding1?: bigint;
+        outOwner0?: bigint;
+        outOwner1?: bigint;
+    }): any {
+        const assetId = opts.assetId ?? 0n;
+        const bl0 = opts.blinding0 ?? 0xaaaaaaaabbbbbbbbaaaaaaaabn;
+        const sk0 = opts.spendingKey0 ?? 0xdeadbeef0000001n;
+        const outBl0 = opts.outBlinding0 ?? 0x1111111100000001n;
+        const outBl1 = opts.outBlinding1 ?? 0x2222222200000002n;
+        const outOwner0 = opts.outOwner0 ?? alice.Ax;
+        const outOwner1 = opts.outOwner1 ?? bob.Ax;
+
+        // Real note (Alice, input[0]) — derive ownerAx from sk0 to match circuit's BabyPbk
+        const owner0Ax = computeOwnerAx(sk0);
+        const comm0 = computeCommitment(opts.value0, assetId, owner0Ax, bl0);
+        const { root, pathElements: pe0, pathIndices: pi0 } = buildMerkleProof([comm0], 0);
+        const null0 = computeNullifier(comm0, sk0);
+
+        // Dummy note (input[1]): value=0, nullifier=0 (required by Constraint 9), all-zero path
+        const zeroPE = Array(TREE_DEPTH).fill(0n);
+        const zeroPI = Array(TREE_DEPTH).fill(0);
+
+        const outComm0 = computeCommitment(opts.outValue0, assetId, outOwner0, outBl0);
+        const outComm1 = computeCommitment(opts.outValue1, assetId, outOwner1, outBl1);
+
+        return {
+            merkle_root: root.toString(),
+            nullifiers: [null0.toString(), "0"], // dummy nullifier must be 0
+            commitments: [outComm0.toString(), outComm1.toString()],
+            asset_id: assetId.toString(),
+            fee: opts.fee.toString(),
+            input_values: [opts.value0.toString(), "0"], // dummy has value = 0
+            input_asset_ids: [assetId.toString(), assetId.toString()],
+            input_blindings: [bl0.toString(), "0"],
+            spending_keys: [sk0.toString(), "1"], // arbitrary for dummy (BabyPbk(1) is valid)
+            input_path_elements: [pe0.map(String), zeroPE.map(String)],
+            input_path_indices: [pi0, zeroPI],
             output_values: [opts.outValue0.toString(), opts.outValue1.toString()],
             output_asset_ids: [assetId.toString(), assetId.toString()],
             output_owner_pubkeys: [outOwner0.toString(), outOwner1.toString()],
@@ -152,24 +207,17 @@ describe("Transfer Circuit (gasless)", function () {
 
     before(async function () {
         poseidon = await buildPoseidon();
-        eddsa = await buildEddsa();
+        babyJub = await buildBabyjub();
         F = poseidon.F;
 
+        // Derive alice/bob pubkeys from their default spending keys via BabyPbk
         alice = (() => {
-            const privKey = Buffer.from(
-                "0001020304050607080900010203040506070809000102030405060708090001",
-                "hex"
-            );
-            const pub = eddsa.prv2pub(privKey);
-            return { privKey, Ax: F.toObject(pub[0]), Ay: F.toObject(pub[1]) };
+            const point = babyJub.mulPointEscalar(babyJub.Base8, SK0_DEFAULT);
+            return { Ax: F.toObject(point[0]) };
         })();
         bob = (() => {
-            const privKey = Buffer.from(
-                "0102030405060708090001020304050607080900010203040506070809000102",
-                "hex"
-            );
-            const pub = eddsa.prv2pub(privKey);
-            return { privKey, Ax: F.toObject(pub[0]), Ay: F.toObject(pub[1]) };
+            const point = babyJub.mulPointEscalar(babyJub.Base8, SK1_DEFAULT);
+            return { Ax: F.toObject(point[0]) };
         })();
 
         if (!fs.existsSync(precompiledWasm)) {
@@ -292,10 +340,10 @@ describe("Transfer Circuit (gasless)", function () {
         });
     });
 
-    // ── 3. EdDSA ownership (Constraint 3) ─────────────────────────────────────
+    // ── 3. Key derivation: BabyPbk(spending_key) → ownerPk (Constraint 3) ──────────────
 
-    describe("EdDSA ownership (Constraint 3)", () => {
-        it("accepts valid signatures from both owners", async function () {
+    describe("Key derivation: BabyPbk(spending_key) \u2192 ownerPk (Constraint 3)", () => {
+        it("accepts valid spending keys (both real notes)", async function () {
             if (!circuit) return this.skip();
             const input = buildInput({
                 value0: 300n,
@@ -308,7 +356,7 @@ describe("Transfer Circuit (gasless)", function () {
             await circuit.checkConstraints(w);
         });
 
-        it("rejects tampered signature S component", async function () {
+        it("rejects wrong spending_key for input[0] (wrong Ax \u2192 commitment mismatch \u2192 Merkle fails)", async function () {
             if (!circuit) return this.skip();
             const input = buildInput({
                 value0: 300n,
@@ -317,7 +365,8 @@ describe("Transfer Circuit (gasless)", function () {
                 outValue1: 0n,
                 fee: 1n,
             });
-            input.input_sig_S[0] = (BigInt(input.input_sig_S[0]) + 1n).toString();
+            // Tamper sk0: circuit derives wrong Ax, builds wrong commitment, Merkle check fails
+            input.spending_keys[0] = "999999999999999";
             try {
                 await circuit.calculateWitness(input);
                 expect.fail("Should have thrown");
@@ -326,7 +375,7 @@ describe("Transfer Circuit (gasless)", function () {
             }
         });
 
-        it("rejects mismatched public key (wrong owner for note)", async function () {
+        it("rejects wrong spending_key for input[1] (wrong Ax \u2192 commitment mismatch \u2192 Merkle fails)", async function () {
             if (!circuit) return this.skip();
             const input = buildInput({
                 value0: 300n,
@@ -335,9 +384,7 @@ describe("Transfer Circuit (gasless)", function () {
                 outValue1: 0n,
                 fee: 1n,
             });
-            // Swap Alice's pubkey for Bob's — commitment was built with Alice's Ax, so this mismatches
-            input.input_owner_Ax[0] = bob.Ax.toString();
-            input.input_owner_Ay[0] = bob.Ay.toString();
+            input.spending_keys[1] = "111111111111111";
             try {
                 await circuit.calculateWitness(input);
                 expect.fail("Should have thrown");
@@ -535,9 +582,9 @@ describe("Transfer Circuit (gasless)", function () {
         });
     });
 
-    // ── 8. Distinct nullifiers (Constraint 9) ───────────────────────────────
+    // ── 8. Distinct nullifiers (Constraint 10) ────────────────────────────────────────
 
-    describe("Distinct nullifiers (Constraint 9)", () => {
+    describe("Distinct nullifiers (Constraint 10)", () => {
         it("accepts two different notes (nullifiers always distinct)", async function () {
             if (!circuit) return this.skip();
             const input = buildInput({
@@ -572,7 +619,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
     });
 
-    // ── 9. u128 range check (Constraint 6 & 6b) ─────────────────────────────
+    // ── 9. u128 range check (Constraint 6 & 6b) ──────────────────────────────
 
     describe("u128 range check (Constraint 6 & 6b)", () => {
         it("accepts 1000 ORB input notes", async function () {
@@ -594,9 +641,9 @@ describe("Transfer Circuit (gasless)", function () {
         it("accepts max u128 fee with matching inputs", async function () {
             if (!circuit) return this.skip();
             const MAX_FEE = 2n ** 128n - 1n;
-            const input = buildInput({
+            // value1 = 0 triggers is_dummy → must use buildDummyInput so nullifiers[1] = 0
+            const input = buildDummyInput({
                 value0: MAX_FEE,
-                value1: 0n,
                 outValue0: 0n,
                 outValue1: 0n,
                 fee: MAX_FEE,
@@ -622,6 +669,147 @@ describe("Transfer Circuit (gasless)", function () {
             } catch (err: any) {
                 expect(err.message).to.include("Assert Failed");
             }
+        });
+    });
+
+    // ── 10. Dummy note (Constraints 9 & 10) ────────────────────────────────────
+
+    describe("Dummy note (Constraints 9 & 10)", () => {
+        it("accepts 1 real note + dummy (value=0, nullifier=0)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildDummyInput({
+                value0: 1000n,
+                outValue0: 999n,
+                outValue1: 0n,
+                fee: 1n,
+            });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("accepts dummy with corrupted Merkle path (path is ignored)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildDummyInput({
+                value0: 500n,
+                outValue0: 499n,
+                outValue1: 0n,
+                fee: 1n,
+            });
+            // Corrupt the dummy path — should still pass (dummy bypasses Merkle check)
+            input.input_path_elements[1][0] = "99999999";
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("rejects dummy with non-zero nullifier (Constraint 9)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildDummyInput({
+                value0: 500n,
+                outValue0: 499n,
+                outValue1: 0n,
+                fee: 1n,
+            });
+            // Set dummy nullifier to non-zero — violates Constraint 9
+            input.nullifiers[1] = "12345";
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("accepts different fee values with dummy input", async function () {
+            if (!circuit) return this.skip();
+            const fee = 1_000_000_000_000_000n; // 0.001 ORB
+            const input = buildDummyInput({
+                value0: 10_000_000_000_000_000_000n,
+                outValue0: 10_000_000_000_000_000_000n - fee,
+                outValue1: 0n,
+                fee,
+            });
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
+        });
+
+        it("rejects wrong spending key for the real note in 1-real+dummy scenario (Constraint 2)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildDummyInput({
+                value0: 500n,
+                outValue0: 499n,
+                outValue1: 0n,
+                fee: 1n,
+            });
+            // Tamper the spending key of the real note — nullifier derivation must fail
+            input.spending_keys[0] = "9999999999999999999";
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("rejects tampered Merkle root for the real note in 1-real+dummy scenario (Constraint 1)", async function () {
+            if (!circuit) return this.skip();
+            const input = buildDummyInput({
+                value0: 500n,
+                outValue0: 499n,
+                outValue1: 0n,
+                fee: 1n,
+            });
+            input.merkle_root = (BigInt(input.merkle_root) + 1n).toString();
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("accepts dummy as input[0], real as input[1] (symmetric positions)", async function () {
+            if (!circuit) return this.skip();
+            // Mirror of buildDummyInput: dummy at index 0, real note (Bob, sk1) at index 1
+            const assetId = 0n;
+            const bl1 = 0xccccccccddddddddccccccccdn;
+            const sk1 = 0xdeadbeef0000002n;
+            const outBl0 = 0x1111111100000001n;
+            const outBl1 = 0x2222222200000002n;
+            const value1 = 800n;
+
+            // Derive owner Ax for the real note from sk1
+            const owner1Ax = computeOwnerAx(sk1);
+            const comm1 = computeCommitment(value1, assetId, owner1Ax, bl1);
+            const { root, pathElements: pe1, pathIndices: pi1 } = buildMerkleProof([comm1], 0);
+            const null1 = computeNullifier(comm1, sk1);
+
+            const outComm0 = computeCommitment(799n, assetId, alice.Ax, outBl0);
+            const outComm1 = computeCommitment(0n, assetId, bob.Ax, outBl1);
+
+            const zeroPE = Array(TREE_DEPTH).fill(0n);
+            const zeroPI = Array(TREE_DEPTH).fill(0);
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const input: any = {
+                merkle_root: root.toString(),
+                nullifiers: ["0", null1.toString()], // dummy nullifier is 0
+                commitments: [outComm0.toString(), outComm1.toString()],
+                asset_id: assetId.toString(),
+                fee: "1",
+                input_values: ["0", value1.toString()], // dummy at index 0
+                input_asset_ids: [assetId.toString(), assetId.toString()],
+                input_blindings: ["0", bl1.toString()],
+                spending_keys: ["1", sk1.toString()], // BabyPbk(1) for dummy (valid point)
+                input_path_elements: [zeroPE.map(String), pe1.map(String)],
+                input_path_indices: [zeroPI, pi1],
+                output_values: ["799", "0"],
+                output_asset_ids: [assetId.toString(), assetId.toString()],
+                output_owner_pubkeys: [alice.Ax.toString(), bob.Ax.toString()],
+                output_blindings: [outBl0.toString(), outBl1.toString()],
+            };
+
+            const w = await circuit.calculateWitness(input);
+            await circuit.checkConstraints(w);
         });
     });
 });
