@@ -13,22 +13,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`change_commitment` public input** (7th public signal): `0` for total unshield; `NoteCommitment(change_value, asset_id, change_owner_pubkey, change_blinding)` for partial unshield.
 - **`change_value`, `change_blinding`, `change_owner_pubkey` private inputs**: define the change note. Ignored by the circuit when `change_value == 0`.
 - **Constraint 8 — conditional change commitment enforcement** using `IsZero(change_value)`:
-  - **8a** (partial): `change_commitment_computer.commitment === change_commitment` when `change_value > 0`.
-  - **8b** (total): `change_commitment === 0` when `change_value == 0`.
+    - **8a** (partial): `change_commitment_computer.commitment === change_commitment` when `change_value > 0`.
+    - **8b** (total): `change_commitment === 0` when `change_value == 0`.
 - **Constraint 9 — `change_value` range check**: `Num2Bits(128)` on `change_value`, consistent with `note_value` and `fee`.
 - **New test section 8 "Change note commitment"** (12 tests, `test/unshield.test.ts`):
-  - Accepts `change_commitment = 0` for total unshield.
-  - Rejects non-zero `change_commitment` when `change_value = 0` (Constraint 8b).
-  - Accepts correct `change_commitment` for partial unshield (Constraint 8a).
-  - Rejects tampered `change_commitment` (Constraint 8a).
-  - Rejects `change_commitment = 0` when `change_value > 0` (Constraint 8a).
-  - Rejects wrong `change_blinding` (Constraint 8a).
-  - Rejects wrong `change_owner_pubkey` (Constraint 8a).
-  - Rejects `change_commitment` forged with a different `asset_id` (Constraint 8a — circuit pins change commitment to `note_asset_id`).
-  - Accepts change note to same owner (self-change).
-  - Accepts change note to different owner.
-  - Accepts `change_value = 2^128 - 1` (max u128, Constraint 9).
-  - Rejects `change_value = 2^128` (Constraint 9).
+    - Accepts `change_commitment = 0` for total unshield.
+    - Rejects non-zero `change_commitment` when `change_value = 0` (Constraint 8b).
+    - Accepts correct `change_commitment` for partial unshield (Constraint 8a).
+    - Rejects tampered `change_commitment` (Constraint 8a).
+    - Rejects `change_commitment = 0` when `change_value > 0` (Constraint 8a).
+    - Rejects wrong `change_blinding` (Constraint 8a).
+    - Rejects wrong `change_owner_pubkey` (Constraint 8a).
+    - Rejects `change_commitment` forged with a different `asset_id` (Constraint 8a — circuit pins change commitment to `note_asset_id`).
+    - Accepts change note to same owner (self-change).
+    - Accepts change note to different owner.
+    - Accepts `change_value = 2^128 - 1` (max u128, Constraint 9).
+    - Rejects `change_value = 2^128` (Constraint 9).
 - **New test section 9 "Public signals"** (2 tests): verifies `change_commitment` is exposed correctly as the 7th public signal in both modes.
 
 ### Changed
