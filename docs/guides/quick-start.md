@@ -176,14 +176,14 @@ pnpm test -- --grep "merkle"
 
 ### Test Coverage
 
-| Test Suite            | Tests | Purpose                     |
-| --------------------- | ----- | --------------------------- |
-| `disclosure.test.ts`  | 12    | Selective disclosure logic  |
-| `transfer.test.ts`    | 79    | Private transfer validation |
-| `unshield.test.ts`    | 38    | Asset unshielding           |
-| `merkle_tree.test.ts` | 15    | Merkle proof verification   |
-| `note.test.ts`        | 10    | Note commitments            |
-| `poseidon_*.test.ts`  | 23    | Hash function tests         |
+| Test Suite            | Tests | Purpose                                              |
+| --------------------- | ----- | ---------------------------------------------------- |
+| `disclosure.test.ts`  | 12    | Selective disclosure logic                           |
+| `transfer.test.ts`    | 79    | Private transfer validation                          |
+| `unshield.test.ts`    | 44    | Asset unshielding (total + partial with change note) |
+| `merkle_tree.test.ts` | 15    | Merkle proof verification                            |
+| `note.test.ts`        | 10    | Note commitments                                     |
+| `poseidon_*.test.ts`  | 23    | Hash function tests                                  |
 
 ## Benchmarking
 

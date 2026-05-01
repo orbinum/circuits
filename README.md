@@ -7,7 +7,7 @@ Zero-Knowledge circuits for Orbinum privacy blockchain.
 
 **Stack**: Circom 2.0 · Groth16 · BN254 · Poseidon (circomlib) · BabyPbk key derivation (BabyJubJub) · snarkjs + arkworks
 
-**Privacy model**: UTXO-based note scheme, 2-in / 2-out with dummy input support (Zcash Sapling technique). Multi-asset (`asset_id` per note). Gasless fee embedded in the circuit proof. Merkle tree depth 20 (up to 1,048,576 notes). All value ranges enforced as u128 (matches Substrate `Balance`).
+**Privacy model**: UTXO-based note scheme, 2-in / 2-out with dummy input support (Zcash Sapling technique). Partial unshield with change note (returns unspent value to the pool without a prior Transfer step). Multi-asset (`asset_id` per note). Gasless fee embedded in the circuit proof. Merkle tree depth 20 (up to 1,048,576 notes). All value ranges enforced as u128 (matches Substrate `Balance`).
 
 ## Installation
 
@@ -185,7 +185,7 @@ pnpm test
 - `note.test.ts` - Note commitment schemes
 - `poseidon_*.test.ts` - Hash function compatibility
 
-**Expected:** 129 tests passing in ~45 seconds
+**Expected:** 135 tests passing in ~45 seconds
 
 ### Run Specific Test
 
@@ -381,22 +381,24 @@ pnpm run prove:transfer
 
 ### Unshield Circuit — `circuits/unshield.circom`
 
-**Purpose:** Withdraw a private note to a public account
+**Purpose:** Withdraw a private note to a public account, with optional change note returned to the pool
 
 **Statistics:**
 
-- Constraints: 16,033
-- Private inputs: 5 scalars + 20 Merkle path elements
-- Public inputs: 6 (`merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, `fee`)
+- Constraints: 16,903
+- Private inputs: 8 scalars + 20 Merkle path elements
+- Public inputs: 7 (`merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, `fee`, `change_commitment`)
 - Tree depth: 20
 
 **Features:**
 
-- Note value conservation: `note_value === amount + fee`
+- **Total unshield**: `note_value === amount + fee`, `change_commitment` must be `0`
+- **Partial unshield**: `note_value === amount + fee + change_value`; `change_commitment` must equal `NoteCommitment(change_value, asset_id, change_owner_pubkey, change_blinding)`. The pallet inserts it into the Merkle tree.
 - Merkle membership proof for the input note
 - Nullifier derivation: `Poseidon(commitment, spending_key)`
-- u128 range checks on `note_value` and `fee`
-- Asset ID binding between private note and public `asset_id`
+- BabyPbk key derivation: `BabyPbk(spending_key)` derives `ownerPk (Ax)` inside the circuit (Constraint 0)
+- u128 range checks on `note_value`, `fee`, and `change_value`
+- Asset ID binding: `note_asset_id === asset_id`; change commitment pinned to same asset
 - `recipient` is a public signal (validated non-zero in the pallet)
 
 ### Disclosure Circuit — `circuits/disclosure.circom`
@@ -445,6 +447,8 @@ The following properties are enforced at the circuit level (R1CS constraints). T
 
 **Fee binding in `transfer` and `unshield`**: `fee` is a public input included in the conservation constraint. The pallet cannot alter the fee after the proof is generated — any change invalidates the proof.
 
+**Change note integrity in `unshield`** (Constraint 8): when `change_value > 0`, the public `change_commitment` must equal `NoteCommitment(change_value, note_asset_id, change_owner_pubkey, change_blinding)`. When `change_value == 0`, `change_commitment` must be `0`. Any tampered commitment, wrong blinding, wrong owner, or wrong asset is rejected by the R1CS constraints.
+
 **Quadratic call hash in `private_link`**: The quadratic `call_hash_sq` constraint survives linear simplification (`--O1`). Without it, `call_hash_fe` would have a zero coefficient in `gamma_abc`, making the proof replayable across different calls.
 
 **Anti-spam (pallet, two layers)**: `pallet-shielded-pool` rejects any `private_transfer` where all nullifiers are zero (both inputs dummy) — (1) in `validate_unsigned` (tx pool, `InvalidTransaction::Custom(2)`) and (2) in `execute` (`Error::InvalidAmount`). Prevents free Merkle tree inflation without a valid spend.
@@ -455,7 +459,7 @@ The following properties are enforced at the circuit level (R1CS constraints). T
 circuits/
 ├── circuits/                  # Circom source files
 │   ├── transfer.circom        # 2-in/2-out private transfer (33,687 constraints)
-│   ├── unshield.circom        # Private → public withdrawal (16,033 constraints)
+│   ├── unshield.circom        # Private → public withdrawal (16,903 constraints)
 │   ├── disclosure.circom      # Selective field disclosure (1,584 constraints)
 │   ├── private_link.circom    # Cross-chain identity link (487 constraints)
 │   ├── note.circom            # NoteCommitment + Nullifier templates
@@ -468,7 +472,7 @@ circuits/
 ├── keys/                      # Cryptographic keys
 │   ├── *_pk.zkey              # snarkjs proving keys
 │   └── *_pk.ark               # arkworks proving keys (serialized)
-├── test/                      # Test suites (129 tests)
+├── test/                      # Test suites (135 tests)
 ├── benches/                   # Performance benchmarks
 ├── scripts/                   # Build and generation scripts
 │   ├── build/                 # Compilation scripts
