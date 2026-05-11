@@ -5,9 +5,11 @@
       "file": "disclosure.circom",
       "merkleDepth": 20,
       "maxAssets": 8,
-      "constraints": 1584,
-      "publicInputs": 4,
-      "privateInputs": 8
+      "constraints": 9411,
+      "publicInputs": 3,
+      "publicOutputs": 5,
+      "privateInputs": 8,
+      "encryptionScheme": "ecdh-babyjubjub-poseidon"
     },
     "transfer": {
       "name": "Private Transfer",
@@ -16,14 +18,22 @@
       "inputNotes": 2,
       "outputNotes": 2,
       "maxAssets": 8,
-      "constraints": 10000
+      "constraints": 33687,
+      "nonLinearConstraints": 20018,
+      "linearConstraints": 13669,
+      "publicInputs": 7,
+      "privateInputs": 96
     },
     "unshield": {
       "name": "Asset Unshield",
       "file": "unshield.circom",
       "merkleDepth": 20,
       "maxAssets": 8,
-      "constraints": 5000
+      "constraints": 16903,
+      "nonLinearConstraints": 10070,
+      "linearConstraints": 6833,
+      "publicInputs": 7,
+      "privateInputs": 47
     }
   },
   "components": {
@@ -51,19 +61,19 @@
   "performance": {
     "targets": {
       "disclosure": {
-        "proofTime": "150ms",
+        "proofTime": "1500ms",
         "verifyTime": "5ms",
-        "constraints": 1600
+        "constraints": 9411
       },
       "transfer": {
-        "proofTime": "500ms",
+        "proofTime": "2000ms",
         "verifyTime": "5ms",
-        "constraints": 10000
+        "constraints": 33687
       },
       "unshield": {
-        "proofTime": "250ms",
+        "proofTime": "1200ms",
         "verifyTime": "5ms",
-        "constraints": 5000
+        "constraints": 16903
       }
     }
   }
