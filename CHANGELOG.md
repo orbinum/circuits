@@ -5,6 +5,31 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-05-11
+
+### Added
+
+- **Selective disclosure with ECDH Baby Jubjub (`disclosure.circom`)**: the circuit implements on-circuit encryption using Diffie-Hellman over Baby Jubjub. The auditor exposes a BJJ public key; the prover computes `epk = r·G` and `shared = r·pk_A`, then encrypts selected fields as `enc_field = masked_field + Poseidon(shared.x, shared.y, i)`.
+- **New public output signals** (`epk_x`, `epk_y`, `enc_value`, `enc_asset_id`, `enc_owner_hash`): 5 encrypted outputs replacing the previous `revealed_value` plaintext approach.
+- **New public input signals** (`auditor_pk_x`, `auditor_pk_y`): auditor's BJJ public key; 3 public inputs total (together with `commitment`).
+- **8 private inputs**: `value`, `asset_id`, `owner_pubkey`, `blinding`, `disclose_value`, `disclose_asset_id`, `disclose_owner`, `r` (ephemeral scalar).
+- **Poseidon keystream**: `k_i = Poseidon(shared.x, shared.y, i)` per field (i = 0, 1, 2).
+- **Owner hash instead of raw pubkey**: `owner_hash = Poseidon(owner_pubkey)` protects the note owner's public key inside the ciphertext.
+- **9,411 constraints** (7,557 non-linear + 1,854 linear); within pot16 limit.
+- **Rewrite of `test/disclosure.test.ts`** — 7 test sections: commitment verification, ECDH `r·G`, ECDH symmetry, encryption correctness, round-trip with different `r`, boolean mask constraints, owner hash vs raw pubkey.
+- **Rewrite of `docs/circuits/disclosure.md`** — new ECDH interface, off-chain decryption guide with circomlibjs, usage examples, updated parameters.
+- **Updated `config/circuits.config.json`** — real compiled values for all 3 circuits: `disclosure` (9,411), `transfer` (33,687), `unshield` (16,903).
+
+### Changed
+
+- **`disclosure.circom` — encryption scheme**: `revealed_value` (plaintext field) → on-circuit ECDH with Poseidon keystream.
+- **`disclosure.circom` — public inputs**: 8 → 3 (`commitment`, `auditor_pk_x`, `auditor_pk_y`).
+- **`disclosure.circom` — public outputs**: 0 → 5 (`epk_x`, `epk_y`, `enc_value`, `enc_asset_id`, `enc_owner_hash`).
+- **`disclosure.circom` — constraint count**: ~1,584 → 9,411.
+- **`disclosure.circom` — `main` declaration**: `public [commitment, auditor_pk_x, auditor_pk_y]`.
+- **`disclosure.circom` — includes**: added `escalarmulany.circom` for `EscalarMulAny` (shared secret `r·pk_A`).
+- **`config/circuits.config.json` — `disclosure.encryptionScheme`**: `"none"` → `"ecdh-babyjubjub-poseidon"`.
+
 ## [0.7.0] - 2026-05-01
 
 ### Added
