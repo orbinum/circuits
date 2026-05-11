@@ -403,20 +403,25 @@ pnpm run prove:transfer
 
 ### Disclosure Circuit — `circuits/disclosure.circom`
 
-**Purpose:** Selective on-chain disclosure of note fields without revealing the spending key
+**Purpose:** Selective on-chain disclosure of note fields to an auditor, ECDH-encrypted on-circuit over Baby Jubjub
 
 **Statistics:**
 
-- Constraints: 1,584
-- Private inputs: 7 (`value`, `asset_id`, `owner_pubkey`, `blinding`, `disclose_value`, `disclose_asset_id`, `disclose_owner`)
-- Public inputs: 4 (`commitment`, `revealed_value`, `revealed_asset_id`, `revealed_owner_hash`)
+- Constraints: 9,411 (7,557 non-linear + 1,854 linear)
+- Private inputs: 8 (`value`, `asset_id`, `owner_pubkey`, `blinding`, `disclose_value`, `disclose_asset_id`, `disclose_owner`, `r`)
+- Public inputs: 3 (`commitment`, `auditor_pk_x`, `auditor_pk_y`)
+- Public outputs: 5 (`epk_x`, `epk_y`, `enc_value`, `enc_asset_id`, `enc_owner_hash`)
 
 **Features:**
 
 - Commitment preimage proof: `commitment === Poseidon(value, asset_id, owner_pubkey, blinding)`
-- Selective field revelation controlled by boolean masks (`disclose_*`)
-- Owner revealed as `Poseidon(owner_pubkey)` instead of raw pubkey (privacy-preserving)
+- Selective field encryption controlled by boolean masks (`disclose_*`); masked fields encrypt as `0`
+- ECDH key exchange on-circuit: `epk = r·G` (EscalarMulFix), `shared = r·pk_A` (EscalarMulAny)
+- Poseidon keystream: `k_i = Poseidon(shared.x, shared.y, i)` for each field (i = 0, 1, 2)
+- Ciphertext: `enc_field = masked_field + k_i` (field addition mod BN254 scalar field)
+- Owner disclosed as `Poseidon(owner_pubkey)` instead of raw pubkey (privacy-preserving)
 - Boolean mask constraints: `disclose_* * (disclose_* - 1) === 0`
+- Ephemeral scalar `r` range-checked via `Num2Bits(253)`
 
 ### Private Link Circuit — `circuits/private_link.circom`
 
@@ -460,7 +465,7 @@ circuits/
 ├── circuits/                  # Circom source files
 │   ├── transfer.circom        # 2-in/2-out private transfer (33,687 constraints)
 │   ├── unshield.circom        # Private → public withdrawal (16,903 constraints)
-│   ├── disclosure.circom      # Selective field disclosure (1,584 constraints)
+│   ├── disclosure.circom      # Selective field disclosure, ECDH-encrypted (9,411 constraints)
 │   ├── private_link.circom    # Cross-chain identity link (487 constraints)
 │   ├── note.circom            # NoteCommitment + Nullifier templates
 │   ├── merkle_tree.circom     # MerkleTreeVerifier template
