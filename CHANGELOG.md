@@ -5,6 +5,48 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-05-01
+
+### Added
+
+- **Partial unshield via change note (`unshield.circom`)**: the circuit now accepts an optional change note that returns unspent value back to the pool. The conservation constraint changes from `note_value === amount + fee` to `note_value === amount + fee + change_value`.
+- **`change_commitment` public input** (7th public signal): `0` for total unshield; `NoteCommitment(change_value, asset_id, change_owner_pubkey, change_blinding)` for partial unshield.
+- **`change_value`, `change_blinding`, `change_owner_pubkey` private inputs**: define the change note. Ignored by the circuit when `change_value == 0`.
+- **Constraint 8 — conditional change commitment enforcement** using `IsZero(change_value)`:
+    - **8a** (partial): `change_commitment_computer.commitment === change_commitment` when `change_value > 0`.
+    - **8b** (total): `change_commitment === 0` when `change_value == 0`.
+- **Constraint 9 — `change_value` range check**: `Num2Bits(128)` on `change_value`, consistent with `note_value` and `fee`.
+- **New test section 8 "Change note commitment"** (12 tests, `test/unshield.test.ts`):
+    - Accepts `change_commitment = 0` for total unshield.
+    - Rejects non-zero `change_commitment` when `change_value = 0` (Constraint 8b).
+    - Accepts correct `change_commitment` for partial unshield (Constraint 8a).
+    - Rejects tampered `change_commitment` (Constraint 8a).
+    - Rejects `change_commitment = 0` when `change_value > 0` (Constraint 8a).
+    - Rejects wrong `change_blinding` (Constraint 8a).
+    - Rejects wrong `change_owner_pubkey` (Constraint 8a).
+    - Rejects `change_commitment` forged with a different `asset_id` (Constraint 8a — circuit pins change commitment to `note_asset_id`).
+    - Accepts change note to same owner (self-change).
+    - Accepts change note to different owner.
+    - Accepts `change_value = 2^128 - 1` (max u128, Constraint 9).
+    - Rejects `change_value = 2^128` (Constraint 9).
+- **New test section 9 "Public signals"** (2 tests): verifies `change_commitment` is exposed correctly as the 7th public signal in both modes.
+
+### Changed
+
+- **`unshield.circom` — conservation constraint**: `note_value === amount + fee` → `note_value === amount + fee + change_value`.
+- **`unshield.circom` — public input count**: 6 → 7 (`change_commitment` added).
+- **`unshield.circom` — constraint count**: 16,033 → 16,903.
+- **`unshield.circom` — `main` declaration**: `public [merkle_root, nullifier, amount, recipient, asset_id, fee, change_commitment]`.
+- **Constraint numbering order** in source: Constraint 9 (`change_value` range check) relocated immediately before Constraint 8 (change commitment), grouping all change-note logic together.
+- **`test/unshield.test.ts` — `buildInput`**: accepts `changeValue` (default `0n`), `changeBlinding` (default `0xabcdef1234567890n`), `changeOwnerPubkey` (default: same owner as input note). Computes `change_commitment` automatically.
+- **`test/unshield.test.ts` — section titles**: corrected constraint labels in sections 3 (`Constraint 4` → `5`), 4 (`Constraint 5` → `6`), 5 (`Constraint 6` → `7`).
+- **`test/unshield.test.ts` — test count**: 38 → 44.
+- **Documentation updated**: `docs/circuits/unshield.md` (full rewrite of inputs, constraints, and usage examples), `docs/ARCHITECTURE.md` (constraint count, partial unshield description), `docs/guides/quick-start.md` (test count table).
+- **`package.json`**: version bump `0.6.0` → `0.7.0`.
+- **Artifacts recompiled** (`build/unshield_js/unshield.wasm`, `build/unshield.r1cs`, `keys/unshield_pk.zkey`, `build/verification_key_unshield.json`) to reflect the updated R1CS.
+
+---
+
 ## [0.6.0] - 2026-04-22
 
 ### Added

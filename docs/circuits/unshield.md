@@ -4,42 +4,52 @@
 
 ## Purpose
 
-The Unshield circuit converts a private note to public tokens. It proves that a user owns a note in the Merkle tree and can withdraw its value to a public address. This is the exit mechanism from the privacy pool, making funds publicly visible again.
+The Unshield circuit converts a private note to public tokens. It supports two modes:
+
+- **Total unshield**: withdraw the full note value (`change_value = 0`).
+- **Partial unshield**: withdraw part of the note value and return the remainder as a new private change note (`change_value > 0`).
+
+In both cases the prover proves ownership of a note in the Merkle tree without revealing any private field beyond what is made public.
 
 ## Circuit Statement
 
-> "I own a note in the Merkle tree, and I'm revealing its amount to withdraw to a public address"
+> "I own a note in the Merkle tree. I am withdrawing `amount` to a public address, paying `fee` to the relayer, and (optionally) returning `change_value` to the pool as a new commitment. The sum of all three equals my note value."
 
 ## Security Properties
 
-- **Ownership Proof**: `BabyPbk(spending_key)` derives `ownerPk (Ax)` inside the circuit, proving knowledge of the discrete logarithm of the `ownerPk` embedded in the note commitment
-- **Double-Spend Prevention**: Nullifier ensures the note can only be unshielded once
-- **Merkle Membership**: Note must exist in the commitment tree
-- **Amount Integrity**: Revealed amount must match note's value minus fee
-- **Asset Consistency**: Revealed asset ID must match note's asset
-- **Range Safety**: Value and fee are constrained to u128 range (matches runtime `Balance`)
+- **Ownership Proof**: `BabyPbk(spending_key)` derives `ownerPk (Ax)` inside the circuit, proving knowledge of the discrete logarithm of the `ownerPk` embedded in the note commitment.
+- **Double-Spend Prevention**: Nullifier ensures the note can only be unshielded once.
+- **Merkle Membership**: Note must exist in the commitment tree.
+- **Conservation of Value**: `note_value === amount + fee + change_value`. Neither inflation nor loss of funds is possible.
+- **Change Note Integrity**: When `change_value > 0`, the public `change_commitment` must equal `NoteCommitment(change_value, asset_id, change_owner_pubkey, change_blinding)`. When `change_value == 0`, `change_commitment` must be `0`.
+- **Asset Consistency**: Revealed `asset_id` must match note's internal `note_asset_id`; the change note is bound to the same asset.
+- **Range Safety**: `note_value`, `fee`, and `change_value` are all constrained to u128 (matches runtime `Balance`).
 
 ## Public Inputs (Visible On-Chain)
 
-| Input         | Type  | Description                                                |
-| ------------- | ----- | ---------------------------------------------------------- |
-| `merkle_root` | Field | Current Merkle tree root                                   |
-| `nullifier`   | Field | Nullifier to prevent double-spend                          |
-| `amount`      | Field | Net withdrawal amount (recipient receives this)            |
-| `recipient`   | Field | Recipient address (validated non-zero in runtime)          |
-| `asset_id`    | Field | Asset ID being unshielded (publicly revealed)              |
-| `fee`         | Field | Gasless fee deducted from note value; paid to block author |
+| Input               | Type  | Description                                                                      |
+| ------------------- | ----- | -------------------------------------------------------------------------------- |
+| `merkle_root`       | Field | Current Merkle tree root                                                         |
+| `nullifier`         | Field | Nullifier to prevent double-spend                                                |
+| `amount`            | Field | Net withdrawal amount (recipient receives this)                                  |
+| `recipient`         | Field | Recipient address (validated non-zero in runtime)                                |
+| `asset_id`          | Field | Asset ID being unshielded (publicly revealed)                                    |
+| `fee`               | Field | Gasless fee deducted from note value; paid to block author                       |
+| `change_commitment` | Field | `0` for total unshield; `NoteCommitment(change_value, ...)` for partial unshield |
 
 ## Private Inputs (Known Only to Prover)
 
-| Input               | Type      | Description                                                         |
-| ------------------- | --------- | ------------------------------------------------------------------- |
-| `note_value`        | Field     | Value in the note (must equal amount + fee)                         |
-| `note_asset_id`     | Field     | Asset ID in note (must match public asset_id)                       |
-| `note_blinding`     | Field     | Random blinding factor                                              |
-| `spending_key`      | Field     | Secret key — derives `ownerPk` via `BabyPbk` and computes nullifier |
-| `path_elements[20]` | Field[20] | Sibling hashes for Merkle proof                                     |
-| `path_indices[20]`  | u8[20]    | Path directions (0=left, 1=right)                                   |
+| Input                 | Type      | Description                                                                |
+| --------------------- | --------- | -------------------------------------------------------------------------- |
+| `note_value`          | Field     | Value in the note (`amount + fee + change_value`)                          |
+| `note_asset_id`       | Field     | Asset ID in note (must match public `asset_id`)                            |
+| `note_blinding`       | Field     | Random blinding factor                                                     |
+| `spending_key`        | Field     | Secret key — derives `ownerPk` via `BabyPbk` and computes nullifier        |
+| `change_value`        | Field     | Amount returned to the pool; `0` for total unshield                        |
+| `change_blinding`     | Field     | Blinding factor for the change note (unused when `change_value == 0`)      |
+| `change_owner_pubkey` | Field     | BabyJubJub `Ax` of the change note owner (unused when `change_value == 0`) |
+| `path_elements[20]`   | Field[20] | Sibling hashes for Merkle proof                                            |
+| `path_indices[20]`    | u8[20]    | Path directions (`0`=left, `1`=right)                                      |
 
 ## Constraints
 
@@ -149,33 +159,37 @@ note_asset_id === asset_id;
 ## Circuit Parameters
 
 - **Tree Depth**: 20 levels (supports up to 2^20 = 1,048,576 notes)
-- **Constraints**: 16,033
-- **Public Inputs**: 6 (merkle_root, nullifier, amount, recipient, asset_id, fee)
-- **Private Inputs**: 6 signals (+ 40 for Merkle proof path)
+- **Constraints**: 16,903
+- **Public Inputs**: 7 (`merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, `fee`, `change_commitment`)
+- **Private Inputs**: 9 signals (+ 40 for Merkle proof path)
 - **Proving Time**: ~750ms (local machine)
 - **Verification Time**: ~15ms
 
 ## Usage Examples
 
-### Basic Unshield (Withdrawal)
+### Total Unshield (Full Withdrawal)
 
-Alice withdraws 100 tokens from her private note to her public address:
+Alice withdraws the full value of a 100-token note to her public address:
 
 ```typescript
 const input = {
-    // Public - Visible on-chain
+    // Public — visible on-chain
     merkle_root: currentRoot,
     nullifier: computedNullifier,
     amount: 99n, // net withdrawal (note_value - fee)
     recipient: alicePublicAddress,
-    asset_id: 0n, // Native token
-    fee: 1n, // Fee paid to block author
+    asset_id: 0n, // native token
+    fee: 1n,
+    change_commitment: 0n, // total unshield — no change note
 
-    // Private - Only Alice knows
-    note_value: 100n, // amount + fee
+    // Private — only Alice knows
+    note_value: 100n, // amount + fee + change_value = 99 + 1 + 0
     note_asset_id: 0n,
     note_blinding: randomBlinding,
-    spending_key: aliceSpendingKey, // ownerPk derived inside circuit via BabyPbk(spending_key).Ax
+    spending_key: aliceSpendingKey,
+    change_value: 0n,
+    change_blinding: 0n, // unused when change_value == 0
+    change_owner_pubkey: 0n, // unused when change_value == 0
 
     // Merkle proof
     path_elements: merkleProof.pathElements,
@@ -183,19 +197,41 @@ const input = {
 };
 ```
 
-### Partial Unshield
+### Partial Unshield (With Change Note)
 
-Alice has a 100 token note but only wants to withdraw 60 (not supported directly):
-
-**Note**: This circuit unshields the entire note. For partial withdrawal, use the Transfer circuit to split the note first:
+Alice withdraws 60 tokens from a 100-token note and sends the remaining 39 (after 1 fee) back into the pool as a new private note:
 
 ```typescript
-// Step 1: Transfer to split note
-Transfer: 100 → [60 (new note), 40 (change)]
+const changeValue = 39n;
+const changeOwner = aliceOwnerAx; // self-change; can be any BabyJubJub Ax
+const changeBlinding = randomBlinding2;
+const changeCommitment = poseidon([changeValue, assetId, changeOwner, changeBlinding]);
 
-// Step 2: Unshield the 60 note
-Unshield: 60 → public address
+const input = {
+    // Public — visible on-chain
+    merkle_root: currentRoot,
+    nullifier: computedNullifier,
+    amount: 60n,
+    recipient: alicePublicAddress,
+    asset_id: 0n,
+    fee: 1n,
+    change_commitment: changeCommitment, // non-zero: pallet inserts this leaf
+
+    // Private
+    note_value: 100n, // 60 + 1 + 39 = 100
+    note_asset_id: 0n,
+    note_blinding: randomBlinding,
+    spending_key: aliceSpendingKey,
+    change_value: 39n,
+    change_blinding: changeBlinding,
+    change_owner_pubkey: changeOwner,
+
+    path_elements: merkleProof.pathElements,
+    path_indices: merkleProof.pathIndices,
+};
 ```
+
+The pallet sees `change_commitment != 0` and inserts it into the Merkle tree. Alice can later spend this note with the standard `unshield` or `private_transfer` circuit.
 
 ### Multi-Asset Unshield
 
