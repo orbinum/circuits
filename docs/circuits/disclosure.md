@@ -4,143 +4,158 @@
 
 ## Purpose
 
-The Selective Disclosure circuit enables users to prove ownership of a note and selectively reveal specific properties (value, asset ID, or owner) while keeping unrevealed properties cryptographically hidden. This is useful for compliance, auditing, and selective transparency without compromising privacy.
+The Selective Disclosure circuit lets a note owner prove ownership and **selectively reveal** specific fields (value, asset ID, or owner) to a designated auditor — without leaking anything to third parties. The revealed data is **encrypted on-circuit** using ECDH over Baby Jubjub + Poseidon, so only the auditor can decrypt.
 
 ## Circuit Statement
 
-> "I know a note that generates this commitment, and I selectively reveal certain fields according to the disclosure mask"
+> "I know a note that generates this commitment. I encrypt the chosen fields with the auditor's Baby Jubjub public key using ephemeral scalar r, and produce a verifiable ciphertext."
 
 ## Security Properties
 
-- **Soundness**: Cannot forge a proof without knowing the actual note data
-- **Privacy**: Unrevealed fields remain cryptographically hidden
-- **Binding**: Proof is bound to a specific commitment
-- **Viewing Key Protection**: Only the note owner (with viewing key) can generate disclosure proofs
+- **Soundness**: Cannot forge a proof without knowing the actual note data.
+- **Privacy**: Only the designated auditor can decrypt the revealed fields (ECDH key agreement).
+- **Binding**: Proof is bound to a specific commitment on-chain.
+- **Auditor-specific**: Different auditor → different public key → different ephemeral shared secret → auditors cannot decrypt each other's disclosures.
+- **Non-malleable r**: `r` is private; changing it produces a different ciphertext — verifier cannot reuse a proof for a different auditor.
 
-## Public Inputs (Visible On-Chain)
+## Public Inputs
 
-| Input                 | Type  | Description                               |
-| --------------------- | ----- | ----------------------------------------- |
-| `commitment`          | Field | Note commitment (already exists on-chain) |
-| `revealed_value`      | u64   | Revealed amount (0 if hidden)             |
-| `revealed_asset_id`   | u32   | Revealed asset ID (0 if hidden)           |
-| `revealed_owner_hash` | Field | Hash of owner public key (0 if hidden)    |
+| Signal         | Type  | Description                                   |
+| -------------- | ----- | --------------------------------------------- |
+| `commitment`   | Field | Note commitment (must exist on-chain)         |
+| `auditor_pk_x` | Field | Auditor Baby Jubjub public key — x coordinate |
+| `auditor_pk_y` | Field | Auditor Baby Jubjub public key — y coordinate |
 
-## Private Inputs (Known Only to Prover)
+## Public Outputs (Ciphertext)
 
-| Input               | Type  | Description                                     |
-| ------------------- | ----- | ----------------------------------------------- |
-| `value`             | Field | Actual note value                               |
-| `asset_id`          | Field | Actual asset ID                                 |
-| `owner_pubkey`      | Field | Owner's public key                              |
-| `blinding`          | Field | Blinding factor for commitment                  |
-| `disclose_value`    | bool  | Disclosure mask: reveal value? (1=yes, 0=no)    |
-| `disclose_asset_id` | bool  | Disclosure mask: reveal asset ID? (1=yes, 0=no) |
-| `disclose_owner`    | bool  | Disclosure mask: reveal owner? (1=yes, 0=no)    |
+| Signal           | Type  | Description                                         |
+| ---------------- | ----- | --------------------------------------------------- |
+| `epk_x`          | Field | Ephemeral public key — x coordinate (`r·G`)         |
+| `epk_y`          | Field | Ephemeral public key — y coordinate (`r·G`)         |
+| `enc_value`      | Field | Encrypted value (`value_or_0 + k₀ mod p`)           |
+| `enc_asset_id`   | Field | Encrypted asset ID (`asset_id_or_0 + k₁ mod p`)     |
+| `enc_owner_hash` | Field | Encrypted owner hash (`owner_hash_or_0 + k₂ mod p`) |
+
+## Private Inputs
+
+| Signal              | Type  | Description                                       |
+| ------------------- | ----- | ------------------------------------------------- |
+| `value`             | Field | Actual note value                                 |
+| `asset_id`          | Field | Actual asset ID                                   |
+| `owner_pubkey`      | Field | Owner's public key                                |
+| `blinding`          | Field | Blinding factor for commitment                    |
+| `disclose_value`    | bool  | 1 = encrypt value, 0 = encrypt 0                  |
+| `disclose_asset_id` | bool  | 1 = encrypt asset_id, 0 = encrypt 0               |
+| `disclose_owner`    | bool  | 1 = encrypt Poseidon(owner_pubkey), 0 = encrypt 0 |
+| `r`                 | Field | Ephemeral scalar (random, BN254 scalar field)     |
 
 ## Constraints
 
 ### 1. Commitment Verification
 
-Proves that the private note data generates the public commitment.
-
 ```
-commitment = Poseidon(value, asset_id, owner_pubkey, blinding)
+commitment == Poseidon(value, asset_id, owner_pubkey, blinding)
 ```
 
-**Circuit Logic**:
+### 2. Boolean Disclosure Masks
 
 ```circom
-component note_commitment = NoteCommitment();
-note_commitment.value <== value;
-note_commitment.asset_id <== asset_id;
-note_commitment.owner_pubkey <== owner_pubkey;
-note_commitment.blinding <== blinding;
-
-note_commitment.commitment === commitment;
-```
-
-### 2. Boolean Constraints
-
-Ensures disclosure masks are binary (0 or 1).
-
-```circom
-disclose_value * (disclose_value - 1) === 0;
+disclose_value    * (disclose_value    - 1) === 0;
 disclose_asset_id * (disclose_asset_id - 1) === 0;
-disclose_owner * (disclose_owner - 1) === 0;
+disclose_owner    * (disclose_owner    - 1) === 0;
 ```
 
-### 3. Selective Reveal - Value
-
-Conditionally reveals or hides the note value.
+### 3. Selective Field Selection
 
 ```
-revealed_value = disclose_value ? value : 0
+plain_value      = disclose_value    ? value                  : 0
+plain_asset_id   = disclose_asset_id ? asset_id               : 0
+plain_owner_hash = disclose_owner    ? Poseidon(owner_pubkey) : 0
 ```
 
-**Circuit Logic**:
-
-```circom
-component value_selector = Selector();
-value_selector.condition <== disclose_value;
-value_selector.true_value <== value;
-value_selector.false_value <== 0;
-
-revealed_value === value_selector.out;
-```
-
-### 4. Selective Reveal - Asset ID
-
-Conditionally reveals or hides the asset ID.
+### 4. ECDH Key Agreement (Baby Jubjub)
 
 ```
-revealed_asset_id = disclose_asset_id ? asset_id : 0
+epk    = r · G     (EscalarMulFix, base point G = Base8)
+shared = r · pk_A  (EscalarMulAny, auditor public key)
 ```
 
-### 5. Selective Reveal - Owner
-
-Conditionally reveals or hides the owner's identity (as a hash).
+**Base point G (Base8)**:
 
 ```
-revealed_owner_hash = disclose_owner ? Poseidon(owner_pubkey) : 0
+Gx = 5299619240641551281634865583518297030282874472190772894086521144482721001553
+Gy = 16950150798460657717958625567821834550301663161624707787222815936182638968203
 ```
 
-**Note**: The circuit reveals the **hash** of the owner's public key, not the key itself, providing an additional layer of privacy.
+### 5. Poseidon Keystream
 
-## Helper Components
+```
+k₀ = Poseidon(shared.x, shared.y, 0)
+k₁ = Poseidon(shared.x, shared.y, 1)
+k₂ = Poseidon(shared.x, shared.y, 2)
+```
 
-### Selector Template
+### 6. Field Encryption (mod p addition)
 
-Implements conditional selection:
-
-```circom
-template Selector() {
-    signal input condition;      // 0 or 1
-    signal input true_value;
-    signal input false_value;
-    signal output out;
-
-    condition * (condition - 1) === 0;  // Boolean constraint
-
-    signal inv_condition;
-    inv_condition <== 1 - condition;
-
-    signal term1;
-    signal term2;
-    term1 <== condition * true_value;
-    term2 <== inv_condition * false_value;
-
-    out <== term1 + term2;
-}
+```
+enc_value      = plain_value      + k₀  (mod BN254 prime p)
+enc_asset_id   = plain_asset_id   + k₁  (mod BN254 prime p)
+enc_owner_hash = plain_owner_hash + k₂  (mod BN254 prime p)
 ```
 
 ## Circuit Parameters
 
-- **Constraints**: ~1,584
-- **Public Inputs**: 4
-- **Private Inputs**: 7 (4 note fields + 3 disclosure masks)
-- **Proving Time**: ~150ms (local machine)
-- **Verification Time**: ~5ms
+- **Constraints**: ~9,411 (7,557 non-linear + 1,854 linear)
+- **Public Inputs**: 3
+- **Public Outputs**: 5
+- **Private Inputs**: 8
+- **Proving Time**: ~1–2 s (local machine)
+- **Verification Time**: ~5 ms
+
+## Decryption (Off-Chain)
+
+The auditor decrypts using their spending key `sk_A`:
+
+```typescript
+import { buildBabyjub, buildPoseidon } from "circomlibjs";
+
+const BN254_P = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+
+async function decrypt(
+    sk_A: bigint,
+    epk_x: bigint,
+    epk_y: bigint,
+    enc_value: bigint,
+    enc_asset_id: bigint,
+    enc_owner_hash: bigint
+) {
+    const babyJub = await buildBabyjub();
+    const poseidon = await buildPoseidon();
+    const F = poseidon.F;
+
+    // Shared secret: sk_A · epk
+    const epkPoint = [babyJub.F.e(epk_x.toString()), babyJub.F.e(epk_y.toString())];
+    const shared = babyJub.mulPointEscalar(epkPoint, sk_A);
+    const sx = BigInt(babyJub.F.toString(shared[0]));
+    const sy = BigInt(babyJub.F.toString(shared[1]));
+
+    // Keystream
+    const k0 = BigInt(F.toString(poseidon([sx, sy, 0n])));
+    const k1 = BigInt(F.toString(poseidon([sx, sy, 1n])));
+    const k2 = BigInt(F.toString(poseidon([sx, sy, 2n])));
+
+    // Decrypt (field subtraction mod p)
+    const sub = (enc: bigint, k: bigint) => (enc - k + BN254_P) % BN254_P;
+
+    return {
+        value: sub(enc_value, k0), // 0 if field not disclosed
+        asset_id: sub(enc_asset_id, k1), // 0 if field not disclosed
+        owner_hash: sub(enc_owner_hash, k2), // 0 if field not disclosed
+    };
+}
+```
+
+**Note**: A decrypted result of `0` means the field was not disclosed. The auditor cannot distinguish "value is 0" from "value was hidden" without a separate proof — this is intentional.
 
 ## Usage Examples
 
@@ -148,158 +163,97 @@ template Selector() {
 
 ```typescript
 const input = {
-    // Public
+    // Public inputs
     commitment: noteCommitment,
-    revealed_value: note.value,
-    revealed_asset_id: 0n,
-    revealed_owner_hash: 0n,
+    auditor_pk_x: auditorKey.x.toString(),
+    auditor_pk_y: auditorKey.y.toString(),
 
-    // Private
-    value: note.value,
-    asset_id: note.asset_id,
-    owner_pubkey: note.ownerPubkey,
-    blinding: note.blinding,
-    disclose_value: 1,
-    disclose_asset_id: 0,
-    disclose_owner: 0,
+    // Private inputs
+    value: note.value.toString(),
+    asset_id: note.assetId.toString(),
+    owner_pubkey: note.ownerPubkey.toString(),
+    blinding: note.blinding.toString(),
+    disclose_value: "1",
+    disclose_asset_id: "0",
+    disclose_owner: "0",
+    r: ephemeralScalar.toString(),
 };
+// Outputs: epk_x, epk_y, enc_value (real), enc_asset_id (zero-masked), enc_owner_hash (zero-masked)
 ```
 
 ### Reveal All Fields
 
 ```typescript
-const ownerHash = poseidon([note.ownerPubkey]);
-
 const input = {
-    // Public
     commitment: noteCommitment,
-    revealed_value: note.value,
-    revealed_asset_id: note.asset_id,
-    revealed_owner_hash: ownerHash,
-
-    // Private
-    value: note.value,
-    asset_id: note.asset_id,
-    owner_pubkey: note.ownerPubkey,
-    blinding: note.blinding,
-    disclose_value: 1,
-    disclose_asset_id: 1,
-    disclose_owner: 1,
+    auditor_pk_x: auditorKey.x.toString(),
+    auditor_pk_y: auditorKey.y.toString(),
+    value: note.value.toString(),
+    asset_id: note.assetId.toString(),
+    owner_pubkey: note.ownerPubkey.toString(),
+    blinding: note.blinding.toString(),
+    disclose_value: "1",
+    disclose_asset_id: "1",
+    disclose_owner: "1",
+    r: ephemeralScalar.toString(),
 };
 ```
 
-### Hide All Fields (Zero-Knowledge Proof of Ownership)
+### Zero-Knowledge Proof of Ownership (Nothing Revealed)
 
 ```typescript
 const input = {
-    // Public
     commitment: noteCommitment,
-    revealed_value: 0n,
-    revealed_asset_id: 0n,
-    revealed_owner_hash: 0n,
-
-    // Private
-    value: note.value,
-    asset_id: note.asset_id,
-    owner_pubkey: note.ownerPubkey,
-    blinding: note.blinding,
-    disclose_value: 0,
-    disclose_asset_id: 0,
-    disclose_owner: 0,
+    auditor_pk_x: auditorKey.x.toString(),
+    auditor_pk_y: auditorKey.y.toString(),
+    value: note.value.toString(),
+    asset_id: note.assetId.toString(),
+    owner_pubkey: note.ownerPubkey.toString(),
+    blinding: note.blinding.toString(),
+    disclose_value: "0",
+    disclose_asset_id: "0",
+    disclose_owner: "0",
+    r: ephemeralScalar.toString(),
 };
+// All enc_* outputs contain only keystream noise — auditor learns nothing.
 ```
 
 ## Use Cases
 
-1. **Compliance Auditing**: Reveal note value to auditors without exposing asset type or owner
-2. **Balance Verification**: Prove minimum balance without revealing exact amount
-3. **Ownership Proof**: Prove note ownership without revealing any other information
-4. **Selective Tax Reporting**: Reveal value and asset for tax purposes while maintaining privacy
-5. **Transparent Donations**: Reveal value and owner for donation transparency
+1. **Compliance Auditing**: Reveal value and asset to a regulator without exposing the owner.
+2. **Selective Tax Reporting**: Reveal value and asset for a specific jurisdiction's auditor.
+3. **Ownership Proof**: Prove note ownership to a counterparty without revealing amount.
+4. **Private Escrow Dispute**: Reveal all fields to an arbitrator under ECDH confidentiality.
+5. **Multi-Auditor**: Generate separate proofs with different `r` and `auditor_pk` for each auditor.
 
 ## Security Considerations
 
-### Information Leakage
+### Ephemeral Scalar r
 
-When revealing fields, consider:
+- `r` MUST be sampled uniformly at random from the BN254 scalar field for each proof.
+- Reusing `r` with the same `auditor_pk` leaks the same `epk` and shared secret — breaking ciphertext unlinkability.
 
-- **Value revealing**: May enable statistical analysis across multiple disclosures
-- **Owner revealing**: Only reveals the hash, but repeated disclosures can be linked
-- **Asset ID revealing**: May expose investment strategies
+### Auditor Public Key Validation
 
-### Commitment Binding
+- The circuit does NOT verify that `auditor_pk` is a valid Baby Jubjub point (this would cost ~2,500 extra constraints). The prover is responsible for using a valid curve point.
+- An invalid point causes `EscalarMulAny` to produce an incorrect result, invalidating the ciphertext but not breaking soundness.
 
-The proof is bound to a specific commitment. Ensure the commitment exists on-chain before accepting the disclosure proof.
+### Owner Hash vs Raw Pubkey
 
-## Implementation Notes
+- When `disclose_owner=1`, the circuit encrypts `Poseidon(owner_pubkey)`, not the raw pubkey. This prevents the auditor from recovering the pubkey even with a weak shared secret.
 
 ### Commitment Validation
 
-The runtime should verify that:
+The runtime SHOULD verify before accepting a disclosure proof:
 
-1. The commitment exists in the commitment tree
-2. The commitment has not been nullified (note hasn't been spent)
-3. The revealed values match expected ranges (if applicable)
+1. The commitment exists in the on-chain Merkle tree.
+2. The commitment has not been nullified (note not spent).
 
-### Multi-Asset Support
+## Implementation Notes
 
-The circuit works with any asset ID. The runtime is responsible for validating:
+Circom includes used:
 
-- Asset ID exists in the registry
-- User has authorization to disclose for that asset (if required)
-
-## Performance Optimization
-
-### Constraint Count Analysis
-
-| Section                 | Constraints |
-| ----------------------- | ----------- |
-| Commitment Verification | ~200        |
-| Boolean Constraints     | 3           |
-| Value Selector          | ~6          |
-| Asset ID Selector       | ~6          |
-| Owner Hash + Selector   | ~200        |
-| **Total**               | **~1,584**  |
-
-### Trusted Setup
-
-- **Powers of Tau**: Requires at least 16 (2^16 = 65,536 constraints)
-- **Phase 2**: Circuit-specific trusted setup
-- **Ceremony**: Can use publicly available Powers of Tau ceremonies
-
-## Testing
-
-Run disclosure circuit tests:
-
-```bash
-pnpm test -- test/disclosure.test.ts
-```
-
-Run end-to-end disclosure test:
-
-```bash
-pnpm run e2e:disclosure
-```
-
-## Build Artifacts
-
-Generate disclosure circuit artifacts:
-
-```bash
-pnpm run full-build:disclosure
-```
-
-This produces:
-
-- `build/disclosure.r1cs`
-- `build/disclosure_js/` (witness calculator)
-- `keys/disclosure_pk.zkey` (proving key)
-- `build/verification_key_disclosure.json`
-- `build/disclosure_pk.ark` (Rust proving key, if ark-circom installed)
-
-## Related Documentation
-
-- [Note Circuit](note.md) - NoteCommitment component used internally
-- [Poseidon Wrapper](poseidon-wrapper.md) - Hash functions used
-- [API: Generate Disclosure Input](../api/generate-disclosure-input.md)
-- [API: Generate Disclosure Proof](../api/generate-disclosure-proof.md)
+- `circomlib/circuits/poseidon.circom` — Poseidon hash (2-input and 4-input)
+- `circomlib/circuits/bitify.circom` — `Num2Bits(253)` for scalar `r`
+- `circomlib/circuits/escalarmulfix.circom` — `epk = r·G`
+- `circomlib/circuits/escalarmulany.circom` — `shared = r·pk_A`
