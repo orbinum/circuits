@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0.0",
   "package_name": "orbinum-circuits",
-  "package_version": "0.6.0",
-  "generated_at": "2026-04-22T23:41:00.226Z",
+  "package_version": "0.8.0",
+  "generated_at": "2026-05-11T17:10:31.620Z",
   "circuits": {
     "disclosure": {
       "active_version": 1,
@@ -12,31 +12,31 @@
       "versions": {
         "1": {
           "version": 1,
-          "vk_hash": "0xd5664bdd1e38ec818aa2174276162e3aabed163b36368099bda78f401588be03",
+          "vk_hash": "0x59f5134a08498917010ac866216c82b79da07a80098b6826c535d609c4a899b4",
           "artifacts": {
             "wasm": {
               "file": "disclosure.wasm",
               "localPath": "build/disclosure_js/disclosure.wasm",
-              "bytes": 2220560,
-              "sha256": "db42d0d4941c7d7265717fe44e43048c0800f962a2ea7251353ea2f645aa9f31"
+              "bytes": 2798462,
+              "sha256": "0595542a3e19d6dc16b7e2af529fc8ab324e9a2c79989dd931d04622246a9dea"
             },
             "zkey": {
               "file": "disclosure_pk.zkey",
               "localPath": "keys/disclosure_pk.zkey",
-              "bytes": 554204,
-              "sha256": "aca2608b34a29cff8a50626ba573bf47695a16bbfb52892cabff93de44e3af69"
+              "bytes": 5017200,
+              "sha256": "ab4710bdb6b17ca57539c5f071e0c0f20ac4afc73acd4dd3816edf79a7700846"
             },
             "vk_json": {
               "file": "verification_key_disclosure.json",
               "localPath": "build/verification_key_disclosure.json",
-              "bytes": 3470,
-              "sha256": "d5664bdd1e38ec818aa2174276162e3aabed163b36368099bda78f401588be03"
+              "bytes": 4207,
+              "sha256": "59f5134a08498917010ac866216c82b79da07a80098b6826c535d609c4a899b4"
             },
             "r1cs": {
               "file": "disclosure.r1cs",
               "localPath": "build/disclosure.r1cs",
-              "bytes": 159840,
-              "sha256": "c8dc1ba76e133ebd39db020ce52b1d8587103209d83dbf02d7eb7545557042f0"
+              "bytes": 1740612,
+              "sha256": "5a61fdb41868c5c9d193683f4ccde4e18ce71dfc7363904a6c2e5864a3bbf0f0"
             }
           }
         }
@@ -50,7 +50,7 @@
       "versions": {
         "1": {
           "version": 1,
-          "vk_hash": "0xaa5039fd04f715a46aa1cefe2bca2a5d005b2b799df0324e84cc8fcb8e6ed153",
+          "vk_hash": "0x16b3ee00be0ed829f4a64356f8643b620b42cecdb1437705478b935311a15a52",
           "artifacts": {
             "wasm": {
               "file": "transfer.wasm",
@@ -62,13 +62,13 @@
               "file": "transfer_pk.zkey",
               "localPath": "keys/transfer_pk.zkey",
               "bytes": 17247624,
-              "sha256": "9b42f274dc24e4194b3399aa6a00db1852abfc2dc7234a8f52c8bf6c71c33d0b"
+              "sha256": "d32e1df8297500adabc1c461a58ac53061655a8cf27242ea2ec86b6452d9f52b"
             },
             "vk_json": {
               "file": "verification_key_transfer.json",
               "localPath": "build/verification_key_transfer.json",
-              "bytes": 4023,
-              "sha256": "aa5039fd04f715a46aa1cefe2bca2a5d005b2b799df0324e84cc8fcb8e6ed153"
+              "bytes": 4022,
+              "sha256": "16b3ee00be0ed829f4a64356f8643b620b42cecdb1437705478b935311a15a52"
             },
             "r1cs": {
               "file": "transfer.r1cs",
@@ -88,69 +88,31 @@
       "versions": {
         "1": {
           "version": 1,
-          "vk_hash": "0xf261cd44605db8a5742c4c3cf6624420723f40f170433451dfce03485a4785cd",
+          "vk_hash": "0xd1eed232a886b10dde8f04fcef01f8e6ad73cb34c5a5429dbd5a7ae1b5304c7d",
           "artifacts": {
             "wasm": {
               "file": "unshield.wasm",
               "localPath": "build/unshield_js/unshield.wasm",
-              "bytes": 2498079,
-              "sha256": "6f89b94eb26ac71d3a14e97d733744e9907c66ea9b7194e7f72d5b1cf8a3bca2"
+              "bytes": 2503051,
+              "sha256": "d861afa2ec6c8a10e837b2b4c847c576dd02be93b22b5273501b8d5d97a96b78"
             },
             "zkey": {
               "file": "unshield_pk.zkey",
               "localPath": "keys/unshield_pk.zkey",
-              "bytes": 7282076,
-              "sha256": "d2b8c22a1d57a746751b574aecabbfea2d47bf171876bc98c2701c14cacd8076"
+              "bytes": 8653108,
+              "sha256": "fb6f27f1eb880fafb51dca7dadb9b3e4f76df3bd685cf3d0716752dc6f13cd6c"
             },
             "vk_json": {
               "file": "verification_key_unshield.json",
               "localPath": "build/verification_key_unshield.json",
-              "bytes": 3840,
-              "sha256": "f261cd44605db8a5742c4c3cf6624420723f40f170433451dfce03485a4785cd"
+              "bytes": 4029,
+              "sha256": "d1eed232a886b10dde8f04fcef01f8e6ad73cb34c5a5429dbd5a7ae1b5304c7d"
             },
             "r1cs": {
               "file": "unshield.r1cs",
               "localPath": "build/unshield.r1cs",
-              "bytes": 2485284,
-              "sha256": "834062371dd82cbd42ba1a73779ad73bbe089b08d6d0c77377c9f95403b9d44b"
-            }
-          }
-        }
-      }
-    },
-    "private_link": {
-      "active_version": 1,
-      "supported_versions": [
-        1
-      ],
-      "versions": {
-        "1": {
-          "version": 1,
-          "vk_hash": "0x797e74e052f4940be10585e17ad29799951f0ec3243a71e8edd4933f0bc8410b",
-          "artifacts": {
-            "wasm": {
-              "file": "private_link.wasm",
-              "localPath": "build/private_link_js/private_link.wasm",
-              "bytes": 1750902,
-              "sha256": "3190bb18260b294c2dccad6f509867a2fdd756707a3c1d10a483551e18796e08"
-            },
-            "zkey": {
-              "file": "private_link_pk.zkey",
-              "localPath": "keys/private_link_pk.zkey",
-              "bytes": 508588,
-              "sha256": "e423a9a399c0f5a9d4098c22b56600e1e94fe51ac1ea6a7d9478b70b596572c6"
-            },
-            "vk_json": {
-              "file": "verification_key_private_link.json",
-              "localPath": "build/verification_key_private_link.json",
-              "bytes": 3108,
-              "sha256": "797e74e052f4940be10585e17ad29799951f0ec3243a71e8edd4933f0bc8410b"
-            },
-            "r1cs": {
-              "file": "private_link.r1cs",
-              "localPath": "build/private_link.r1cs",
-              "bytes": 138248,
-              "sha256": "62b38b485b501d0423580c5f217f5cc088d46ead3956097cd893358df7b3fa8c"
+              "bytes": 2611520,
+              "sha256": "738ed6a634af4ec8c199fab9d568fae6b9c90b06ec28d373f0dd9a2d5d6c0de5"
             }
           }
         }
