@@ -42,7 +42,6 @@ This automatically:
 - Downloads Powers of Tau (72MB, one-time)
 - Generates cryptographic keys (proving + verifying keys)
 - Converts to compatible formats
-- Generates `manifest.json` with SHA-256 hashes for artifacts (when using `pnpm run build-all:manifest`)
 
 ### Generate Artifact Manifest (NPM/CDN sync)
 
@@ -181,6 +180,7 @@ pnpm test
 - `value_proof.test.ts` - Relay fee value proof (16 tests)
 - `transfer.test.ts` - Private transfer logic
 - `unshield.test.ts` - Multi-asset support
+- `private_link.test.ts` - Cross-chain identity link
 - `merkle_tree.test.ts` - Merkle proof verification
 - `note.test.ts` - Note commitment schemes
 - `poseidon_*.test.ts` - Hash function compatibility
@@ -189,60 +189,6 @@ pnpm test
 
 ```bash
 pnpm test -- --grep "value_proof"
-```
-
-## Benchmarks
-
-### Prerequisites
-
-Generate test inputs first (transfer circuit):
-
-```bash
-pnpm run gen-input:transfer
-```
-
-### Run Benchmarks
-
-```bash
-# Transfer circuit
-pnpm run bench:transfer
-
-# Unshield circuit
-pnpm run bench:unshield
-
-# All circuits
-pnpm run bench
-```
-
-**Metrics measured:**
-
-- Witness generation time
-- Proof generation time
-- Proof verification time
-- Memory usage
-- Throughput (ops/sec)
-
-**Results saved to:** `build/benchmark_results_*.json`
-
-### Example Output
-
-```
-📊 Benchmarking Proof Generation (10 iterations)...
-  Proof Generation:
-    Average:    101.29 ms
-    Min:        97.62 ms
-    Max:        109.43 ms
-    Throughput: 9.87 ops/sec
-```
-
-## End-to-End Workflows
-
-Complete automated workflows from compilation to proof generation.
-
-### Transfer Circuit
-
-```bash
-pnpm run e2e:transfer
 ```
 
 ## Development Workflow
@@ -277,7 +223,7 @@ pnpm run full-build:value-proof
 
 **Why is this needed?**
 
-The `fp-encrypted-memo` primitive can use WASM to calculate the complete circuit witness (~740 wires) without reimplementing all Circom logic in Rust. This ensures:
+The `primitives/encrypted-memo` primitive can use WASM to calculate the complete circuit witness (~740 wires) without reimplementing all Circom logic in Rust. This ensures:
 
 - ✅ **Accuracy**: Executes the exact circuit logic
 - ✅ **Maintainability**: Updates automatically when circuit is recompiled
@@ -304,20 +250,6 @@ let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 ```
 
 **Note:** WASM is also generated automatically with `pnpm run build-all`.
-
-### Generate Test Inputs
-
-```bash
-# Transfer circuit
-pnpm run gen-input:transfer
-```
-
-### Generate Proofs
-
-```bash
-# Transfer proofs
-pnpm run prove:transfer
-```
 
 ## Circuit Specifications
 
@@ -441,7 +373,6 @@ circuits/
 │   ├── *_pk.zkey              # snarkjs proving keys
 │   └── *_pk.ark               # arkworks proving keys (serialized)
 ├── test/                      # Test suites (135 tests)
-├── benches/                   # Performance benchmarks
 ├── scripts/                   # Build scripts
 │   ├── build/                 # Compilation scripts
 │   └── utils/                 # Manifest and lint utilities
