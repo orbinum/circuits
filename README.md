@@ -38,7 +38,7 @@ pnpm run build-all
 This automatically:
 
 - Installs dependencies
-- Compiles circuits (disclosure.circom → R1CS + WASM)
+- Compiles circuits (value_proof.circom → R1CS + WASM)
 - Downloads Powers of Tau (72MB, one-time)
 - Generates cryptographic keys (proving + verifying keys)
 - Converts to compatible formats
@@ -59,9 +59,9 @@ This creates `manifest.json` at repo root with:
 
 **Output:**
 
-- `build/disclosure_js/disclosure.wasm` (2.1MB) - Witness calculator
-- `keys/disclosure_pk.zkey` (689KB) - Proving key
-- `build/verification_key_disclosure.json` (3.4KB) - Verifying key
+- `build/value_proof_js/value_proof.wasm` (<1MB) - Witness calculator
+- `keys/value_proof_pk.zkey` (<1MB) - Proving key
+- `build/verification_key_value_proof.json` (3.4KB) - Verifying key
 
 ## Using with Rust/Substrate
 
@@ -89,7 +89,7 @@ use ark_serialize::CanonicalDeserialize;
 use std::fs::File;
 
 // Load .ark file (fast)
-let mut ark_file = File::open("keys/disclosure_pk.ark")?;
+let mut ark_file = File::open("keys/transfer_pk.ark")?;
 let proving_key = ProvingKey::<Bn254>::deserialize_compressed(&mut ark_file)?;
 
 // Generate proof
@@ -118,14 +118,14 @@ use ark_groth16::Groth16;
 use std::fs::File;
 
 // Read .zkey file directly
-let mut zkey_file = File::open("keys/disclosure_pk.zkey")?;
+let mut zkey_file = File::open("keys/transfer_pk.zkey")?;
 let (proving_key, matrices) = read_zkey(&mut zkey_file)?;
 
 // Configure circuit with WASM
 let cfg = CircomConfig::<Bn254>::new(
-    "build/disclosure_js/disclosure.wasm",
-    "build/disclosure.r1cs"
-)?;
+    "build/transfer_js/transfer.wasm",
+    "build/transfer.r1cs"
+)?;;
 
 // Build circuit with inputs
 let mut builder = CircomBuilder::new(cfg);
@@ -145,11 +145,11 @@ If you need to generate the `.ark` file yourself:
 ```bash
 # Using the Rust script
 cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
-  keys/disclosure_pk.zkey \
-  keys/disclosure_pk.ark
+  keys/value_proof_pk.zkey \
+  keys/value_proof_pk.ark
 
 # Or via pnpm
-pnpm run convert:disclosure
+pnpm run convert:value-proof
 ```
 
 ### Download Release Artifacts
@@ -158,14 +158,14 @@ Get pre-built circuits from [GitHub Releases](../../releases):
 
 ```bash
 # Download latest release
-wget https://github.com/orb-labs/circuits/releases/latest/download/disclosure-circuit-v*.tar.gz
+wget https://github.com/orb-labs/circuits/releases/latest/download/orbinum-circuits-v*.tar.gz
 
 # Extract files
-tar -xzf disclosure-circuit-v*.tar.gz
+tar -xzf orbinum-circuits-v*.tar.gz
 
 # Use in your Rust project
-cp keys/disclosure_pk.zkey /path/to/your/rust/project/
-cp build/disclosure_js/disclosure.wasm /path/to/your/rust/project/
+cp value_proof_pk.zkey /path/to/your/rust/project/
+cp value_proof.wasm /path/to/your/rust/project/
 ```
 
 ## Testing
@@ -178,46 +178,37 @@ pnpm test
 
 **Test Suites:**
 
-- `disclosure.test.ts` - Selective disclosure circuit
+- `value_proof.test.ts` - Relay fee value proof (16 tests)
 - `transfer.test.ts` - Private transfer logic
 - `unshield.test.ts` - Multi-asset support
 - `merkle_tree.test.ts` - Merkle proof verification
 - `note.test.ts` - Note commitment schemes
 - `poseidon_*.test.ts` - Hash function compatibility
 
-**Expected:** 135 tests passing in ~45 seconds
-
 ### Run Specific Test
 
 ```bash
-pnpm test -- --grep "disclosure"
+pnpm test -- --grep "value_proof"
 ```
 
 ## Benchmarks
 
 ### Prerequisites
 
-Generate test inputs first:
+Generate test inputs first (transfer circuit):
 
 ```bash
-pnpm run gen-input:disclosure
+pnpm run gen-input:transfer
 ```
-
-This creates 4 test scenarios:
-
-- `reveal_nothing` - Full privacy
-- `reveal_value_only` - Amount visible
-- `reveal_value_and_asset` - Amount + asset type visible
-- `reveal_all` - Complete disclosure
 
 ### Run Benchmarks
 
 ```bash
-# Disclosure circuit
-pnpm run bench:disclosure
-
-# Transfer circuit (coming soon)
+# Transfer circuit
 pnpm run bench:transfer
+
+# Unshield circuit
+pnpm run bench:unshield
 
 # All circuits
 pnpm run bench
@@ -248,26 +239,6 @@ pnpm run bench
 
 Complete automated workflows from compilation to proof generation.
 
-### Disclosure Circuit
-
-```bash
-pnpm run e2e:disclosure
-```
-
-**What it does:**
-
-1. Compiles circuit
-2. Sets up keys
-3. Generates test inputs (4 scenarios)
-4. Creates proofs for all scenarios
-5. Verifies all proofs
-
-**Generated artifacts:**
-
-- 4 input files: `build/disclosure_input_*.json`
-- 4 proof files: `build/proof_disclosure_*.json`
-- 4 public signals: `build/public_disclosure_*.json`
-
 ### Transfer Circuit
 
 ```bash
@@ -290,16 +261,16 @@ pnpm run build-all
 
 ```bash
 # Step 1: Compile circuit
-pnpm run compile:disclosure
+pnpm run compile:value-proof
 
 # Step 2: Generate keys (requires compilation)
-pnpm run setup:disclosure
+pnpm run setup:value-proof
 
 # Step 3: Convert to compatible format (optional)
-pnpm run convert:discord
+pnpm run convert:value-proof
 
 # Or run all steps together
-pnpm run full-build:disclosure
+pnpm run full-build:value-proof
 ```
 
 ### Generate WASM for Rust (Witness Calculator)
@@ -316,19 +287,19 @@ The `fp-encrypted-memo` primitive can use WASM to calculate the complete circuit
 **From circuits/circuits/ directory:**
 
 ```bash
-# Compile disclosure.circom to WASM
-circom disclosure.circom --wasm --output ../build/
+# Compile value_proof.circom to WASM
+circom value_proof.circom --wasm --output ../build/
 ```
 
 **Generated file:**
 
-- `build/disclosure_js/disclosure.wasm` (~2.1MB)
+- `build/value_proof_js/value_proof.wasm` (<1MB)
 
 **Usage in Rust:**
 
 ```rust
 // With feature flag: wasm-witness
-let wasm_bytes = std::fs::read("circuits/build/disclosure_js/disclosure.wasm")?;
+let wasm_bytes = std::fs::read("circuits/build/value_proof_js/value_proof.wasm")?;;
 let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 ```
 
@@ -337,9 +308,6 @@ let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 ### Generate Test Inputs
 
 ```bash
-# Disclosure circuit (4 scenarios)
-pnpm run gen-input:disclosure
-
 # Transfer circuit
 pnpm run gen-input:transfer
 ```
@@ -347,9 +315,6 @@ pnpm run gen-input:transfer
 ### Generate Proofs
 
 ```bash
-# Disclosure proofs
-pnpm run prove:disclosure
-
 # Transfer proofs
 pnpm run prove:transfer
 ```
@@ -401,27 +366,25 @@ pnpm run prove:transfer
 - Asset ID binding: `note_asset_id === asset_id`; change commitment pinned to same asset
 - `recipient` is a public signal (validated non-zero in the pallet)
 
-### Disclosure Circuit — `circuits/disclosure.circom`
+### Value Proof Circuit — `circuits/value_proof.circom`
 
-**Purpose:** Selective on-chain disclosure of note fields to an auditor, ECDH-encrypted on-circuit over Baby Jubjub
+**Purpose:** Proves a note commitment encodes exactly the declared relay fee amount before the runtime inserts it into the Merkle tree. Used by `pallet-shielded-pool::claim_shielded_fees`.
 
 **Statistics:**
 
-- Constraints: 9,411 (7,557 non-linear + 1,854 linear)
-- Private inputs: 8 (`value`, `asset_id`, `owner_pubkey`, `blinding`, `disclose_value`, `disclose_asset_id`, `disclose_owner`, `r`)
-- Public inputs: 3 (`commitment`, `auditor_pk_x`, `auditor_pk_y`)
-- Public outputs: 5 (`epk_x`, `epk_y`, `enc_value`, `enc_asset_id`, `enc_owner_hash`)
+- Constraints: ~300
+- Private inputs: 2 (`owner_pubkey`, `blinding`)
+- Public inputs: 3 (`commitment`, `value`, `asset_id`)
+- Public outputs: 1 (`owner_hash`)
+- CircuitId: `6` (`CircuitId::VALUE_PROOF`)
 
 **Features:**
 
 - Commitment preimage proof: `commitment === Poseidon(value, asset_id, owner_pubkey, blinding)`
-- Selective field encryption controlled by boolean masks (`disclose_*`); masked fields encrypt as `0`
-- ECDH key exchange on-circuit: `epk = r·G` (EscalarMulFix), `shared = r·pk_A` (EscalarMulAny)
-- Poseidon keystream: `k_i = Poseidon(shared.x, shared.y, i)` for each field (i = 0, 1, 2)
-- Ciphertext: `enc_field = masked_field + k_i` (field addition mod BN254 scalar field)
-- Owner disclosed as `Poseidon(owner_pubkey)` instead of raw pubkey (privacy-preserving)
-- Boolean mask constraints: `disclose_* * (disclose_* - 1) === 0`
-- Ephemeral scalar `r` range-checked via `Num2Bits(253)`
+- Owner hash: `owner_hash = Poseidon(owner_pubkey)` — reveals owner identity hash for audit without exposing the raw key
+- No Merkle proof, no spending key, no nullifier — proves note formation only
+- Prevents inflation attacks: relayer cannot claim `value=10000` if commitment was built with `value=1000`
+- Public signals layout (76 bytes): `commitment[0..32] | value[32..40] | asset_id[40..44] | owner_hash[44..76]`
 
 ### Private Link Circuit — `circuits/private_link.circom`
 
@@ -465,24 +428,23 @@ circuits/
 ├── circuits/                  # Circom source files
 │   ├── transfer.circom        # 2-in/2-out private transfer (33,687 constraints)
 │   ├── unshield.circom        # Private → public withdrawal (16,903 constraints)
-│   ├── disclosure.circom      # Selective field disclosure, ECDH-encrypted (9,411 constraints)
+│   ├── value_proof.circom     # Relay fee value proof, no Merkle/nullifier (~300 constraints)
 │   ├── private_link.circom    # Cross-chain identity link (487 constraints)
 │   ├── note.circom            # NoteCommitment + Nullifier templates
 │   ├── merkle_tree.circom     # MerkleTreeVerifier template
 │   └── poseidon_wrapper.circom
 ├── build/                     # Compiled artifacts
 │   ├── transfer_js/transfer.wasm
-│   ├── disclosure_js/disclosure.wasm
+│   ├── value_proof_js/value_proof.wasm
 │   └── verification_key_*.json
 ├── keys/                      # Cryptographic keys
 │   ├── *_pk.zkey              # snarkjs proving keys
 │   └── *_pk.ark               # arkworks proving keys (serialized)
 ├── test/                      # Test suites (135 tests)
 ├── benches/                   # Performance benchmarks
-├── scripts/                   # Build and generation scripts
+├── scripts/                   # Build scripts
 │   ├── build/                 # Compilation scripts
-│   ├── generators/            # Input/proof generators
-│   └── e2e-*.ts               # End-to-end workflows
+│   └── utils/                 # Manifest and lint utilities
 └── package.json
 ```
 
@@ -496,14 +458,6 @@ circuits/
 All requirements are checked automatically by build scripts.
 
 ## Troubleshooting
-
-### "Missing disclosure input files"
-
-Run input generator first:
-
-```bash
-pnpm run gen-input:disclosure
-```
 
 ### "Powers of Tau download failed"
 
