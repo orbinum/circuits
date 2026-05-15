@@ -51,14 +51,14 @@ The pipeline will automatically:
 Convert a specific circuit:
 
 ```bash
-# Disclosure circuit
-pnpm run convert:disclosure
+# Value Proof circuit
+pnpm run convert:value-proof
 
 # Transfer circuit
 pnpm run convert:transfer
 
 # Or use the script directly
-bash scripts/build/convert-to-ark.sh disclosure
+bash scripts/build/convert-to-ark.sh value_proof
 ```
 
 ### Generated Files
@@ -67,8 +67,8 @@ After successful conversion:
 
 ```
 keys/
-├── disclosure_pk.zkey    # 689KB - For JavaScript/TypeScript
-└── disclosure_pk.ark     # 689KB - For Rust
+├── value_proof_pk.zkey    # For JavaScript/TypeScript
+└── value_proof_pk.ark     # For Rust
 ```
 
 ## CI/CD Pipeline
@@ -90,19 +90,19 @@ Creates two release packages:
 **JavaScript/TypeScript Package:**
 
 ```bash
-disclosure-circuit-js-v0.1.0.tar.gz
-├── disclosure.wasm
-├── disclosure_pk.zkey
-└── verification_key_disclosure.json
+value-proof-circuit-js-v0.1.0.tar.gz
+├── value_proof.wasm
+├── value_proof_pk.zkey
+└── verification_key_value_proof.json
 ```
 
 **Rust Package:**
 
 ```bash
-disclosure-circuit-rust-v0.1.0.tar.gz
-├── disclosure.wasm
-├── disclosure_pk.ark
-└── verification_key_disclosure.json
+value-proof-circuit-rust-v0.1.0.tar.gz
+├── value_proof.wasm
+├── value_proof_pk.ark
+└── verification_key_value_proof.json
 ```
 
 ## Usage Examples
@@ -114,8 +114,8 @@ import { groth16 } from "snarkjs";
 
 const { proof, publicSignals } = await groth16.fullProve(
     input,
-    "build/disclosure_js/disclosure.wasm",
-    "keys/disclosure_pk.zkey" // ← Use .zkey
+    "build/value_proof_js/value_proof.wasm",
+    "keys/value_proof_pk.zkey" // ← Use .zkey
 );
 ```
 
@@ -130,7 +130,7 @@ builder.setup();
 
 let circom = builder.build().unwrap();
 let proof = circom.prove(
-    "keys/disclosure_pk.ark"  // ← Use .ark
+    "keys/value_proof_pk.ark"  // ← Use .ark
 ).unwrap();
 ```
 
@@ -162,17 +162,17 @@ which ark-circom
 ```bash
 # 1. Verify .zkey file is valid
 snarkjs zkey verify \
-  build/disclosure.r1cs \
+  build/value_proof.r1cs \
   ptau/pot16_final.ptau \
-  keys/disclosure_pk.zkey
+  keys/value_proof_pk.zkey
 
 # 2. Check ark-circom version
 ark-circom --version
 
 # 3. Try manual conversion with verbose output
 ark-circom \
-  --input keys/disclosure_pk.zkey \
-  --output keys/disclosure_pk.ark
+  --input keys/value_proof_pk.zkey \
+  --output keys/value_proof_pk.ark
 ```
 
 ### Rust not installed in CI
@@ -218,30 +218,30 @@ This is **normal** if ark-circom is not installed. The build pipeline gracefully
 
 **Files needed**:
 
-- `disclosure.wasm` (witness calculator)
-- `disclosure_pk.zkey` (proving key)
+- `value_proof.wasm` (witness calculator)
+- `value_proof_pk.zkey` (proving key)
 
 **Download**:
 
 ```bash
 # From GitHub release
-wget https://github.com/orbinum/circuits/releases/download/v0.1.0/disclosure-circuit-js-v0.1.0.tar.gz
-tar -xzf disclosure-circuit-js-v0.1.0.tar.gz
+wget https://github.com/orbinum/circuits/releases/download/v0.1.0/value-proof-circuit-js-v0.1.0.tar.gz
+tar -xzf value-proof-circuit-js-v0.1.0.tar.gz
 ```
 
 ### Substrate Runtime (Rust)
 
 **Files needed**:
 
-- `disclosure.wasm` (witness calculator)
-- `disclosure_pk.ark` (proving key)
+- `value_proof.wasm` (witness calculator)
+- `value_proof_pk.ark` (proving key)
 
 **Download**:
 
 ```bash
 # From GitHub release
-wget https://github.com/orbinum/circuits/releases/download/v0.1.0/disclosure-circuit-rust-v0.1.0.tar.gz
-tar -xzf disclosure-circuit-rust-v0.1.0.tar.gz
+wget https://github.com/orbinum/circuits/releases/download/v0.1.0/value-proof-circuit-rust-v0.1.0.tar.gz
+tar -xzf value-proof-circuit-rust-v0.1.0.tar.gz
 ```
 
 **Integration**:
@@ -252,12 +252,12 @@ use ark_circom::CircomBuilder;
 
 pub fn generate_proof(input: CircuitInput) -> Result<Proof, Error> {
     let builder = CircomBuilder::<Bn254>::new(
-        std::include_bytes!("../circuits/disclosure.wasm")
+        std::include_bytes!("../circuits/value_proof.wasm")
     );
 
     // Use embedded .ark key
     let circom = builder.setup_with_ark(
-        std::include_bytes!("../circuits/disclosure_pk.ark")
+        std::include_bytes!("../circuits/value_proof_pk.ark")
     )?;
 
     circom.prove(input)
@@ -291,9 +291,9 @@ Currently, there's no direct verification tool for `.ark` files. Verify the sour
 
 ```bash
 snarkjs zkey verify \
-  build/disclosure.r1cs \
+  build/value_proof.r1cs \
   ptau/pot16_final.ptau \
-  keys/disclosure_pk.zkey
+  keys/value_proof_pk.zkey
 ```
 
 Then convert to `.ark` - the conversion preserves cryptographic validity.

@@ -4,7 +4,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-type CircuitName = "disclosure" | "transfer" | "unshield" | "private_link";
+type CircuitName = "value_proof" | "transfer" | "unshield" | "private_link";
 type ArtifactKind = "wasm" | "zkey" | "ark" | "r1cs" | "vk_json";
 
 interface ArtifactEntry {
@@ -48,7 +48,7 @@ if (!Number.isFinite(defaultCircuitVersion) || defaultCircuitVersion < 1) {
     throw new Error(`Invalid CIRCUIT_VERSION: ${process.env.CIRCUIT_VERSION}`);
 }
 
-const circuits: CircuitName[] = ["disclosure", "transfer", "unshield", "private_link"];
+const circuits: CircuitName[] = ["value_proof", "transfer", "unshield", "private_link"];
 
 function sha256Hex(data: Buffer): string {
     return crypto.createHash("sha256").update(data).digest("hex");

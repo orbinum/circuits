@@ -39,7 +39,7 @@ Fixes #(issue number)
 
 **Affected Circuits:**
 
-- [ ] Disclosure
+- [ ] Value Proof
 - [ ] Transfer
 - [ ] Unshield
 - [ ] Core components

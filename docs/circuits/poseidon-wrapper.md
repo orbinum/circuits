@@ -529,7 +529,7 @@ interface PoseidonHash {
 
 - [Note Circuit](note.md) - Uses Poseidon2 and Poseidon4
 - [Merkle Tree](merkle-tree.md) - Uses Poseidon2
-- [Disclosure Circuit](disclosure.md) - Uses Poseidon variants
+- [Value Proof Circuit](value_proof.md) - Uses Poseidon variants
 - [Transfer Circuit](transfer.md) - Uses Poseidon variants
 - [Unshield Circuit](unshield.md) - Uses Poseidon variants
 
