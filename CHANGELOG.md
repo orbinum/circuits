@@ -5,6 +5,47 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-05-14
+
+### Added
+
+- **`value_proof.circom`**: new circuit that lets a relayer prove a note commitment encodes exactly the declared relay fee amount. Replaces `disclosure.circom` as the note-introspection circuit. Used by `pallet-shielded-pool::claim_shielded_fees`.
+- **Public signals layout (76 bytes)**: `commitment[0..32] | value[32..40] | asset_id[40..44] | owner_hash[44..76]`.
+- **Public inputs**: `commitment` (Field), `value` (u64 LE), `asset_id` (u32 LE).
+- **Public output**: `owner_hash = Poseidon(owner_pubkey)` — exposes the owner hash for off-chain audit without revealing the key.
+- **Private inputs**: `owner_pubkey`, `blinding`.
+- **2 constraints**: commitment verification (`Poseidon(value, asset_id, owner_pubkey, blinding) == commitment`) and owner hash.
+- **`CircuitId::VALUE_PROOF = 6`** added to `pallet-zk-verifier` and `primitives/zk-verifier`.
+- **`verify_value_proof()`** on the `ZkVerifierPort` trait with its implementation.
+- **`test/value_proof.test.ts`**: 16 tests — happy path (6), constraint violations (5), inflation attack (2), owner_hash privacy (2).
+- **`docs/circuits/value_proof.md`**: full documentation covering purpose, signals, constraints, comparison table, usage example, and inflation attack analysis.
+- **`value_proof` scripts in `package.json` and `scripts/build-all.sh`**: `compile:value-proof`, `setup:value-proof`, `convert:value-proof`, `full-build:value-proof`.
+- **`manifest.json`**: `"value_proof"` block with sha256 pending trusted setup.
+
+### Removed
+
+- **`disclosure.circom`**: removed. The on-circuit ECDH Baby Jubjub model is incompatible with the Zcash off-chain viewing-key flow adopted in the `ZCASH_DISCLOSURE_MIGRATION`. Build artifacts (`build/disclosure_js/`, `keys/disclosure_*`) should be deleted from the build environment.
+- **`docs/circuits/disclosure.md`**: replaced by `docs/circuits/value_proof.md`.
+- **`scripts/generators/`**: entire directory removed (`generate_input.ts`, `generate_unshield_and_private_link_input.js`).
+- **`disclosure` scripts from `package.json`**: `compile:disclosure`, `setup:disclosure`, `convert:disclosure`, `full-build:disclosure`.
+- **`"disclosure"` block from `manifest.json`**.
+
+### Changed
+
+- **`build-all.sh`**: replaced `"disclosure"` with `"value_proof"` in the `CIRCUITS` array.
+- **`config/circuits.config.json`**: removed `disclosure` block; added `value_proof` block with `circuitId: 6`, correct signal counts (3 public inputs, 1 public output, 2 private inputs, ~300 constraints), `encryptionScheme: "none"`, and `publicSignalsLayout`. Performance target updated accordingly.
+- **`npm/index.js`**: `CIRCUITS` array and JSDoc — `"disclosure"` → `"value_proof"`.
+- **`npm/index.d.ts`**: `CircuitType` union and `getCircuitPaths` parameter — `"disclosure"` → `"value_proof"`.
+- **`npm/README.md`**: circuit list, type comments, "Available Circuits" section (Disclosure → Value Proof with correct description), and `generateProof` example updated.
+- **`scripts/build/full-pipeline.sh`**: usage comment and inline example — `disclosure` → `value_proof`.
+- **`scripts/build/convert-to-ark.sh`**: default circuit name — `disclosure` → `value_proof`.
+- **Docs updated**: `docs/README.md`, `docs/ARCHITECTURE.md`, `docs/guides/arkworks-integration.md`, `docs/guides/quick-start.md`, `docs/circuits/note.md`, `docs/circuits/poseidon-wrapper.md` — all references to `disclosure` removed; constraint count table updated with `value_proof`.
+
+### Security
+
+- **Inflation attack prevented**: without `value_proof`, a malicious relayer could insert a commitment built with `value=10000` while claiming only `fee=1000`, then `unshield` that commitment to drain other users' funds. The circuit enforces `commitment == NoteCommitment(declared_value, ...)`.
+- **`claim_relay_fees_to_evm` removed from `pallet-shielded-pool`**: that extrinsic exposed relayer funds publicly (no ZK proof), creating relayer↔funds linkability. The only valid path is now `claim_shielded_fees` with a ZK proof.
+
 ## [0.8.0] - 2026-05-11
 
 ### Added
