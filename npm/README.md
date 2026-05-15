@@ -13,9 +13,9 @@ npm install @orbinum/circuits
 
 ## 📦 Package Contents
 
-This package includes **20 files** for 4 circuits (disclosure, transfer, unshield, private_link):
+This package includes **20 files** for 4 circuits (value_proof, transfer, unshield, private_link):
 
-### For Each Circuit (disclosure, transfer, unshield, private_link):
+### For Each Circuit (value_proof, transfer, unshield, private_link):
 
 1. **`{circuit}.wasm`** - Witness calculator (4 files)
 2. **`{circuit}.r1cs`** - R1CS constraint system — for custom provers / verification (4 files)
@@ -33,7 +33,7 @@ import { readFileSync } from "fs";
 import { getCircuitPaths } from "@orbinum/circuits";
 
 // Get all paths for a circuit
-const paths = getCircuitPaths("transfer"); // 'disclosure' | 'transfer' | 'unshield' | 'private_link'
+const paths = getCircuitPaths("transfer"); // 'value_proof' | 'transfer' | 'unshield' | 'private_link'
 
 // Load WASM witness calculator
 const wasmBuffer = readFileSync(paths.wasm);
@@ -73,9 +73,9 @@ import verificationKey from "@orbinum/circuits/verification_key_transfer.json";
 
 ## 📋 Available Circuits
 
-### 1. **Disclosure** (`disclosure_*`)
+### 1. **Value Proof** (`value_proof_*`)
 
-Selective disclosure circuit for privacy-preserving attribute revelation.
+Proves that a note commitment encodes exactly the declared relay fee amount. Used by `pallet-shielded-pool::claim_shielded_fees` to prevent inflation attacks. `CircuitId = 6`.
 
 ### 2. **Transfer** (`transfer_*`)
 
@@ -100,7 +100,7 @@ Proves linkage between two commitments without revealing their values.
 import { generateProof, CircuitType } from "@orbinum/proof-generator";
 
 // Proof generator automatically loads circuits from @orbinum/circuits
-const result = await generateProof(CircuitType.Transfer, witnessInputs, numPublicSignals);
+const result = await generateProof(CircuitType.ValueProof, witnessInputs, numPublicSignals);
 
 console.log("Proof:", result.proof);
 console.log("Public signals:", result.publicSignals);
