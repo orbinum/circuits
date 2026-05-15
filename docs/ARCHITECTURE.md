@@ -17,7 +17,7 @@ orbinum-circuits/
 │   └── PRE_COMMIT.md          # Pre-commit documentation
 │
 ├── circuits/                   # Circom circuit definitions (flat)
-│   ├── disclosure.circom       # Selective disclosure
+│   ├── value_proof.circom      # Note formation proof (relay-fee claiming)
 │   ├── merkle_tree.circom      # Merkle tree component
 │   ├── note.circom             # Note commitment
 │   ├── poseidon_wrapper.circom # Poseidon hash wrapper
@@ -34,16 +34,7 @@ orbinum-circuits/
 │   │   ├── convert-to-ark.rs   # Rust script (.zkey → .ark)
 │   │   ├── extract-vk.rs       # Rust script (extract verifying key)
 │   │   └── generate-metadata.sh
-│   ├── generators/             # Input/proof generators
-│   │   ├── generate_disclosure_input.ts
-│   │   ├── generate_disclosure_proof.ts
-│   │   ├── generate_input.ts
-│   │   ├── generate_proof.ts
-│   │   ├── generate_unshield_and_private_link_input.js
-│   │   ├── proof_wrapper.ts
-│   │   └── eddsa_signer.ts
 │   ├── e2e/                    # End-to-end tests
-│   │   ├── e2e-disclosure.ts
 │   │   └── e2e-transfer.ts
 │   ├── utils/                  # Utilities
 │   │   ├── check-artifacts.ts
@@ -54,7 +45,7 @@ orbinum-circuits/
 │   └── README.md
 │
 ├── test/                       # Test suite (flat)
-│   ├── disclosure.test.ts
+│   ├── value_proof.test.ts
 │   ├── merkle_tree.test.ts
 │   ├── note.test.ts
 │   ├── poseidon_compat.test.ts
@@ -66,7 +57,6 @@ orbinum-circuits/
 │
 ├── benches/                    # Performance benchmarks
 │   ├── run-all.bench.ts
-│   ├── disclosure.bench.ts
 │   ├── transfer.bench.ts
 │   ├── types.ts
 │   └── utils.ts
@@ -92,7 +82,7 @@ orbinum-circuits/
 ├── docs/                       # Documentation
 │   ├── ARCHITECTURE.md
 │   ├── circuits/               # Circuit specifications
-│   │   ├── disclosure.md
+│   │   ├── value_proof.md
 │   │   ├── merkle-tree.md
 │   │   ├── note.md
 │   │   ├── poseidon-wrapper.md
@@ -126,7 +116,7 @@ orbinum-circuits/
 **Organization** (flat — all `.circom` files at root level):
 
 - `merkle_tree.circom`, `note.circom`, `poseidon_wrapper.circom`: Reusable components
-- `disclosure.circom`, `transfer.circom`, `unshield.circom`, `private_link.circom`: Application circuits
+- `value_proof.circom`, `transfer.circom`, `unshield.circom`, `private_link.circom`: Application circuits
 
 `transfer.circom` implements a 2-in/2-out scheme with **dummy input support**: when a user has only one note, the second input slot carries `value = 0` and bypasses Merkle membership and nullifier derivation (Zcash Sapling technique). Ownership is proven via `BabyPbk(spending_key)` — no EdDSA signatures required. The dummy nullifier is forced to zero by the circuit (Constraint 9). The pallet rejects transactions where both nullifiers are zero (anti-spam).
 
@@ -162,7 +152,7 @@ orbinum-circuits/
 
 **Test files** (flat structure):
 
-- `disclosure.test.ts`, `transfer.test.ts`, `unshield.test.ts`, `private_link.test.ts`: Application circuit tests
+- `value_proof.test.ts`, `transfer.test.ts`, `unshield.test.ts`, `private_link.test.ts`: Application circuit tests
 - `merkle_tree.test.ts`, `note.test.ts`, `poseidon_wrapper.test.ts`, `poseidon_compat.test.ts`: Component tests
 - `test-utils.ts`: Shared test helpers
 
@@ -181,7 +171,7 @@ orbinum-circuits/
 **Files**:
 
 - `run-all.bench.ts`: Runs all benchmarks sequentially
-- `disclosure.bench.ts`, `transfer.bench.ts`: Per-circuit benchmarks
+- `transfer.bench.ts`: Per-circuit benchmarks
 - `types.ts`, `utils.ts`: Shared benchmark helpers
 
 **Metrics**:
@@ -192,20 +182,7 @@ orbinum-circuits/
 - Memory usage
 - Throughput (operations/second)
 
-### 5. **Code Generators** (`scripts/generators/`)
-
-**Purpose**: Generate inputs and proofs programmatically
-
-**Generators**:
-
-- `generate_input.ts`: Create valid transfer circuit inputs
-- `generate_disclosure_input.ts`: Create disclosure circuit inputs
-- `generate_proof.ts` / `generate_disclosure_proof.ts`: Generate ZK proofs
-- `generate_unshield_and_private_link_input.js`: Inputs for unshield + private link
-- `proof_wrapper.ts`: Proof serialization/deserialization
-- `eddsa_signer.ts`: EdDSA signature helper (legacy; ownership is now proven via `BabyPbk` in `transfer` and `unshield`)
-
-### 6. **npm Package** (`npm/`)
+### 5. **npm Package** (`npm/`)
 
 **Purpose**: Distributable npm package template for `@orbinum/circuits`
 
@@ -220,7 +197,7 @@ orbinum-circuits/
 **Structure**:
 
 - **ARCHITECTURE.md**: System design and component interactions (this file)
-- **circuits/**: Specifications for disclosure, transfer, unshield, note, merkle-tree, poseidon-wrapper
+- **circuits/**: Specifications for value_proof, transfer, unshield, note, merkle-tree, poseidon-wrapper
 - **guides/**: Quick start, arkworks integration, pre-push checks
 
 ## Data Flow
@@ -228,12 +205,7 @@ orbinum-circuits/
 ### Proof Generation Flow
 
 ```
-1. Input Generation
-   └─> scripts/generators/generate_input.ts
-        └─> Validate parameters
-        └─> Create circuit inputs (JSON)
-
-2. Witness Calculation
+1. Witness Calculation
    └─> build/*_js/*.wasm
         └─> Execute circuit logic
         └─> Generate witness (.wtns)
@@ -384,10 +356,8 @@ pnpm run format
 
 ```json
 {
-    "disclosure": {
-        "merkleDepth": 20,
-        "maxAssets": 8,
-        "constraints": 1584
+    "value_proof": {
+        "constraints": 300
     },
     "transfer": {
         "merkleDepth": 20,
@@ -425,7 +395,7 @@ pnpm run format
 
 | Circuit      | Constraints | Proof Time | Verify Time |
 | ------------ | ----------- | ---------- | ----------- |
-| Disclosure   | 1,584       | <150ms     | <5ms        |
+| Value Proof  | ~300        | <50ms      | <5ms        |
 | Transfer     | 33,687      | <3s        | <15ms       |
 | Unshield     | 16,903      | <1s        | <15ms       |
 | Private Link | 487         | <100ms     | <5ms        |
