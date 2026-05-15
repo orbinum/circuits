@@ -1,7 +1,7 @@
 #!/bin/bash
 # Full pipeline: compile circuit → setup
 # Usage: bash scripts/build/full-pipeline.sh <circuit_name>
-# Example: bash scripts/build/full-pipeline.sh disclosure
+# Example: bash scripts/build/full-pipeline.sh value_proof
 
 set -e
 
@@ -9,7 +9,7 @@ CIRCUIT=$1
 
 if [ -z "$CIRCUIT" ]; then
     echo "Usage: $0 <circuit_name>"
-    echo "Example: $0 disclosure"
+    echo "Example: $0 value_proof"
     exit 1
 fi
 

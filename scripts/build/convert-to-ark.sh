@@ -19,8 +19,8 @@ echo -e "${BLUE}  Convert .zkey to .ark Format (Arkworks)${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
 echo ""
 
-# Get circuit name from command line or default to "disclosure"
-CIRCUIT_NAME="${1:-disclosure}"
+# Get circuit name from command line or default to "value_proof"
+CIRCUIT_NAME="${1:-value_proof}"
 
 KEYS_DIR="$PROJECT_DIR/keys"
 ZKEY_FILE="$KEYS_DIR/${CIRCUIT_NAME}_pk.zkey"

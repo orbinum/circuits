@@ -22,16 +22,16 @@ echo ""
 
 # Check if node_modules exists
 if [ ! -d "node_modules" ]; then
-    echo -e "${BLUE}[Step 1/4]${NC} Installing dependencies..."
+    echo -e "${BLUE}[Step 1/5]${NC} Installing dependencies..."
     pnpm install
     echo ""
 else
-    echo -e "${GREEN}[Step 1/4]${NC} Dependencies already installed ✓"
+    echo -e "${GREEN}[Step 1/5]${NC} Dependencies already installed ✓"
     echo ""
 fi
 
 # Build all circuits
-CIRCUITS=("disclosure" "transfer" "unshield" "private_link")
+CIRCUITS=("transfer" "unshield" "private_link" "value_proof")
 
 for i in "${!CIRCUITS[@]}"; do
     CIRCUIT="${CIRCUITS[$i]}"
@@ -50,10 +50,10 @@ echo -e "${GREEN}═════════════════════
 echo ""
 echo -e "${BLUE}Generated Artifacts:${NC}"
 echo ""
-echo -e "${YELLOW}Disclosure Circuit:${NC}"
-echo -e "  ${YELLOW}•${NC} build/disclosure_js/disclosure.wasm"
-echo -e "  ${YELLOW}•${NC} keys/disclosure_pk.zkey"
-echo -e "  ${YELLOW}•${NC} build/verification_key_disclosure.json"
+echo -e "${YELLOW}Value Proof Circuit:${NC}"
+echo -e "  ${YELLOW}•${NC} build/value_proof_js/value_proof.wasm"
+echo -e "  ${YELLOW}•${NC} keys/value_proof_pk.zkey"
+echo -e "  ${YELLOW}•${NC} build/verification_key_value_proof.json"
 echo ""
 echo -e "${YELLOW}Transfer Circuit:${NC}"
 echo -e "  ${YELLOW}•${NC} build/transfer_js/transfer.wasm"
