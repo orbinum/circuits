@@ -85,52 +85,49 @@ For more control, build circuits individually:
 #### Step 1: Compile Circuit
 
 ```bash
-# Compile disclosure circuit
-pnpm run compile:disclosure
+# Compile value_proof circuit
+pnpm run compile:value-proof
 
 # Output:
-# - build/disclosure.r1cs (208KB)
-# - build/disclosure.sym (129KB)
-# - build/disclosure_js/disclosure.wasm (2.1MB)
+# - build/value_proof.r1cs
+# - build/value_proof.sym
+# - build/value_proof_js/value_proof.wasm
 ```
 
 #### Step 2: Generate Keys
 
 ```bash
 # Generate proving and verifying keys
-pnpm run setup:disclosure
+pnpm run setup:value-proof
 
 # Output:
-# - keys/disclosure_pk.zkey (689KB)
-# - build/verification_key_disclosure.json (3.4KB)
+# - keys/value_proof_pk.zkey
+# - build/verification_key_value_proof.json
 ```
 
 #### Step 3: Test Circuit
 
 ```bash
 # Run tests
-pnpm test -- --grep "disclosure"
+pnpm test -- --grep "ValueProof"
 ```
 
 ## Your First Proof
 
 ### 1. Generate Test Input
 
-```bash
-pnpm run gen-input:disclosure
-```
-
-This creates sample inputs in `build/input_*.json`:
-
-- `reveal_nothing.json` - Full privacy mode
-- `reveal_value_only.json` - Disclose amount only
-- `reveal_value_and_asset.json` - Disclose amount + asset
-- `reveal_all.json` - Complete disclosure
+Build a valid input manually using `circomlibjs` (see [value_proof.md](../circuits/value_proof.md#usage-example) for the full snippet) or copy from `test/value_proof.test.ts`.
 
 ### 2. Generate Proof
 
 ```bash
-pnpm run prove:disclosure
+# Using snarkjs directly
+npx snarkjs groth16 fullprove \
+  build/value_proof_input.json \
+  build/value_proof_js/value_proof.wasm \
+  keys/value_proof_pk.zkey \
+  build/proof.json \
+  build/public.json
 ```
 
 This generates:
@@ -138,16 +135,14 @@ This generates:
 - `build/proof.json` - The zero-knowledge proof
 - `build/public.json` - Public signals
 
-**Expected time**: ~100-150ms
+**Expected time**: <50ms
 
 ### 3. Verify Proof
-
-The proof is automatically verified during generation. You can also verify manually:
 
 ```bash
 # Using snarkjs directly
 npx snarkjs groth16 verify \
-  build/verification_key_disclosure.json \
+  build/verification_key_value_proof.json \
   build/public.json \
   build/proof.json
 ```
@@ -168,7 +163,7 @@ pnpm test
 
 ```bash
 # Test a specific circuit
-pnpm test -- --grep "disclosure"
+pnpm test -- --grep "ValueProof"
 
 # Test a specific component
 pnpm test -- --grep "merkle"
@@ -178,7 +173,7 @@ pnpm test -- --grep "merkle"
 
 | Test Suite            | Tests | Purpose                                              |
 | --------------------- | ----- | ---------------------------------------------------- |
-| `disclosure.test.ts`  | 12    | Selective disclosure logic                           |
+| `value_proof.test.ts` | 16    | Note formation proof, inflation attack prevention    |
 | `transfer.test.ts`    | 79    | Private transfer validation                          |
 | `unshield.test.ts`    | 44    | Asset unshielding (total + partial with change note) |
 | `merkle_tree.test.ts` | 15    | Merkle proof verification                            |
@@ -190,9 +185,6 @@ pnpm test -- --grep "merkle"
 ### Run Benchmarks
 
 ```bash
-# Benchmark disclosure circuit
-pnpm run bench:disclosure
-
 # Benchmark all circuits
 pnpm run bench
 ```
@@ -200,14 +192,13 @@ pnpm run bench
 ### Typical Results
 
 ```
-📊 Disclosure Circuit Benchmarks
-  Witness Generation: 5.23ms avg
-  Proof Generation:   101.29ms avg
-  Verification:       3.87ms avg
-  Throughput:         9.87 proofs/sec
+📊 Value Proof Circuit Benchmarks
+  Witness Generation: <5ms avg
+  Proof Generation:   <50ms avg
+  Verification:       <5ms avg
 ```
 
-Results saved to: `build/benchmark_results_disclosure.json`
+Results saved to: `build/benchmark_results_value_proof.json`
 
 ## Common Tasks
 
