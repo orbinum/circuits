@@ -26,7 +26,7 @@ What alternative solutions or features have you considered?
 
 Which circuits would this affect?
 
-- [ ] Disclosure
+- [ ] Value Proof
 - [ ] Transfer
 - [ ] Unshield
 - [ ] New circuit
