@@ -90,8 +90,8 @@ jobs:
                   rustup component add rust-src --toolchain nightly
 
                   cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
-                    keys/disclosure_pk.zkey \
-                    keys/disclosure_pk.ark
+                    keys/value_proof_pk.zkey \
+                    keys/value_proof_pk.ark
 
                   cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
                     keys/transfer_pk.zkey \
@@ -115,9 +115,9 @@ jobs:
                   sha256sum manifest.json > release/checksums.txt
                   cd build
 
-                  sha256sum disclosure.r1cs >> ../release/checksums.txt
-                  sha256sum disclosure_js/disclosure.wasm >> ../release/checksums.txt
-                  sha256sum verification_key_disclosure.json >> ../release/checksums.txt
+                  sha256sum value_proof.r1cs >> ../release/checksums.txt
+                  sha256sum value_proof_js/value_proof.wasm >> ../release/checksums.txt
+                  sha256sum verification_key_value_proof.json >> ../release/checksums.txt
                   sha256sum transfer.r1cs >> ../release/checksums.txt
                   sha256sum transfer_js/transfer.wasm >> ../release/checksums.txt
                   sha256sum verification_key_transfer.json >> ../release/checksums.txt
@@ -129,8 +129,8 @@ jobs:
                   sha256sum verification_key_private_link.json >> ../release/checksums.txt
 
                   cd ../keys
-                  sha256sum disclosure_pk.zkey >> ../release/checksums.txt
-                  sha256sum disclosure_pk.ark >> ../release/checksums.txt
+                  sha256sum value_proof_pk.zkey >> ../release/checksums.txt
+                  sha256sum value_proof_pk.ark >> ../release/checksums.txt
                   sha256sum transfer_pk.zkey >> ../release/checksums.txt
                   sha256sum transfer_pk.ark >> ../release/checksums.txt
                   sha256sum unshield_pk.zkey >> ../release/checksums.txt
@@ -147,11 +147,11 @@ jobs:
                   mkdir -p release/snarkjs-temp
                   mkdir -p release/verification-keys-temp
 
-                  cp build/disclosure_js/disclosure.wasm release/arkworks-temp/
+                  cp build/value_proof_js/value_proof.wasm release/arkworks-temp/
                   cp build/transfer_js/transfer.wasm release/arkworks-temp/
                   cp build/unshield_js/unshield.wasm release/arkworks-temp/
                   cp build/private_link_js/private_link.wasm release/arkworks-temp/
-                  cp keys/disclosure_pk.ark release/arkworks-temp/
+                  cp keys/value_proof_pk.ark release/arkworks-temp/
                   cp keys/transfer_pk.ark release/arkworks-temp/
                   cp keys/unshield_pk.ark release/arkworks-temp/
                   cp keys/private_link_pk.ark release/arkworks-temp/
@@ -160,7 +160,7 @@ jobs:
                   tar -czf ../orbinum-circuits-${VERSION}.tar.gz *
                   cd ../..
 
-                  cp keys/disclosure_pk.zkey release/snarkjs-temp/
+                  cp keys/value_proof_pk.zkey release/snarkjs-temp/
                   cp keys/transfer_pk.zkey release/snarkjs-temp/
                   cp keys/unshield_pk.zkey release/snarkjs-temp/
                   cp keys/private_link_pk.zkey release/snarkjs-temp/
@@ -169,7 +169,7 @@ jobs:
                   tar -czf ../orbinum-circuits-snarkjs-${VERSION}.tar.gz *
                   cd ../..
 
-                  cp build/verification_key_disclosure.json release/verification-keys-temp/
+                  cp build/verification_key_value_proof.json release/verification-keys-temp/
                   cp build/verification_key_transfer.json release/verification-keys-temp/
                   cp build/verification_key_unshield.json release/verification-keys-temp/
                   cp build/verification_key_private_link.json release/verification-keys-temp/
@@ -237,27 +237,27 @@ jobs:
 
                   cp manifest.json pkg/
 
-                  cp build/disclosure.r1cs pkg/
+                  cp build/value_proof.r1cs pkg/
                   cp build/transfer.r1cs pkg/
                   cp build/unshield.r1cs pkg/
                   cp build/private_link.r1cs pkg/
 
-                  cp build/disclosure_js/disclosure.wasm pkg/
+                  cp build/value_proof_js/value_proof.wasm pkg/
                   cp build/transfer_js/transfer.wasm pkg/
                   cp build/unshield_js/unshield.wasm pkg/
                   cp build/private_link_js/private_link.wasm pkg/
 
-                  cp keys/disclosure_pk.zkey pkg/
+                  cp keys/value_proof_pk.zkey pkg/
                   cp keys/transfer_pk.zkey pkg/
                   cp keys/unshield_pk.zkey pkg/
                   cp keys/private_link_pk.zkey pkg/
 
-                  cp keys/disclosure_pk.ark pkg/
+                  cp keys/value_proof_pk.ark pkg/
                   cp keys/transfer_pk.ark pkg/
                   cp keys/unshield_pk.ark pkg/
                   cp keys/private_link_pk.ark pkg/
 
-                  cp build/verification_key_disclosure.json pkg/
+                  cp build/verification_key_value_proof.json pkg/
                   cp build/verification_key_transfer.json pkg/
                   cp build/verification_key_unshield.json pkg/
                   cp build/verification_key_private_link.json pkg/
