@@ -2,7 +2,10 @@
 
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
+import { execFileSync } from "node:child_process";
+import { blake2b } from "@noble/hashes/blake2.js";
 
 type CircuitName = "value_proof" | "transfer" | "unshield" | "private_link";
 type ArtifactKind = "wasm" | "zkey" | "ark" | "r1cs" | "vk_json";
@@ -54,6 +57,33 @@ function sha256Hex(data: Buffer): string {
     return crypto.createHash("sha256").update(data).digest("hex");
 }
 
+// snarkjs VK JSON → arkworks compressed binary. Same conversion the node's VK
+// registration runs, so its output is exactly the `key_data` stored on-chain.
+const CONVERT_VK_BIN =
+    process.env.CONVERT_VK_BIN ?? path.resolve(ROOT, "../groth16-proofs/target/release/convert-vk");
+
+// Canonical VK hash = blake2_256 of the arkworks binary, identical to the chain's
+// sp_io::hashing::blake2_256(key_data). Hashing vk.json instead would be a different
+// hash of different bytes and never match the chain, so it fails closed if convert-vk
+// is missing rather than falling back.
+function computeVkHash(vkJsonPath: string): string {
+    if (!fs.existsSync(CONVERT_VK_BIN)) {
+        throw new Error(
+            `convert-vk binary not found at ${CONVERT_VK_BIN}. ` +
+                `Build it (cargo build --release -p groth16-proofs --bin convert-vk) or set CONVERT_VK_BIN.`
+        );
+    }
+    const binPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "vkhash-")), "vk.bin");
+    try {
+        execFileSync(CONVERT_VK_BIN, [vkJsonPath, binPath], { stdio: "pipe" });
+        const bin = fs.readFileSync(binPath);
+        const digest = blake2b(new Uint8Array(bin), { dkLen: 32 });
+        return `0x${Buffer.from(digest).toString("hex")}`;
+    } finally {
+        fs.rmSync(path.dirname(binPath), { recursive: true, force: true });
+    }
+}
+
 function readArtifact(localPath: string): ArtifactEntry | null {
     const absPath = path.join(ROOT, localPath);
     if (!fs.existsSync(absPath)) {
@@ -101,13 +131,15 @@ function buildCircuitEntry(circuit: CircuitName): Manifest["circuits"][CircuitNa
         artifacts.r1cs = r1cs;
     }
 
+    const vkHash = computeVkHash(path.join(ROOT, vkJsonPath));
+
     return {
         active_version: defaultCircuitVersion,
         supported_versions: [defaultCircuitVersion],
         versions: {
             [String(defaultCircuitVersion)]: {
                 version: defaultCircuitVersion,
-                vk_hash: `0x${vkJson.sha256}`,
+                vk_hash: vkHash,
                 artifacts,
             },
         },
