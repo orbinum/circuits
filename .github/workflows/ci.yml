@@ -73,9 +73,22 @@ jobs:
     - name: Build all circuits
       run: pnpm run build-all
 
+    # convert-vk (from groth16-proofs) produces the arkworks VK binary the chain
+    # registers; the manifest hashes it (blake2_256) so vk_hash matches on-chain.
+    - name: Checkout groth16-proofs
+      uses: actions/checkout@v4
+      with:
+        repository: orbinum/groth16-proofs
+        path: groth16-proofs
+
+    - name: Build convert-vk
+      run: cargo build --release --manifest-path groth16-proofs/Cargo.toml --bin convert-vk
+
     - name: Generate manifest (strict)
+      env:
+        CONVERT_VK_BIN: ${{ github.workspace }}/groth16-proofs/target/release/convert-vk
       run: MANIFEST_REQUIRE_ALL=true pnpm run manifest
-    
+
     - name: Run tests
       run: pnpm test
     

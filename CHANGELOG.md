@@ -5,6 +5,20 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-07-06
+
+### Changed
+
+- **`manifest.json` `vk_hash` is now the canonical on-chain hash** — `blake2_256` of the arkworks-compressed verifying key, byte-for-byte identical to what the chain stores (`sp_io::hashing::blake2_256(vk.key_data)`). Previously it was `sha256` of the snarkjs `verification_key_<circuit>.json`, a different hash over different bytes that could never match the chain. This is what lets the SDK's per-note circuit-version resolver cross-check the prover's VK against the chain's VK before spending a note; with the old value the cross-check could never pass on a real rotation.
+    - `generate-manifest` runs the same `convert-vk` (JSON → arkworks binary) the node's VK registration uses, then `blake2_256` of the resulting binary (via `@noble/hashes`, which matches `sp_io::blake2_256`).
+    - Requires the `convert-vk` binary at build time (defaults to the sibling `groth16-proofs` release build; override with `CONVERT_VK_BIN`). Fail-closed: manifest generation throws if it is missing rather than falling back to a non-matching hash.
+    - The per-artifact `sha256` (download integrity) is unchanged — it and `vk_hash` serve different roles.
+    - **Breaking for consumers that read `vk_hash`**: the published value changes format and content.
+
+### Added
+
+- **`test/manifest_vk_hash.test.ts`**: locks `manifest vk_hash == blake2_256(convert-vk(vk.json))` for every circuit, plus the `blake2_256(b"abc")` vector, so the sha256-vs-blake2 mismatch cannot silently return.
+
 ## [0.9.0] - 2026-05-14
 
 ### Added
