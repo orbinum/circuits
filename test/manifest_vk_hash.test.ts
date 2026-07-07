@@ -49,8 +49,15 @@ describe("manifest vk_hash is the canonical on-chain blake2_256", () => {
     const hasManifest = fs.existsSync(manifestPath);
     const hasBin = fs.existsSync(CONVERT_VK_BIN);
 
+    /** vk.json for a version: the suffixed file if present, else the base (single-version) file. */
+    function vkJsonForVersion(circuit: string, version: number): string {
+        const suffixed = path.join(ROOT, "build", `verification_key_${circuit}_v${version}.json`);
+        if (fs.existsSync(suffixed)) return suffixed;
+        return path.join(ROOT, "build", `verification_key_${circuit}.json`);
+    }
+
     for (const circuit of CIRCUITS) {
-        it(`${circuit}: manifest vk_hash == blake2_256(arkworks VK)`, function () {
+        it(`${circuit}: every version's manifest vk_hash == blake2_256(arkworks VK)`, function () {
             if (!hasManifest || !hasBin) {
                 this.skip(); // needs a built manifest + convert-vk binary
                 return;
@@ -61,19 +68,20 @@ describe("manifest vk_hash is the canonical on-chain blake2_256", () => {
                 this.skip(); // circuit not in this manifest build
                 return;
             }
-            const version = String(entry.active_version);
-            const manifestHash: string = entry.versions[version].vk_hash;
 
-            const vkJson = path.join(ROOT, "build", `verification_key_${circuit}.json`);
-            if (!fs.existsSync(vkJson)) {
-                this.skip();
-                return;
+            // Check EVERY registered version, not just the active one — a rotation
+            // adds v2 while keeping v1, and both hashes must match the chain.
+            let checked = 0;
+            for (const vStr of Object.keys(entry.versions)) {
+                const version = Number(vStr);
+                const manifestHash: string = entry.versions[vStr].vk_hash;
+                const vkJson = vkJsonForVersion(circuit, version);
+                if (!fs.existsSync(vkJson)) continue; // version's source not on disk here
+                expect(manifestHash, `${circuit} v${version}`).to.equal(canonicalVkHash(vkJson));
+                expect(manifestHash).to.match(/^0x[0-9a-f]{64}$/);
+                checked++;
             }
-            const expected = canonicalVkHash(vkJson);
-
-            expect(manifestHash).to.equal(expected);
-            // Defense: must be a 32-byte hex hash, never empty/sha256-of-json shape slipping through.
-            expect(manifestHash).to.match(/^0x[0-9a-f]{64}$/);
+            if (checked === 0) this.skip();
         });
     }
 });

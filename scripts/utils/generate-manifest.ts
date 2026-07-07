@@ -99,50 +99,81 @@ function readArtifact(localPath: string): ArtifactEntry | null {
     };
 }
 
-function buildCircuitEntry(circuit: CircuitName): Manifest["circuits"][CircuitName] | null {
-    const wasmPath = `build/${circuit}_js/${circuit}.wasm`;
-    const zkeyPath = `keys/${circuit}_pk.zkey`;
-    const arkPath = `keys/${circuit}_pk.ark`;
-    const r1csPath = `build/${circuit}.r1cs`;
-    const vkJsonPath = `build/verification_key_${circuit}.json`;
+// A version's artifacts live at either the base names (unshield_pk.zkey) or
+// version-suffixed names (unshield_v2_pk.zkey). Suffixed names are REQUIRED for
+// any non-base version so v1 and v2 don't collide in the flat served dir.
+function artifactPaths(circuit: string, suffix: string) {
+    const js = `build/${circuit}${suffix}`;
+    return {
+        wasm: `build/${circuit}_js/${circuit}${suffix}.wasm`,
+        zkey: `keys/${circuit}${suffix}_pk.zkey`,
+        ark: `keys/${circuit}${suffix}_pk.ark`,
+        r1cs: `build/${circuit}${suffix}.r1cs`,
+        vk_json: `build/verification_key_${circuit}${suffix}.json`,
+        _js: js,
+    };
+}
 
-    const wasm = readArtifact(wasmPath);
-    const zkey = readArtifact(zkeyPath);
-    const ark = readArtifact(arkPath);
-    const r1cs = readArtifact(r1csPath);
-    const vkJson = readArtifact(vkJsonPath);
-
+// One version entry (vk_hash + per-artifact sha256) from the suffixed files.
+function buildVersionEntry(
+    circuit: string,
+    version: number,
+    suffix: string
+): CircuitVersionEntry | null {
+    const p = artifactPaths(circuit, suffix);
+    const wasm = readArtifact(p.wasm);
+    const zkey = readArtifact(p.zkey);
+    const vkJson = readArtifact(p.vk_json);
     if (!wasm || !zkey || !vkJson) {
-        console.warn(
-            `⚠️  Skipping ${circuit}: missing required artifacts (wasm, zkey, verification_key_json)`
-        );
+        console.warn(`⚠️  ${circuit} v${version}: missing wasm/zkey/vk_json (suffix "${suffix}")`);
         return null;
     }
 
-    const artifacts: Partial<Record<ArtifactKind, ArtifactEntry>> = {
-        wasm,
-        zkey,
-        vk_json: vkJson,
+    const artifacts: Partial<Record<ArtifactKind, ArtifactEntry>> = { wasm, zkey, vk_json: vkJson };
+    const ark = readArtifact(p.ark);
+    if (ark) artifacts.ark = ark;
+    const r1cs = readArtifact(p.r1cs);
+    if (r1cs) artifacts.r1cs = r1cs;
+
+    return {
+        version,
+        vk_hash: computeVkHash(path.join(ROOT, p.vk_json)),
+        artifacts,
     };
-    if (ark) {
-        artifacts.ark = ark;
-    }
-    if (r1cs) {
-        artifacts.r1cs = r1cs;
+}
+
+// Rotation controls: to add a version for ONE circuit, set ROTATE_CIRCUIT +
+// ROTATE_VERSION. The prior manifest's versions are reused verbatim (their
+// published bytes are canonical) and the new one is appended.
+const rotateCircuit = process.env.ROTATE_CIRCUIT ?? "";
+const rotateVersion = Number(process.env.ROTATE_VERSION ?? "0");
+const priorManifest: Manifest | null = (() => {
+    if (!rotateCircuit) return null;
+    const p = path.join(ROOT, "manifest.json");
+    return fs.existsSync(p) ? (JSON.parse(fs.readFileSync(p, "utf8")) as Manifest) : null;
+})();
+
+function buildCircuitEntry(circuit: CircuitName): Manifest["circuits"][CircuitName] | null {
+    // Rotation path: this circuit gets a new version merged onto the prior ones.
+    if (circuit === rotateCircuit && rotateVersion > 0 && priorManifest) {
+        const prior = priorManifest.circuits[circuit];
+        if (!prior) throw new Error(`ROTATE_CIRCUIT=${circuit} not in prior manifest`);
+        const newEntry = buildVersionEntry(circuit, rotateVersion, `_v${rotateVersion}`);
+        if (!newEntry) throw new Error(`Failed to build ${circuit} v${rotateVersion} artifacts`);
+        const versions = { ...prior.versions, [String(rotateVersion)]: newEntry };
+        const supported = [...new Set([...prior.supported_versions, rotateVersion])].sort(
+            (a, b) => a - b
+        );
+        return { active_version: rotateVersion, supported_versions: supported, versions };
     }
 
-    const vkHash = computeVkHash(path.join(ROOT, vkJsonPath));
-
+    // Default path: single-version entry from the base (unsuffixed) artifacts.
+    const entry = buildVersionEntry(circuit, defaultCircuitVersion, "");
+    if (!entry) return null;
     return {
         active_version: defaultCircuitVersion,
         supported_versions: [defaultCircuitVersion],
-        versions: {
-            [String(defaultCircuitVersion)]: {
-                version: defaultCircuitVersion,
-                vk_hash: vkHash,
-                artifacts,
-            },
-        },
+        versions: { [String(defaultCircuitVersion)]: entry },
     };
 }
 
