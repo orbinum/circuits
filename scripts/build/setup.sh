@@ -27,6 +27,12 @@ echo -e "${GREEN}✓${NC} snarkjs detected"
 CIRCUIT_NAME=${1:-example}
 R1CS_FILE="build/${CIRCUIT_NAME}.r1cs"
 
+# Trusted-setup entropy/beacon are overridable so a new version gets a distinct VK.
+# Defaults reproduce the original v1 setup byte-for-byte.
+SETUP_ENTROPY="${SETUP_ENTROPY:-orbinum-dev-contribution}"
+SETUP_BEACON="${SETUP_BEACON:-0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f}"
+SETUP_BEACON_ITERS="${SETUP_BEACON_ITERS:-10}"
+
 if [ ! -f "$R1CS_FILE" ]; then
     echo -e "${RED}Error: R1CS file not found: $R1CS_FILE${NC}"
     echo "Please compile the circuit first: npm run compile:${CIRCUIT_NAME}"
@@ -36,12 +42,13 @@ fi
 # Create keys directory
 mkdir -p keys
 
-# Clean previous key generation artifacts
+# Clean previous key generation artifacts — only this run's outputs.
+# Avoid a ${CIRCUIT}_*.zkey glob: it would wipe version-suffixed keys (e.g. unshield_v1_pk.zkey).
 if [ -f "keys/${CIRCUIT_NAME}_pk.zkey" ] || [ -f "build/verification_key_${CIRCUIT_NAME}.json" ]; then
     echo ""
     echo -e "${YELLOW}Cleaning previous keys...${NC}"
     rm -f "keys/${CIRCUIT_NAME}_pk.zkey"
-    rm -f "keys/${CIRCUIT_NAME}_"*.zkey
+    rm -f "keys/${CIRCUIT_NAME}_0000.zkey" "keys/${CIRCUIT_NAME}_0001.zkey"
     rm -f "build/verification_key_${CIRCUIT_NAME}.json"
     echo -e "${GREEN}      ✓ Previous keys removed${NC}"
 fi
@@ -85,7 +92,7 @@ echo -e "${BLUE}[3/6]${NC} Adding entropy contribution..."
 echo -e "      Contributor: Development build"
 
 # Add a contribution (in production, multiple parties would do this)
-echo "orbinum-dev-contribution" | snarkjs zkey contribute \
+echo "$SETUP_ENTROPY" | snarkjs zkey contribute \
     "keys/${CIRCUIT_NAME}_0000.zkey" \
     "keys/${CIRCUIT_NAME}_0001.zkey" \
     --name="Dev Contribution 1" > /dev/null 2>&1
@@ -99,7 +106,7 @@ echo -e "      Applying final beacon"
 snarkjs zkey beacon \
     "keys/${CIRCUIT_NAME}_0001.zkey" \
     "keys/${CIRCUIT_NAME}_pk.zkey" \
-    0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 10 \
+    "$SETUP_BEACON" "$SETUP_BEACON_ITERS" \
     -n="Final Beacon phase2" > /dev/null 2>&1
 
 echo -e "${GREEN}      ✓ Proving key ready${NC}"

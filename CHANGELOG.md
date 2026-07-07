@@ -5,6 +5,17 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-07-07
+
+### Added
+
+- **Multi-version manifest support** in `scripts/utils/generate-manifest.ts`. Setting `ROTATE_CIRCUIT=<circuit>` + `ROTATE_VERSION=<n>` merges a new circuit version onto the existing `manifest.json`: prior versions are reused verbatim, the new one is appended (`supported_versions` grows, `active_version` becomes the new version), and each version's artifacts use version-suffixed filenames (`<circuit>_v<n>_pk.zkey`, etc.) so they don't collide in a flat served directory. Without the env vars, the generator produces the same single-version manifest as before. This lets a VK rotation publish a manifest that keeps the old version spendable while activating the new one.
+- **Parametrized trusted setup** in `scripts/build/setup.sh` via `SETUP_ENTROPY` / `SETUP_BEACON` / `SETUP_BEACON_ITERS` (defaults reproduce the original v1 setup byte-for-byte). Lets a new circuit version be generated with genuinely different entropy — required so a rotated VK actually differs from the old one.
+
+### Fixed
+
+- **`setup.sh` cleanup no longer wipes version-suffixed keys.** The previous `rm -f keys/<circuit>_*.zkey` glob would delete `<circuit>_v1_pk.zkey` / `<circuit>_v2_pk.zkey`; it now removes only the numbered intermediates the script creates (`_0000`/`_0001`).
+
 ## [0.10.0] - 2026-07-06
 
 ### Changed
