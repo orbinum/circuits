@@ -52,9 +52,31 @@ pnpm run manifest
 This creates `manifest.json` at repo root with:
 
 - package version metadata
-- active/supported version per circuit
-- SHA-256 + size for `.wasm`, `.zkey`, `.ark` (if available)
-- `vk_hash` derived from `verification_key_<circuit>.json`
+- per-circuit `active_version`, `supported_versions[]`, and a `versions{}` map keyed by version
+- SHA-256 + size for `.wasm`, `.zkey`, `.ark` (if available), per version
+- `vk_hash` per version — the canonical **on-chain** hash: `blake2_256` of the arkworks-compressed verifying key, byte-for-byte identical to what the chain stores. This is what lets the SDK cross-check a note's circuit version against the chain's VK before spending.
+
+#### Multi-version manifest (VK rotation)
+
+A single `manifest.json` can carry **multiple verifying keys per circuit** at once. When you rotate a circuit, the old version stays `supported` (so notes created with it remain spendable) while the new version becomes `active`:
+
+```bash
+# Append a new version onto the existing manifest
+ROTATE_CIRCUIT=transfer ROTATE_VERSION=2 pnpm run manifest
+```
+
+- Prior versions are reused verbatim; the new one is appended.
+- `supported_versions` grows; `active_version` becomes the new version.
+- Artifacts are version-suffixed (`transfer_v2_pk.zkey`, …) so they don't collide in a flat served directory.
+- Without the env vars, the generator produces a single-version manifest as before.
+
+A new version's key material must genuinely differ from the old one. The trusted setup is parametrized for this:
+
+```bash
+SETUP_ENTROPY=... SETUP_BEACON=... SETUP_BEACON_ITERS=... pnpm run setup:transfer
+```
+
+Defaults reproduce the original v1 setup byte-for-byte.
 
 **Output:**
 
