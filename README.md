@@ -17,7 +17,7 @@ Zero-Knowledge circuits for Orbinum privacy blockchain.
 npm install @orbinum/circuits
 ```
 
-This installs pre-compiled circuit artifacts ready to use. See [npm package documentation](./docs/npm-publishing.md).
+This installs pre-compiled circuit artifacts ready to use. See [release documentation](./docs/RELEASE.md).
 
 ### Building from Source
 

@@ -1,6 +1,6 @@
 {
   "name": "orbinum-circuits",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "Zero-Knowledge circuits for Orbinum privacy blockchain",
   "scripts": {
     "compile": "pnpm run compile:transfer",
@@ -23,6 +23,10 @@
     "full-build:value-proof": "bash scripts/build/full-pipeline.sh value_proof",
     "build-all": "bash scripts/build-all.sh",
     "manifest": "ts-node scripts/utils/generate-manifest.ts",
+    "release": "bash scripts/release/release.sh",
+    "release:dry": "bash scripts/release/release.sh --dry-run",
+    "release:verify": "ts-node scripts/release/verify-artifacts.ts",
+    "release:restore": "ts-node scripts/release/restore-artifacts.ts",
     "test": "mocha --require ts-node/register 'test/**/*.test.ts' --timeout 100000",
     "test:js": "mocha test/**/*.test.js --timeout 100000",
     "build": "tsc",

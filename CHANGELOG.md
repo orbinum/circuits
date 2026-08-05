@@ -5,6 +5,23 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.1] - 2026-08-05
+
+### Changed
+
+- **Releases are now manual** (`scripts/release/release.sh`, see `docs/RELEASE.md`). The automatic release workflow (`.github/workflows/release.yml`) is removed: it rebuilt all circuits on every push to main, and since zkey/VK setup is nondeterministic, each run minted new VKs that no longer matched what was registered on-chain. The release script never rebuilds — it fail-closed sha256-verifies every local artifact against the committed `manifest.json` before publishing to npm and GitHub releases.
+- **CI no longer regenerates `manifest.json`**; it validates the committed one instead (`test/manifest_schema.test.ts`) and treats freshly built keys as throwaway circuit-logic validation. The Rust/convert-vk/artifact-upload steps are removed from `ci.yml`.
+- **Cloudflare R2 distribution dropped**: npm/unpkg is the only default distribution channel. Consumers needing a mirror can self-host `manifest.json` + artifacts and point `baseUrl` at it (downloads remain sha256-verified against the manifest).
+
+### Added
+
+- `scripts/release/verify-artifacts.ts` (`pnpm run release:verify`) — fail-closed check that local artifacts are byte-identical to the committed manifest.
+- `scripts/release/restore-artifacts.ts` (`pnpm run release:restore`) — restores canonical published artifacts from npm into `build/`/`keys/`, sha256-verified.
+
+### Fixed
+
+- **Resynced `manifest.json` to the published `@orbinum/circuits@0.11.0`.** The committed manifest had drifted: the old release CI rebuilt all circuits ~35 minutes after the local build that generated the committed manifest, so npm/on-chain hashes (the canonical ones consumers verify against) differed from git.
+
 ## [0.11.0] - 2026-07-07
 
 ### Added
