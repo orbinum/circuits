@@ -31,7 +31,7 @@ else
 fi
 
 # Build all circuits
-CIRCUITS=("transfer" "unshield" "private_link" "value_proof")
+CIRCUITS=("transfer" "unshield" "value_proof")
 
 for i in "${!CIRCUITS[@]}"; do
     CIRCUIT="${CIRCUITS[$i]}"
@@ -64,11 +64,6 @@ echo -e "${YELLOW}Unshield Circuit:${NC}"
 echo -e "  ${YELLOW}•${NC} build/unshield_js/unshield.wasm"
 echo -e "  ${YELLOW}•${NC} keys/unshield_pk.zkey"
 echo -e "  ${YELLOW}•${NC} build/verification_key_unshield.json"
-echo ""
-echo -e "${YELLOW}Private Link Circuit:${NC}"
-echo -e "  ${YELLOW}•${NC} build/private_link_js/private_link.wasm"
-echo -e "  ${YELLOW}•${NC} keys/private_link_pk.zkey"
-echo -e "  ${YELLOW}•${NC} build/verification_key_private_link.json"
 echo ""
 echo -e "${BLUE}Integration:${NC}"
 echo -e "  ${YELLOW}Wallet CLI:${NC} Copy WASM + .zkey files for client-side proving"

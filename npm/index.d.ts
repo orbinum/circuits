@@ -15,13 +15,11 @@ export interface CircuitPaths {
 /**
  * Get paths to all files for a specific circuit
  */
-export function getCircuitPaths(
-    circuit: "value_proof" | "transfer" | "unshield" | "private_link"
-): CircuitPaths;
+export function getCircuitPaths(circuit: "value_proof" | "transfer" | "unshield"): CircuitPaths;
 
 /**
  * Available circuits
  */
-export type CircuitType = "value_proof" | "transfer" | "unshield" | "private_link";
+export type CircuitType = "value_proof" | "transfer" | "unshield";
 
 export const CIRCUITS: CircuitType[];

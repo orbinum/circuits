@@ -5,6 +5,12 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-08-05
+
+### Removed
+
+- **`private_link` circuit removed** (on-chain `CircuitId 5`, retired and purged from the runtime during the spec-6 upgrade): `circuits/private_link.circom`, its test suite (`test/private_link.test.ts`), doc page, `package.json` build scripts, `build-all.sh` entry, manifest generator support, and the `npm` helper types (`CircuitType` is now `"value_proof" | "transfer" | "unshield"`). Its `manifest.json` entry is gone, so the package no longer ships `private_link` artifacts; the remaining circuits' artifacts are byte-identical to 0.11.x (same `vk_hash` as registered on-chain — nothing to re-register). Packages up to 0.11.1 keep the `private_link` artifacts for historical consumers.
+
 ## [0.11.1] - 2026-08-05
 
 ### Changed

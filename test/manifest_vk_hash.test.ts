@@ -21,7 +21,7 @@ const ROOT = path.resolve(__dirname, "..");
 const CONVERT_VK_BIN =
     process.env.CONVERT_VK_BIN ?? path.resolve(ROOT, "../groth16-proofs/target/release/convert-vk");
 
-const CIRCUITS = ["value_proof", "transfer", "unshield", "private_link"] as const;
+const CIRCUITS = ["value_proof", "transfer", "unshield"] as const;
 
 /** blake2_256 of the arkworks binary — must equal sp_io::hashing::blake2_256(key_data). */
 function canonicalVkHash(vkJsonPath: string): string {

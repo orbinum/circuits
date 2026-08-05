@@ -13,15 +13,14 @@ npm install @orbinum/circuits
 
 ## 📦 Package Contents
 
-This package includes **20 files** for 4 circuits (value_proof, transfer, unshield, private_link):
+This package includes the artifacts for 3 circuits (value_proof, transfer, unshield):
 
-### For Each Circuit (value_proof, transfer, unshield, private_link):
+### For Each Circuit (value_proof, transfer, unshield):
 
-1. **`{circuit}.wasm`** - Witness calculator (4 files)
-2. **`{circuit}.r1cs`** - R1CS constraint system — for custom provers / verification (4 files)
-3. **`{circuit}_pk.zkey`** - Proving key for snarkjs (4 files)
-4. **`{circuit}_pk.ark`** - Proving key for arkworks/Rust (4 files)
-5. **`verification_key_{circuit}.json`** - Verification key for on-chain verification (4 files)
+1. **`{circuit}.wasm`** - Witness calculator
+2. **`{circuit}.r1cs`** - R1CS constraint system — for custom provers / verification
+3. **`{circuit}_pk.zkey`** - Proving key for snarkjs
+4. **`verification_key_{circuit}.json`** - Verification key for on-chain verification
 
 ## 🔧 Usage
 
@@ -33,7 +32,7 @@ import { readFileSync } from "fs";
 import { getCircuitPaths } from "@orbinum/circuits";
 
 // Get all paths for a circuit
-const paths = getCircuitPaths("transfer"); // 'value_proof' | 'transfer' | 'unshield' | 'private_link'
+const paths = getCircuitPaths("transfer"); // 'value_proof' | 'transfer' | 'unshield'
 
 // Load WASM witness calculator
 const wasmBuffer = readFileSync(paths.wasm);
@@ -84,10 +83,6 @@ Private token transfer circuit with 2 inputs and 2 outputs.
 ### 3. **Unshield** (`unshield_*`)
 
 Withdrawal circuit from private pool to public account.
-
-### 4. **Private Link** (`private_link_*`)
-
-Proves linkage between two commitments without revealing their values.
 
 ## 🔗 Related Packages
 

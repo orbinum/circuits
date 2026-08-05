@@ -9,7 +9,6 @@ This directory contains detailed technical documentation for each zero-knowledge
 - **[Value Proof](value_proof.md)** - Prove note formation (value + asset_id encoded in commitment) for relay-fee claiming
 - **[Transfer](transfer.md)** - Private token transfers with BabyPbk ownership verification (discrete log proof)
 - **[Unshield](unshield.md)** - Convert private notes to public tokens (withdrawal)
-- **[Private Link](private-link.md)** - Prove knowledge of a private cross-chain wallet link without revealing the address
 
 ### Supporting Components
 

@@ -202,7 +202,6 @@ pnpm test
 - `value_proof.test.ts` - Relay fee value proof (16 tests)
 - `transfer.test.ts` - Private transfer logic
 - `unshield.test.ts` - Multi-asset support
-- `private_link.test.ts` - Cross-chain identity link
 - `merkle_tree.test.ts` - Merkle proof verification
 - `note.test.ts` - Note commitment schemes
 - `poseidon_*.test.ts` - Hash function compatibility
@@ -340,21 +339,6 @@ let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 - Prevents inflation attacks: relayer cannot claim `value=10000` if commitment was built with `value=1000`
 - Public signals layout (76 bytes): `commitment[0..32] | value[32..40] | asset_id[40..44] | owner_hash[44..76]`
 
-### Private Link Circuit — `circuits/private_link.circom`
-
-**Purpose:** Prove knowledge of an external wallet address linked to an on-chain commitment, without revealing the address
-
-**Statistics:**
-
-- Constraints: 487
-- Private inputs: 3 (`chain_id_fe`, `address_fe`, `blinding_fe`)
-- Public inputs: 2 (`commitment`, `call_hash_fe`)
-
-**Features:**
-
-- Commitment scheme: `Poseidon(Poseidon(chain_id_fe, address_fe), blinding_fe)`
-- Proof bound to a specific call via `call_hash_sq <== call_hash_fe * call_hash_fe` (quadratic constraint; survives `--O1` simplification, prevents replay across different calls)
-
 ## Security Properties
 
 The following properties are enforced at the circuit level (R1CS constraints). They hold for any honest or adversarial prover — soundness is guaranteed by the Groth16 argument.
@@ -371,8 +355,6 @@ The following properties are enforced at the circuit level (R1CS constraints). T
 
 **Change note integrity in `unshield`** (Constraint 8): when `change_value > 0`, the public `change_commitment` must equal `NoteCommitment(change_value, note_asset_id, change_owner_pubkey, change_blinding)`. When `change_value == 0`, `change_commitment` must be `0`. Any tampered commitment, wrong blinding, wrong owner, or wrong asset is rejected by the R1CS constraints.
 
-**Quadratic call hash in `private_link`**: The quadratic `call_hash_sq` constraint survives linear simplification (`--O1`). Without it, `call_hash_fe` would have a zero coefficient in `gamma_abc`, making the proof replayable across different calls.
-
 **Anti-spam (pallet, two layers)**: `pallet-shielded-pool` rejects any `private_transfer` where all nullifiers are zero (both inputs dummy) — (1) in `validate_unsigned` (tx pool, `InvalidTransaction::Custom(2)`) and (2) in `execute` (`Error::InvalidAmount`). Prevents free Merkle tree inflation without a valid spend.
 
 ## Project Structure
@@ -383,7 +365,6 @@ circuits/
 │   ├── transfer.circom        # 2-in/2-out private transfer (33,687 constraints)
 │   ├── unshield.circom        # Private → public withdrawal (16,903 constraints)
 │   ├── value_proof.circom     # Relay fee value proof, no Merkle/nullifier (~300 constraints)
-│   ├── private_link.circom    # Cross-chain identity link (487 constraints)
 │   ├── note.circom            # NoteCommitment + Nullifier templates
 │   ├── merkle_tree.circom     # MerkleTreeVerifier template
 │   └── poseidon_wrapper.circom

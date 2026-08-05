@@ -20,7 +20,6 @@ orbinum-circuits/
 │   ├── merkle_tree.circom      # Merkle tree component
 │   ├── note.circom             # Note commitment
 │   ├── poseidon_wrapper.circom # Poseidon hash wrapper
-│   ├── private_link.circom     # Private note linking
 │   ├── transfer.circom         # Private transfers (2-in/2-out, supports dummy inputs)
 │   └── unshield.circom         # Asset unshielding
 │
@@ -49,7 +48,6 @@ orbinum-circuits/
 │   ├── note.test.ts
 │   ├── poseidon_compat.test.ts
 │   ├── poseidon_wrapper.test.ts
-│   ├── private_link.test.ts
 │   ├── transfer.test.ts
 │   ├── unshield.test.ts
 │   └── test-utils.ts           # Shared test helpers
@@ -115,7 +113,7 @@ orbinum-circuits/
 **Organization** (flat — all `.circom` files at root level):
 
 - `merkle_tree.circom`, `note.circom`, `poseidon_wrapper.circom`: Reusable components
-- `value_proof.circom`, `transfer.circom`, `unshield.circom`, `private_link.circom`: Application circuits
+- `value_proof.circom`, `transfer.circom`, `unshield.circom`: Application circuits
 
 `transfer.circom` implements a 2-in/2-out scheme with **dummy input support**: when a user has only one note, the second input slot carries `value = 0` and bypasses Merkle membership and nullifier derivation (Zcash Sapling technique). Ownership is proven via `BabyPbk(spending_key)` — no EdDSA signatures required. The dummy nullifier is forced to zero by the circuit (Constraint 9). The pallet rejects transactions where both nullifiers are zero (anti-spam).
 
@@ -151,7 +149,7 @@ orbinum-circuits/
 
 **Test files** (flat structure):
 
-- `value_proof.test.ts`, `transfer.test.ts`, `unshield.test.ts`, `private_link.test.ts`: Application circuit tests
+- `value_proof.test.ts`, `transfer.test.ts`, `unshield.test.ts`: Application circuit tests
 - `merkle_tree.test.ts`, `note.test.ts`, `poseidon_wrapper.test.ts`, `poseidon_compat.test.ts`: Component tests
 - `test-utils.ts`: Shared test helpers
 
@@ -365,9 +363,6 @@ Full flow and rationale: [RELEASE.md](./RELEASE.md).
     "unshield": {
         "merkleDepth": 20,
         "maxAssets": 8
-    },
-    "private_link": {
-        "merkleDepth": 20
     }
 }
 ```
