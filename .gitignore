@@ -23,7 +23,7 @@ verifier.sol
 node_modules/
 
 # Release artifacts
-release/
+/release/
 
 # Environment
 .env

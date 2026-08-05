@@ -9,9 +9,8 @@ Orbinum Circuits is a Zero-Knowledge proof system for privacy-preserving blockch
 ```
 orbinum-circuits/
 ├── .github/                    # GitHub configuration
-│   ├── workflows/              # CI/CD pipelines
-│   │   ├── ci.yml              # Build, test, security audit
-│   │   └── release.yml         # Release & publish
+│   ├── workflows/              # CI pipelines
+│   │   └── ci.yml              # Build, test, security audit (no publishing)
 │   ├── ISSUE_TEMPLATE/         # Issue templates
 │   ├── PULL_REQUEST_TEMPLATE.md
 │   └── PRE_COMMIT.md          # Pre-commit documentation
@@ -188,7 +187,7 @@ orbinum-circuits/
 
 - `index.js` / `index.d.ts`: Package entry point and TypeScript types
 - `package.json.template`: Version-stamped during release
-- Published to npm registry and Cloudflare R2 on each release
+- Published manually via `scripts/release/release.sh` to npm (see [RELEASE.md](./RELEASE.md))
 
 ### 7. **Documentation** (`docs/`)
 
@@ -262,9 +261,9 @@ orbinum-circuits/
 ### Artifact Lifecycle
 
 - **Development**: Generated locally, excluded from git
-- **CI/CD**: Generated during builds, cached
-- **Releases**: Published as GitHub release assets
-- **Integration**: Downloaded by consuming applications
+- **CI**: Rebuilt for validation only — never published (nondeterministic keys)
+- **Releases**: Manual, from the developer's machine (`scripts/release/release.sh`); published as npm package and GitHub release assets. Published artifacts are immutable.
+- **Integration**: Downloaded by consuming applications, sha256-verified against `manifest.json`
 
 ## Security Considerations
 
@@ -324,31 +323,29 @@ pnpm run format
 - **Tests**: All test suites must pass
 - **Commit Message**: Conventional Commits format
 
-## CI/CD Pipeline
+## CI & Releases
 
-### Continuous Integration
+### Continuous Integration (`ci.yml`)
 
-**Triggers**: Push to main, pull requests
-
-**Steps**:
-
-1. Install dependencies
-2. Compile all circuits
-3. Run test suite
-4. Generate benchmarks
-5. Upload artifacts
-
-### Continuous Deployment
-
-**Triggers**: Git tags (v*.*.\*)
+**Triggers**: Push to main/develop, pull requests
 
 **Steps**:
 
-1. Build release artifacts
-2. Run full test suite
-3. Generate documentation
-4. Create GitHub release
-5. Publish artifacts
+1. Install dependencies + circom
+2. Lint (prettier, circom)
+3. Compile all circuits (`build-all` — throwaway keys, validates circuit logic)
+4. Run test suite (includes committed-manifest schema validation)
+
+CI never publishes and never regenerates `manifest.json`: zkey/VK setup is
+nondeterministic, so a CI rebuild would produce VKs that don't match what is
+registered on-chain.
+
+### Release (manual)
+
+No CD pipeline. Releases run locally via `scripts/release/release.sh`, which
+fail-closed verifies every artifact's sha256 against the committed
+`manifest.json` before publishing to npm and GitHub releases.
+Full flow and rationale: [RELEASE.md](./RELEASE.md).
 
 ## Configuration Management
 

@@ -1,3 +1,7 @@
+# CI only compiles and tests. It never publishes and never regenerates
+# manifest.json — zkey/VK generation is nondeterministic, so a CI rebuild would
+# mint VKs that don't match what is published/registered on-chain. Releases are
+# manual: see docs/RELEASE.md.
 name: CI - Build and Test
 
 on:
@@ -34,34 +38,6 @@ jobs:
         sudo mv circom-linux-amd64 /usr/local/bin/circom
         circom --version
     
-    - name: Setup Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
-    
-    - name: Cache Cargo
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-    
-    - name: Install ark-circom
-      run: |
-        cargo install ark-circom --git https://github.com/arkworks-rs/circom-compat || true
-        if command -v ark-circom &> /dev/null; then
-          echo "✓ ark-circom installed successfully"
-          ark-circom --version
-        else
-          echo "⚠ ark-circom installation skipped (non-blocking)"
-        fi
-      continue-on-error: true
-    
     - name: Install dependencies
       run: pnpm install --frozen-lockfile
     
@@ -73,36 +49,13 @@ jobs:
     - name: Build all circuits
       run: pnpm run build-all
 
-    # convert-vk (from groth16-proofs) produces the arkworks VK binary the chain
-    # registers; the manifest hashes it (blake2_256) so vk_hash matches on-chain.
-    - name: Checkout groth16-proofs
-      uses: actions/checkout@v4
-      with:
-        repository: orbinum/groth16-proofs
-        path: groth16-proofs
-
-    - name: Build convert-vk
-      run: cargo build --release --manifest-path groth16-proofs/Cargo.toml --bin convert-vk
-
-    - name: Generate manifest (strict)
-      env:
-        CONVERT_VK_BIN: ${{ github.workspace }}/groth16-proofs/target/release/convert-vk
-      run: MANIFEST_REQUIRE_ALL=true pnpm run manifest
-
+    # Freshly built zkeys/VKs are non-canonical throwaways (nondeterministic
+    # setup) — they validate circuit logic only and are never uploaded.
+    # manifest_vk_hash.test.ts self-skips here (no convert-vk); it runs locally
+    # before a release. manifest_schema.test.ts validates the committed manifest.
     - name: Run tests
       run: pnpm test
-    
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: circuit-artifacts
-        path: |
-          manifest.json
-          build/**/*.wasm
-          keys/**/*.zkey
-          build/**/*.json
-        retention-days: 7
-    
+
   security:
     runs-on: ubuntu-latest
     steps:
