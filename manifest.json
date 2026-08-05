@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "package_name": "orbinum-circuits",
-  "package_version": "0.11.1",
+  "package_version": "0.12.0",
   "generated_at": "2026-07-07T23:50:06.547Z",
   "circuits": {
     "value_proof": {
@@ -113,44 +113,6 @@
               "localPath": "build/unshield.r1cs",
               "bytes": 2611520,
               "sha256": "738ed6a634af4ec8c199fab9d568fae6b9c90b06ec28d373f0dd9a2d5d6c0de5"
-            }
-          }
-        }
-      }
-    },
-    "private_link": {
-      "active_version": 1,
-      "supported_versions": [
-        1
-      ],
-      "versions": {
-        "1": {
-          "version": 1,
-          "vk_hash": "0xa6782788a6b8196f4df4550c9de46e1f3b58d0e22da07cb76a4630922e26e73d",
-          "artifacts": {
-            "wasm": {
-              "file": "private_link.wasm",
-              "localPath": "build/private_link_js/private_link.wasm",
-              "bytes": 1750902,
-              "sha256": "3190bb18260b294c2dccad6f509867a2fdd756707a3c1d10a483551e18796e08"
-            },
-            "zkey": {
-              "file": "private_link_pk.zkey",
-              "localPath": "keys/private_link_pk.zkey",
-              "bytes": 508588,
-              "sha256": "5fa4b21fc1628d5520afdb30f9521ef0e593dbb3321a3b67b9e466e04ce76f16"
-            },
-            "vk_json": {
-              "file": "verification_key_private_link.json",
-              "localPath": "build/verification_key_private_link.json",
-              "bytes": 3110,
-              "sha256": "343445ed77a1a2f805e4c3d2643d5f7cc1f50f4db65da47244f92df0c1c9720b"
-            },
-            "r1cs": {
-              "file": "private_link.r1cs",
-              "localPath": "build/private_link.r1cs",
-              "bytes": 138248,
-              "sha256": "62b38b485b501d0423580c5f217f5cc088d46ead3956097cd893358df7b3fa8c"
             }
           }
         }

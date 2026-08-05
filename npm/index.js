@@ -6,11 +6,11 @@
 
 const { join } = require("path");
 
-const CIRCUITS = ["value_proof", "transfer", "unshield", "private_link"];
+const CIRCUITS = ["value_proof", "transfer", "unshield"];
 
 /**
  * Get paths to all files for a specific circuit
- * @param {string} circuit - Circuit name: 'value_proof', 'transfer', 'unshield', or 'private_link'
+ * @param {string} circuit - Circuit name: 'value_proof', 'transfer', or 'unshield'
  * @returns {Object} Paths to circuit files
  */
 function getCircuitPaths(circuit) {
