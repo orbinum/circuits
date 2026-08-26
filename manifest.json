@@ -2,7 +2,7 @@
   "schema_version": "1.0.0",
   "package_name": "orbinum-circuits",
   "package_version": "0.12.0",
-  "generated_at": "2026-07-07T23:50:06.547Z",
+  "generated_at": "2026-08-26T14:02:52.003Z",
   "circuits": {
     "value_proof": {
       "active_version": 1,
@@ -31,6 +31,12 @@
               "localPath": "build/verification_key_value_proof.json",
               "bytes": 3473,
               "sha256": "88071eb7139ef476291312e48a88f9c0e6fe2ff74e1cf2e8dc46556f2bc25463"
+            },
+            "ark": {
+              "file": "value_proof_pk.ark",
+              "localPath": "keys/value_proof_pk.ark",
+              "bytes": 250832,
+              "sha256": "8504794e9de28f687e6941b699ecfc1b8a16f8b08fb684a6394407d87b74f0ad"
             },
             "r1cs": {
               "file": "value_proof.r1cs",
@@ -70,6 +76,12 @@
               "bytes": 4023,
               "sha256": "8be8a4eb4312e910a482f911186e293a0573018f8dd13735ff8c7acbc3f05072"
             },
+            "ark": {
+              "file": "transfer_pk.ark",
+              "localPath": "keys/transfer_pk.ark",
+              "bytes": 7494288,
+              "sha256": "3dcf9bb2bcc3a638caf4ab84822333a529ba5a26807b39e721833f1866988ba5"
+            },
             "r1cs": {
               "file": "transfer.r1cs",
               "localPath": "build/transfer.r1cs",
@@ -107,6 +119,12 @@
               "localPath": "build/verification_key_unshield.json",
               "bytes": 4029,
               "sha256": "61ea10c9783a3bf671386d27cab39d537aed7b9b4bcd28b9c0a7fb92c6baf86b"
+            },
+            "ark": {
+              "file": "unshield_pk.ark",
+              "localPath": "keys/unshield_pk.ark",
+              "bytes": 3757392,
+              "sha256": "502763b5cbf92e001df92856d7d8f38fde014120c997eefca34b43f2beea6190"
             },
             "r1cs": {
               "file": "unshield.r1cs",
