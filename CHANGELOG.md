@@ -5,6 +5,22 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-08-26
+
+### Fixed
+
+- **`.ark` proving keys regenerated.** All three were a month behind their `.zkey`: the `.zkey` files were restored from npm on 3 Aug (sha256-verified, see 0.11.1) while the `.ark` files were last built on 8 Jul. All three changed on regeneration — `unshield_pk.ark` keeps its size but differs in 1,583,647 bytes (42% of the file) from byte 161 onward, where the circuit-common prefix ends and the ceremony material begins. Proving with the stale key produced proofs that failed verification with nothing to explain why.
+- **`manifest.json` now lists the `ark` artifacts.** It never had them, so `WebArtifactProvider.getCircuitProvingKey()` always threw and the arkworks backend was unreachable from a browser. The generator has supported `ark` since it was written; the manifest was simply generated one day before the `.ark` files existed. **`vk_hash` values are unchanged — nothing to re-register on chain.**
+- **`scripts/build/full-pipeline.sh` no longer skips `.ark` generation.** It gated on `command -v ark-circom`, a binary that does not exist — ark-circom is a library, and the conversion runs through `cargo +nightly -Zscript`. The test never passed, so every build silently skipped phase 3 and suggested `cargo install ark-circom`, which is not a valid command. This is the mechanical cause of both problems above.
+
+### Removed
+
+- **`keys/unshield_v2_pk.ark`**, a stale copy of the v1 key (same sha256) whose `.zkey` differs. Same circuit, different phase-2 ceremony, so anyone using it would generate proofs that fail against the v2 VK with no visible error. It was never in the manifest, `pkg/`, or a published package.
+
+### Added
+
+- `scripts/utils/make-fixture.ts` — emits a deterministic input, `.wtns` and decimal witness for the unshield circuit, reusing the defaults from `test/unshield.test.ts`. No `.wtns` shipped anywhere before, so `bench-groth16` could not run and no external prover could be differential-tested. It asserts the witness layout it produces, because that layout is an unchecked contract with the proving key and a mismatch surfaces as a proof that verifies against nothing.
+
 ## [0.12.0] - 2026-08-05
 
 ### Removed
