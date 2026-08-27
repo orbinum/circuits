@@ -26,6 +26,7 @@ import { expect } from "chai";
 
 import { MANIFEST_PATH, ROOT, artifacts } from "../../scripts/lib/paths";
 import { readManifest, type Manifest } from "../../scripts/lib/manifest";
+import { packVerifyingKeyBin } from "../../scripts/lib/vk-hash";
 
 /** Run generate-manifest with the given environment. */
 function generate(env: NodeJS.ProcessEnv): { ok: boolean; output: string } {
@@ -54,6 +55,19 @@ describe("Manifest rotation", function () {
     let original: string | null = null;
 
     before(function () {
+        // generate-manifest computes a vk_hash for every version, which shells out
+        // to pack-verifying-key. Without it the script dies before writing
+        // anything, so there is no rotation to assert on.
+        if (!fs.existsSync(packVerifyingKeyBin())) {
+            if (process.env.CIRCUITS_REQUIRE_ARTIFACTS) {
+                throw new Error(
+                    "pack-verifying-key is required to exercise rotation and " +
+                        "CIRCUITS_REQUIRE_ARTIFACTS is set — set PACK_VERIFYING_KEY_BIN"
+                );
+            }
+            return this.skip();
+        }
+
         const v1 = artifacts(CIRCUIT);
         const v2 = artifacts(CIRCUIT, `_v${VERSION}`);
 
