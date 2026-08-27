@@ -2,7 +2,7 @@
  * Structural validation of the COMMITTED manifest.json.
  *
  * Releases are manual (docs/RELEASE.md) and CI never regenerates the manifest,
- * so this is the check CI can always run without artifacts or convert-vk: the
+ * so this is the check CI can always run without artifacts or pack-verifying-key: the
  * committed manifest is well-formed, version-consistent with package.json, and
  * safe to serve from a flat directory (npm pkg/, R2).
  */

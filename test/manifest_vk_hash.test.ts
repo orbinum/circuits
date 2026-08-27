@@ -18,8 +18,9 @@ import { blake2b } from "@noble/hashes/blake2.js";
 import { expect } from "chai";
 
 const ROOT = path.resolve(__dirname, "..");
-const CONVERT_VK_BIN =
-    process.env.CONVERT_VK_BIN ?? path.resolve(ROOT, "../groth16-proofs/target/release/convert-vk");
+const PACK_VERIFYING_KEY_BIN =
+    process.env.PACK_VERIFYING_KEY_BIN ??
+    path.resolve(ROOT, "../groth16-proofs/target/release/pack-verifying-key");
 
 const CIRCUITS = ["value_proof", "transfer", "unshield"] as const;
 
@@ -28,7 +29,7 @@ function canonicalVkHash(vkJsonPath: string): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vkhash-test-"));
     try {
         const bin = path.join(dir, "vk.bin");
-        execFileSync(CONVERT_VK_BIN, [vkJsonPath, bin], { stdio: "pipe" });
+        execFileSync(PACK_VERIFYING_KEY_BIN, [vkJsonPath, bin], { stdio: "pipe" });
         const digest = blake2b(new Uint8Array(fs.readFileSync(bin)), { dkLen: 32 });
         return `0x${Buffer.from(digest).toString("hex")}`;
     } finally {
@@ -47,7 +48,7 @@ describe("manifest vk_hash is the canonical on-chain blake2_256", () => {
 
     const manifestPath = path.join(ROOT, "manifest.json");
     const hasManifest = fs.existsSync(manifestPath);
-    const hasBin = fs.existsSync(CONVERT_VK_BIN);
+    const hasBin = fs.existsSync(PACK_VERIFYING_KEY_BIN);
 
     /** vk.json for a version: the suffixed file if present, else the base (single-version) file. */
     function vkJsonForVersion(circuit: string, version: number): string {
@@ -59,7 +60,7 @@ describe("manifest vk_hash is the canonical on-chain blake2_256", () => {
     for (const circuit of CIRCUITS) {
         it(`${circuit}: every version's manifest vk_hash == blake2_256(arkworks VK)`, function () {
             if (!hasManifest || !hasBin) {
-                this.skip(); // needs a built manifest + convert-vk binary
+                this.skip(); // needs a built manifest + pack-verifying-key binary
                 return;
             }
             const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
