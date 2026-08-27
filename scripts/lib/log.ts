@@ -45,3 +45,17 @@ export function die(msg: string): never {
     error(msg);
     process.exit(1);
 }
+
+/**
+ * Run `main`, reporting a thrown message rather than a stack trace.
+ *
+ * These are command-line tools: a mistyped circuit name should print what the
+ * valid names are, not twenty frames of ts-node internals.
+ */
+export function cli(main: () => void): void {
+    try {
+        main();
+    } catch (err) {
+        die(err instanceof Error ? err.message : String(err));
+    }
+}

@@ -21,7 +21,7 @@
 import fs from "fs";
 
 import { BUILD_DIR, artifacts, circuitSource, rel } from "../lib/paths";
-import { banner, die, info, ok, step, yellow } from "../lib/log";
+import { cli, banner, die, info, ok, step, yellow } from "../lib/log";
 import { parseCircuit, scriptName } from "../lib/circuits";
 import { requireTool, run, tryRun } from "../lib/run";
 
@@ -81,4 +81,4 @@ function main(): void {
     info(`  next: pnpm run setup ${scriptName(circuit)}`);
 }
 
-main();
+cli(main);

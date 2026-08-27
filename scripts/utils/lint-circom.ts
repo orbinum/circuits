@@ -24,7 +24,7 @@ import os from "os";
 import path from "path";
 
 import { CIRCUITS_DIR, ROOT, rel } from "../lib/paths";
-import { die, green, info, ok, red, warn, yellow } from "../lib/log";
+import { cli, die, green, info, ok, red, warn, yellow } from "../lib/log";
 import { has, tryRun } from "../lib/run";
 
 interface Finding {
@@ -164,4 +164,4 @@ function main(): void {
     );
 }
 
-main();
+cli(main);

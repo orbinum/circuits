@@ -10,7 +10,7 @@
  *   ts-node scripts/build-all.ts [--allow-skip-ark]
  */
 import { CIRCUITS } from "./lib/circuits";
-import { banner, info, ok } from "./lib/log";
+import { cli, banner, info, ok } from "./lib/log";
 import { run } from "./lib/run";
 
 function main(): void {
@@ -29,4 +29,4 @@ function main(): void {
     ok(`built ${CIRCUITS.length} circuits`);
 }
 
-main();
+cli(main);

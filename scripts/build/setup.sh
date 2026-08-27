@@ -35,7 +35,7 @@ SETUP_BEACON_ITERS="${SETUP_BEACON_ITERS:-10}"
 
 if [ ! -f "$R1CS_FILE" ]; then
     echo -e "${RED}Error: R1CS file not found: $R1CS_FILE${NC}"
-    echo "Please compile the circuit first: npm run compile:${CIRCUIT_NAME}"
+    echo "Please compile the circuit first: pnpm run compile ${CIRCUIT_NAME}"
     exit 1
 fi
 
@@ -156,6 +156,6 @@ echo -e "  This is a ${RED}development setup${NC} for testing purposes only."
 echo -e "  Production requires a multi-party ceremony (50+ contributors)."
 echo ""
 echo -e "${BLUE}Next Steps:${NC}"
-echo -e "  ${YELLOW}1.${NC} Test proof generation: npm run prove:${CIRCUIT_NAME}"
-echo -e "  ${YELLOW}2.${NC} Verify proof: npm run verify:${CIRCUIT_NAME}"
+echo -e "  ${YELLOW}1.${NC} Pack the proving key: pnpm run convert ${CIRCUIT_NAME}"
+echo -e "  ${YELLOW}2.${NC} Regenerate the manifest: pnpm run manifest"
 echo ""

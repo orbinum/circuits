@@ -21,7 +21,7 @@
  * Usage:
  *   ts-node scripts/build/full-pipeline.ts <circuit> [--allow-skip-ark]
  */
-import { banner, die, info, ok, warn } from "../lib/log";
+import { cli, banner, die, info, ok, warn } from "../lib/log";
 import { has, run } from "../lib/run";
 import { parseCircuit } from "../lib/circuits";
 
@@ -54,11 +54,11 @@ function main(): void {
         }
         warn("cargo not found — skipping .ark generation because --allow-skip-ark was passed");
     } else {
-        run("bash", ["scripts/build/pack-proving-key.sh", circuit]);
+        run("npx", ["ts-node", "scripts/build/pack-proving-key.ts", circuit]);
     }
 
     info("");
     ok(`${circuit} built`);
 }
 
-main();
+cli(main);

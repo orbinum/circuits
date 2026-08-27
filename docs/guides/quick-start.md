@@ -86,7 +86,7 @@ For more control, build circuits individually:
 
 ```bash
 # Compile value_proof circuit
-pnpm run compile:value-proof
+pnpm run compile value_proof
 
 # Output:
 # - build/value_proof.r1cs
@@ -98,7 +98,7 @@ pnpm run compile:value-proof
 
 ```bash
 # Generate proving and verifying keys
-pnpm run setup:value-proof
+pnpm run setup value_proof
 
 # Output:
 # - keys/value_proof_pk.zkey

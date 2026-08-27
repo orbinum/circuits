@@ -295,7 +295,7 @@ async function main() {
     const wasmPath = path.join(ROOT, "build", `${circuit}_js`, `${circuit}.wasm`);
     if (!fs.existsSync(wasmPath)) {
         throw new Error(
-            `Circuit wasm not found: ${wasmPath}. Run 'pnpm run compile:${circuit}' first.`
+            `Circuit wasm not found: ${wasmPath}. Run 'pnpm run compile ${circuit}' first.`
         );
     }
 

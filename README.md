@@ -73,7 +73,7 @@ ROTATE_CIRCUIT=transfer ROTATE_VERSION=2 pnpm run manifest
 A new version's key material must genuinely differ from the old one. The trusted setup is parametrized for this:
 
 ```bash
-SETUP_ENTROPY=... SETUP_BEACON=... SETUP_BEACON_ITERS=... pnpm run setup:transfer
+SETUP_ENTROPY=... SETUP_BEACON=... SETUP_BEACON_ITERS=... pnpm run setup transfer
 ```
 
 Defaults reproduce the original v1 setup byte-for-byte.
@@ -170,7 +170,7 @@ If you need to generate the `.ark` file yourself:
   keys/value_proof_pk.ark
 
 # Or via pnpm
-pnpm run convert:value-proof
+pnpm run convert value_proof
 ```
 
 ### Download Release Artifacts
@@ -228,16 +228,16 @@ pnpm run build-all
 
 ```bash
 # Step 1: Compile circuit
-pnpm run compile:value-proof
+pnpm run compile value_proof
 
 # Step 2: Generate keys (requires compilation)
-pnpm run setup:value-proof
+pnpm run setup value_proof
 
 # Step 3: Convert to compatible format (optional)
-pnpm run convert:value-proof
+pnpm run convert value_proof
 
 # Or run all steps together
-pnpm run full-build:value-proof
+pnpm run build:circuit value_proof
 ```
 
 ### Generate WASM for Rust (Witness Calculator)

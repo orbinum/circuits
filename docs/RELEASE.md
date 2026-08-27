@@ -30,7 +30,7 @@ overwrite.**
     run this first — the release ships the exact published bytes for unchanged
     circuits.
 
-2. **Build only what changed**: `pnpm run full-build:<name>`. Never rebuild a
+2. **Build only what changed**: `pnpm run build:circuit <name>`. Never rebuild a
    circuit whose on-chain VK must stay stable. If a circuit's logic changed,
    that is a rotation — build with version-suffixed artifacts (see
    `scripts/build/setup.sh` env vars `SETUP_ENTROPY`/`SETUP_BEACON` for a fresh
@@ -45,7 +45,7 @@ overwrite.**
       `MANIFEST_REQUIRE_ALL=true pnpm run manifest`. This is only safe when every
       local artifact is canonical (step 1) — the generator recomputes hashes from
       local files. Note: `.ark` files convert deterministically from zkeys
-      (`pnpm run convert:<name>`), so regenerating them from canonical zkeys is safe
+      (`pnpm run convert <name>`), so regenerating them from canonical zkeys is safe
       and adds their manifest entries.
 
 5. **Verify locally**:
