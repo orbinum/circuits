@@ -51,7 +51,7 @@ jobs:
 
     # Freshly built zkeys/VKs are non-canonical throwaways (nondeterministic
     # setup) — they validate circuit logic only and are never uploaded.
-    # manifest_vk_hash.test.ts self-skips here (no convert-vk); it runs locally
+    # manifest_vk_hash.test.ts self-skips here (no pack-verifying-key); it runs locally
     # before a release. manifest_schema.test.ts validates the committed manifest.
     - name: Run tests
       run: pnpm test

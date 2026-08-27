@@ -5,6 +5,26 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-08-26
+
+### Fixed
+
+- **The `.ark` artifacts are now usable for proving.** 0.13.0 shipped them for the first time, but a `.ark` v1 holds only the proving key — proving a Circom circuit also needs the constraint matrices, which `read_zkey` returns alongside the key and the old converter discarded. Every `.ark` this package has published, including 0.13.0's, could be downloaded and verified and still not produce a proof.
+
+    The new `.ark` v2 carries both, behind an `ORBARKV2` magic so a v1 file is rejected by name rather than failing deep in deserialization. Only the A and B matrices are stored: `CircomReduction` derives C from their evaluations. Sizes are ~58% of the corresponding `.zkey` — unshield 4.83 MB against 8.25 MB — so the arkworks path still downloads a third less than the snarkjs one.
+
+    **`vk_hash` values are unchanged — nothing to re-register on chain.**
+
+### Changed
+
+- `scripts/build/convert-to-ark.sh` is now `scripts/build/pack-proving-key.sh`, matching the binary it drives (`convert-ark-v2` became `pack-proving-key` in groth16-proofs 3.1.0 — the old names read as variants of one tool when they are opposite ends of a trusted setup). `CONVERT_VK_BIN` becomes `PACK_VERIFYING_KEY_BIN`.
+- The conversion script calls `pack-proving-key` from the sibling `groth16-proofs` checkout instead of running its own `cargo -Zscript`. The artifact format lives with the code that reads it, so the writer and the reader cannot drift apart. Override the location with `GROTH16_PROOFS_DIR` or `CONVERT_ARK_BIN`.
+- `scripts/build/convert-to-ark.rs` removed — superseded by the converter in `groth16-proofs`.
+
+### Requires
+
+- `@orbinum/groth16-proofs` 3.1.0 or later to read these artifacts. Earlier versions expect a v1 file and will reject the magic.
+
 ## [0.13.0] - 2026-08-26
 
 ### Fixed
