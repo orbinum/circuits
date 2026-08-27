@@ -2,8 +2,9 @@ import path from "path";
 import fs from "fs";
 import { expect } from "chai";
 import { wasm as wasm_tester } from "circom_tester";
-import { buildPoseidon } from "circomlibjs";
 import type { WasmTester } from "circom_tester";
+
+import { NoteCrypto } from "./helpers/circuit-inputs";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -23,14 +24,12 @@ describe("ValueProof Circuit", function () {
     const precompiledWasm = path.join(outputDir, "value_proof_js", "value_proof.wasm");
 
     let circuit: WasmTester;
-    let poseidon: any;
-    let F: any;
+    let note: NoteCrypto;
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
 
     before(async function () {
-        poseidon = await buildPoseidon();
-        F = poseidon.F;
+        note = await NoteCrypto.build();
 
         const recompile = !fs.existsSync(precompiledWasm);
         circuit = await wasm_tester(circuitPath, { output: outputDir, recompile });
@@ -38,20 +37,17 @@ describe("ValueProof Circuit", function () {
 
     // ── Pure helpers ───────────────────────────────────────────────────────────
 
-    /** Poseidon(value, asset_id, owner_pubkey, blinding) → commitment (bigint). */
-    function computeCommitment(
+    // The note primitives live in ./helpers/circuit-inputs, shared with the
+    // other circuit suites and with make-fixture.ts. These thin aliases keep
+    // the cases below reading the way they did.
+    const computeCommitment = (
         value: bigint,
         assetId: bigint,
         ownerPubkey: bigint,
         blinding: bigint
-    ): bigint {
-        return F.toObject(poseidon([value, assetId, ownerPubkey, blinding]));
-    }
+    ): bigint => note.commitment(value, assetId, ownerPubkey, blinding);
 
-    /** Poseidon(owner_pubkey) → owner_hash (bigint). */
-    function computeOwnerHash(ownerPubkey: bigint): bigint {
-        return F.toObject(poseidon([ownerPubkey]));
-    }
+    const computeOwnerHash = (ownerPubkey: bigint): bigint => note.ownerHash(ownerPubkey);
 
     /** Build a valid circuit input for the given parameters. */
     function buildInput(

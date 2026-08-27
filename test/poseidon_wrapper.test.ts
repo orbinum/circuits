@@ -310,8 +310,8 @@ describe("Poseidon Wrapper Circuit Components", function () {
         });
 
         it("should produce different hashes when inputs are permuted", async () => {
-            const baseInputs = ["1", "2", "3", "4"];
-
+            // The first entry is the identity permutation, so the set below
+            // covers the base ordering too.
             const permutations = [
                 ["1", "2", "3", "4"],
                 ["4", "3", "2", "1"],

@@ -35,15 +35,10 @@
  */
 import fs from "fs";
 import path from "path";
-import { buildPoseidon, buildBabyjub } from "circomlibjs";
-
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+import { NoteCrypto, TREE_DEPTH } from "../../test/helpers/circuit-inputs";
 const snarkjs = require("snarkjs");
 
 const ROOT = path.resolve(__dirname, "..", "..");
-
-/** Matches `Unshield(20)` in circuits/unshield.circom. */
-const TREE_DEPTH = 20;
 
 /**
  * A public signal: either a plain input name, or one element of an array input,
@@ -136,25 +131,20 @@ const DEFAULTS = {
 };
 
 async function buildUnshieldInput(): Promise<Built> {
-    const poseidon = await buildPoseidon();
-    const babyJub = await buildBabyjub();
-    const F = poseidon.F;
-
-    const commit = (value: bigint, assetId: bigint, owner: bigint, blinding: bigint): bigint =>
-        F.toObject(poseidon([value, assetId, owner, blinding]));
-
+    const note = await NoteCrypto.build();
     const d = DEFAULTS;
 
-    // Owner pubkey — matches the circuit's BabyPbk(spending_key).Ax
-    const owner = F.toObject(babyJub.mulPointEscalar(babyJub.Base8, d.spendingKey)[0]);
-    const commitment = commit(d.noteValue, d.assetId, owner, d.blinding);
-    const nullifier = F.toObject(poseidon([commitment, d.spendingKey]));
+    const owner = note.ownerPubkey(d.spendingKey);
+    const commitment = note.commitment(d.noteValue, d.assetId, owner, d.blinding);
+    const nullifier = note.nullifier(commitment, d.spendingKey);
 
-    const { root, pathElements, pathIndices } = singleLeafTree(poseidon, commitment, d.leafIndex);
+    const { root, pathElements, pathIndices } = note.singleLeafTree(commitment, d.leafIndex);
 
     // change_commitment is 0 for a total unshield — constraint 8b requires it.
     const changeCommitment =
-        d.changeValue > 0n ? commit(d.changeValue, d.assetId, owner, d.changeBlinding) : 0n;
+        d.changeValue > 0n
+            ? note.commitment(d.changeValue, d.assetId, owner, d.changeBlinding)
+            : 0n;
 
     return {
         input: {
@@ -218,65 +208,21 @@ const VALUE_PROOF_DEFAULTS = {
     assetId: 0n,
 };
 
-/**
- * A Merkle root and path for a tree holding a single leaf at `leafIndex`.
- *
- * Every sibling is the empty value, so the path is all zeroes — but written as
- * the general loop so a non-zero index still works.
- */
-function singleLeafTree(
-    poseidon: any,
-    leaf: bigint,
-    leafIndex: number
-): { root: bigint; pathElements: bigint[]; pathIndices: number[] } {
-    const F = poseidon.F;
-    const pathElements: bigint[] = [];
-    const pathIndices: number[] = [];
-    let level = new Map<number, bigint>([[leafIndex, leaf]]);
-
-    for (let depth = 0; depth < TREE_DEPTH; depth++) {
-        const nodeIdx = leafIndex >> depth;
-        const isRight = nodeIdx % 2 === 1;
-        pathIndices.push(isRight ? 1 : 0);
-        pathElements.push(level.get(isRight ? nodeIdx - 1 : nodeIdx + 1) ?? 0n);
-
-        const next = new Map<number, bigint>();
-        for (const [pos] of level) {
-            const parent = pos >> 1;
-            if (next.has(parent)) continue;
-            const l = level.get(parent * 2) ?? 0n;
-            const r = level.get(parent * 2 + 1) ?? 0n;
-            next.set(parent, F.toObject(poseidon([l, r])));
-        }
-        level = next;
-    }
-    return { root: level.get(0) ?? 0n, pathElements, pathIndices };
-}
-
 async function buildTransferInput(): Promise<Built> {
-    const poseidon = await buildPoseidon();
-    const babyJub = await buildBabyjub();
-    const F = poseidon.F;
+    const note = await NoteCrypto.build();
     const d = TRANSFER_DEFAULTS;
 
-    const commit = (value: bigint, assetId: bigint, owner: bigint, blinding: bigint): bigint =>
-        F.toObject(poseidon([value, assetId, owner, blinding]));
-
     // Slot 0 is a real note; slot 1 is a dummy (value 0).
-    const owner = F.toObject(babyJub.mulPointEscalar(babyJub.Base8, d.spendingKey)[0]);
-    const inputCommitment = commit(d.inputValue, d.assetId, owner, d.blinding);
-    const nullifier = F.toObject(poseidon([inputCommitment, d.spendingKey]));
+    const owner = note.ownerPubkey(d.spendingKey);
+    const inputCommitment = note.commitment(d.inputValue, d.assetId, owner, d.blinding);
+    const nullifier = note.nullifier(inputCommitment, d.spendingKey);
 
-    const { root, pathElements, pathIndices } = singleLeafTree(
-        poseidon,
-        inputCommitment,
-        d.leafIndex
-    );
+    const { root, pathElements, pathIndices } = note.singleLeafTree(inputCommitment, d.leafIndex);
 
     // Constraint 5: sum(inputs) == sum(outputs) + fee.
     const outputValues = [d.inputValue - d.fee, 0n];
     const commitments = [0, 1].map((i) =>
-        commit(outputValues[i], d.assetId, d.outputOwners[i], d.outputBlindings[i])
+        note.commitment(outputValues[i], d.assetId, d.outputOwners[i], d.outputBlindings[i])
     );
 
     // A dummy input's nullifier is forced to zero by the circuit.
@@ -307,12 +253,11 @@ async function buildTransferInput(): Promise<Built> {
 }
 
 async function buildValueProofInput(): Promise<Built> {
-    const poseidon = await buildPoseidon();
-    const F = poseidon.F;
+    const note = await NoteCrypto.build();
     const d = VALUE_PROOF_DEFAULTS;
 
-    const commitment = F.toObject(poseidon([d.value, d.assetId, d.ownerPubkey, d.blinding]));
-    const ownerHash = F.toObject(poseidon([d.ownerPubkey]));
+    const commitment = note.commitment(d.value, d.assetId, d.ownerPubkey, d.blinding);
+    const ownerHash = note.ownerHash(d.ownerPubkey);
 
     return {
         input: {
