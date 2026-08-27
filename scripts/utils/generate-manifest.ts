@@ -59,23 +59,24 @@ function sha256Hex(data: Buffer): string {
 
 // snarkjs VK JSON → arkworks compressed binary. Same conversion the node's VK
 // registration runs, so its output is exactly the `key_data` stored on-chain.
-const CONVERT_VK_BIN =
-    process.env.CONVERT_VK_BIN ?? path.resolve(ROOT, "../groth16-proofs/target/release/convert-vk");
+const PACK_VERIFYING_KEY_BIN =
+    process.env.PACK_VERIFYING_KEY_BIN ??
+    path.resolve(ROOT, "../groth16-proofs/target/release/pack-verifying-key");
 
 // Canonical VK hash = blake2_256 of the arkworks binary, identical to the chain's
 // sp_io::hashing::blake2_256(key_data). Hashing vk.json instead would be a different
-// hash of different bytes and never match the chain, so it fails closed if convert-vk
+// hash of different bytes and never match the chain, so it fails closed if pack-verifying-key
 // is missing rather than falling back.
 function computeVkHash(vkJsonPath: string): string {
-    if (!fs.existsSync(CONVERT_VK_BIN)) {
+    if (!fs.existsSync(PACK_VERIFYING_KEY_BIN)) {
         throw new Error(
-            `convert-vk binary not found at ${CONVERT_VK_BIN}. ` +
-                `Build it (cargo build --release -p groth16-proofs --bin convert-vk) or set CONVERT_VK_BIN.`
+            `pack-verifying-key binary not found at ${PACK_VERIFYING_KEY_BIN}. ` +
+                `Build it (cargo build --release -p groth16-proofs --bin pack-verifying-key) or set PACK_VERIFYING_KEY_BIN.`
         );
     }
     const binPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "vkhash-")), "vk.bin");
     try {
-        execFileSync(CONVERT_VK_BIN, [vkJsonPath, binPath], { stdio: "pipe" });
+        execFileSync(PACK_VERIFYING_KEY_BIN, [vkJsonPath, binPath], { stdio: "pipe" });
         const bin = fs.readFileSync(binPath);
         const digest = blake2b(new Uint8Array(bin), { dkLen: 32 });
         return `0x${Buffer.from(digest).toString("hex")}`;
