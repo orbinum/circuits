@@ -35,88 +35,22 @@
  */
 import fs from "fs";
 import path from "path";
-import { buildPoseidon, buildBabyjub } from "circomlibjs";
-
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+import {
+    SIGNAL_LAYOUT,
+    parseCircuit,
+    signalName,
+    signalValue,
+    type CircuitName,
+} from "../lib/circuits";
+import { die, info, ok } from "../lib/log";
+import { NoteCrypto, TREE_DEPTH } from "../lib/note";
+import { artifacts, fixtures, rel } from "../lib/paths";
 const snarkjs = require("snarkjs");
-
-const ROOT = path.resolve(__dirname, "..", "..");
-
-/** Matches `Unshield(20)` in circuits/unshield.circom. */
-const TREE_DEPTH = 20;
 
 /**
  * A public signal: either a plain input name, or one element of an array input,
  * or a circuit output that has no corresponding input at all.
  */
-type Signal =
-    | { kind: "input"; name: string }
-    | { kind: "element"; name: string; index: number }
-    | { kind: "output"; name: string };
-
-const input = (name: string): Signal => ({ kind: "input", name });
-const element = (name: string, index: number): Signal => ({ kind: "element", name, index });
-const output = (name: string): Signal => ({ kind: "output", name });
-
-/**
- * The public-signal layout of each circuit, in witness order.
- *
- * The order is load-bearing: the witness carries public signals at indices
- * 1..=n in exactly this sequence, and a prover that assumes a different one
- * produces a proof that fails verification with no error to explain it.
- */
-const PUBLIC_SIGNALS: Record<string, readonly Signal[]> = {
-    unshield: [
-        input("merkle_root"),
-        input("nullifier"),
-        input("amount"),
-        input("recipient"),
-        input("asset_id"),
-        input("fee"),
-        input("change_commitment"),
-    ],
-    transfer: [
-        input("merkle_root"),
-        element("nullifiers", 0),
-        element("nullifiers", 1),
-        element("commitments", 0),
-        element("commitments", 1),
-        input("asset_id"),
-        input("fee"),
-    ],
-    // `owner_hash` is a `signal output`, and Circom places outputs before
-    // public inputs in the witness. Asserted against the real witness below,
-    // because the circuit's own header comment lists it last.
-    value_proof: [output("owner_hash"), input("commitment"), input("value"), input("asset_id")],
-};
-
-/** The value a signal should hold, given the circuit input it was built from. */
-function signalValue(
-    signal: Signal,
-    input: Record<string, unknown>,
-    outputs: Record<string, bigint>
-): bigint {
-    switch (signal.kind) {
-        case "input":
-            return BigInt(input[signal.name] as string);
-        case "element":
-            return BigInt((input[signal.name] as string[])[signal.index]);
-        case "output": {
-            const v = outputs[signal.name];
-            if (v === undefined) {
-                throw new Error(
-                    `builder did not report the expected value of output "${signal.name}"`
-                );
-            }
-            return v;
-        }
-    }
-}
-
-/** A human-readable name for a signal, for assertion messages. */
-function signalName(s: Signal): string {
-    return s.kind === "element" ? `${s.name}[${s.index}]` : s.name;
-}
 
 /**
  * The defaults from `test/unshield.test.ts`. Reproduced rather than imported
@@ -136,25 +70,20 @@ const DEFAULTS = {
 };
 
 async function buildUnshieldInput(): Promise<Built> {
-    const poseidon = await buildPoseidon();
-    const babyJub = await buildBabyjub();
-    const F = poseidon.F;
-
-    const commit = (value: bigint, assetId: bigint, owner: bigint, blinding: bigint): bigint =>
-        F.toObject(poseidon([value, assetId, owner, blinding]));
-
+    const note = await NoteCrypto.build();
     const d = DEFAULTS;
 
-    // Owner pubkey — matches the circuit's BabyPbk(spending_key).Ax
-    const owner = F.toObject(babyJub.mulPointEscalar(babyJub.Base8, d.spendingKey)[0]);
-    const commitment = commit(d.noteValue, d.assetId, owner, d.blinding);
-    const nullifier = F.toObject(poseidon([commitment, d.spendingKey]));
+    const owner = note.ownerPubkey(d.spendingKey);
+    const commitment = note.commitment(d.noteValue, d.assetId, owner, d.blinding);
+    const nullifier = note.nullifier(commitment, d.spendingKey);
 
-    const { root, pathElements, pathIndices } = singleLeafTree(poseidon, commitment, d.leafIndex);
+    const { root, pathElements, pathIndices } = note.singleLeafTree(commitment, d.leafIndex);
 
     // change_commitment is 0 for a total unshield — constraint 8b requires it.
     const changeCommitment =
-        d.changeValue > 0n ? commit(d.changeValue, d.assetId, owner, d.changeBlinding) : 0n;
+        d.changeValue > 0n
+            ? note.commitment(d.changeValue, d.assetId, owner, d.changeBlinding)
+            : 0n;
 
     return {
         input: {
@@ -218,65 +147,21 @@ const VALUE_PROOF_DEFAULTS = {
     assetId: 0n,
 };
 
-/**
- * A Merkle root and path for a tree holding a single leaf at `leafIndex`.
- *
- * Every sibling is the empty value, so the path is all zeroes — but written as
- * the general loop so a non-zero index still works.
- */
-function singleLeafTree(
-    poseidon: any,
-    leaf: bigint,
-    leafIndex: number
-): { root: bigint; pathElements: bigint[]; pathIndices: number[] } {
-    const F = poseidon.F;
-    const pathElements: bigint[] = [];
-    const pathIndices: number[] = [];
-    let level = new Map<number, bigint>([[leafIndex, leaf]]);
-
-    for (let depth = 0; depth < TREE_DEPTH; depth++) {
-        const nodeIdx = leafIndex >> depth;
-        const isRight = nodeIdx % 2 === 1;
-        pathIndices.push(isRight ? 1 : 0);
-        pathElements.push(level.get(isRight ? nodeIdx - 1 : nodeIdx + 1) ?? 0n);
-
-        const next = new Map<number, bigint>();
-        for (const [pos] of level) {
-            const parent = pos >> 1;
-            if (next.has(parent)) continue;
-            const l = level.get(parent * 2) ?? 0n;
-            const r = level.get(parent * 2 + 1) ?? 0n;
-            next.set(parent, F.toObject(poseidon([l, r])));
-        }
-        level = next;
-    }
-    return { root: level.get(0) ?? 0n, pathElements, pathIndices };
-}
-
 async function buildTransferInput(): Promise<Built> {
-    const poseidon = await buildPoseidon();
-    const babyJub = await buildBabyjub();
-    const F = poseidon.F;
+    const note = await NoteCrypto.build();
     const d = TRANSFER_DEFAULTS;
 
-    const commit = (value: bigint, assetId: bigint, owner: bigint, blinding: bigint): bigint =>
-        F.toObject(poseidon([value, assetId, owner, blinding]));
-
     // Slot 0 is a real note; slot 1 is a dummy (value 0).
-    const owner = F.toObject(babyJub.mulPointEscalar(babyJub.Base8, d.spendingKey)[0]);
-    const inputCommitment = commit(d.inputValue, d.assetId, owner, d.blinding);
-    const nullifier = F.toObject(poseidon([inputCommitment, d.spendingKey]));
+    const owner = note.ownerPubkey(d.spendingKey);
+    const inputCommitment = note.commitment(d.inputValue, d.assetId, owner, d.blinding);
+    const nullifier = note.nullifier(inputCommitment, d.spendingKey);
 
-    const { root, pathElements, pathIndices } = singleLeafTree(
-        poseidon,
-        inputCommitment,
-        d.leafIndex
-    );
+    const { root, pathElements, pathIndices } = note.singleLeafTree(inputCommitment, d.leafIndex);
 
     // Constraint 5: sum(inputs) == sum(outputs) + fee.
     const outputValues = [d.inputValue - d.fee, 0n];
     const commitments = [0, 1].map((i) =>
-        commit(outputValues[i], d.assetId, d.outputOwners[i], d.outputBlindings[i])
+        note.commitment(outputValues[i], d.assetId, d.outputOwners[i], d.outputBlindings[i])
     );
 
     // A dummy input's nullifier is forced to zero by the circuit.
@@ -307,12 +192,11 @@ async function buildTransferInput(): Promise<Built> {
 }
 
 async function buildValueProofInput(): Promise<Built> {
-    const poseidon = await buildPoseidon();
-    const F = poseidon.F;
+    const note = await NoteCrypto.build();
     const d = VALUE_PROOF_DEFAULTS;
 
-    const commitment = F.toObject(poseidon([d.value, d.assetId, d.ownerPubkey, d.blinding]));
-    const ownerHash = F.toObject(poseidon([d.ownerPubkey]));
+    const commitment = note.commitment(d.value, d.assetId, d.ownerPubkey, d.blinding);
+    const ownerHash = note.ownerHash(d.ownerPubkey);
 
     return {
         input: {
@@ -337,32 +221,22 @@ const BUILDERS: Record<string, () => Promise<Built>> = {
 };
 
 async function main() {
-    const circuit = process.argv[2] ?? "unshield";
-    const outDir = path.resolve(ROOT, process.argv[3] ?? "fixtures");
+    const circuit: CircuitName = parseCircuit(process.argv[2] ?? "unshield");
 
     const build = BUILDERS[circuit];
     if (!build) {
-        throw new Error(
-            `No fixture builder for "${circuit}". Available: ${Object.keys(BUILDERS).join(", ")}`
-        );
+        die(`no fixture builder for "${circuit}"`);
     }
 
-    const wasmPath = path.join(ROOT, "build", `${circuit}_js`, `${circuit}.wasm`);
+    const wasmPath = artifacts(circuit).wasm;
     if (!fs.existsSync(wasmPath)) {
-        throw new Error(
-            `Circuit wasm not found: ${wasmPath}. Run 'pnpm run compile:${circuit}' first.`
-        );
+        die(`circuit wasm not found: ${rel(wasmPath)}. Run 'pnpm run compile ${circuit}' first.`);
     }
 
-    fs.mkdirSync(outDir, { recursive: true });
-    const inputPath = path.join(outDir, `${circuit}.input.json`);
-    const wtnsPath = path.join(outDir, `${circuit}.wtns`);
-    const decimalPath = path.join(outDir, `${circuit}.witness.json`);
+    const { input: inputPath, wtns: wtnsPath, witnessJson: decimalPath } = fixtures(circuit);
+    fs.mkdirSync(path.dirname(inputPath), { recursive: true });
 
-    const signals = PUBLIC_SIGNALS[circuit];
-    if (!signals) {
-        throw new Error(`No public-signal layout for "${circuit}"`);
-    }
+    const signals = SIGNAL_LAYOUT[circuit];
 
     console.log(`Building ${circuit} input…`);
     const { input, outputs = {} } = await build();
@@ -404,15 +278,15 @@ async function main() {
         }
     }
 
-    console.log(`\n✓ ${path.relative(ROOT, inputPath)}`);
-    console.log(`✓ ${path.relative(ROOT, wtnsPath)} (${fs.statSync(wtnsPath).size} bytes)`);
-    console.log(`✓ ${path.relative(ROOT, decimalPath)}`);
-    console.log(`\n  witness elements:   ${witness.length}`);
-    console.log(`  public signals:     ${signals.length}`);
-    console.log(`  witness[0]:         ${witness[0]} (constant)`);
-    console.log(
-        `  witness[1..${signals.length}]:      verified — ${signals.map(signalName).join(", ")}`
-    );
+    info("");
+    ok(rel(inputPath));
+    ok(`${rel(wtnsPath)} (${fs.statSync(wtnsPath).size} bytes)`);
+    ok(rel(decimalPath));
+    info("");
+    info(`  witness elements:   ${witness.length}`);
+    info(`  public signals:     ${signals.length}`);
+    info(`  witness[0]:         ${witness[0]} (constant)`);
+    info(`  witness[1..${signals.length}]:      verified — ${signals.map(signalName).join(", ")}`);
 }
 
 main()

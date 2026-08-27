@@ -1,9 +1,9 @@
 import path from "path";
-import fs from "fs";
 import { expect } from "chai";
 import { wasm as wasm_tester } from "circom_tester";
-import { buildPoseidon, buildBabyjub } from "circomlibjs";
 import type { WasmTester } from "circom_tester";
+import { needCircuit, requireArtifact } from "./helpers/artifacts";
+import { NoteCrypto } from "../scripts/lib/note";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -16,10 +16,8 @@ describe("Transfer Circuit (gasless)", function () {
     const outputDir = path.join(__dirname, "..", "build");
     const precompiledWasm = path.join(outputDir, "transfer_js", "transfer.wasm");
 
-    let circuit: WasmTester;
-    let poseidon: any;
-    let babyJub: any;
-    let F: any;
+    let circuitOrUndefined: WasmTester | undefined;
+    let note: NoteCrypto;
 
     // Default spending keys (same values as buildInput/buildDummyInput defaults)
     const SK0_DEFAULT = 0xdeadbeef0000001n;
@@ -31,58 +29,31 @@ describe("Transfer Circuit (gasless)", function () {
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
-    function computeCommitment(
+    const computeCommitment = (
         value: bigint,
         assetId: bigint,
         ownerAx: bigint,
         blinding: bigint
-    ): bigint {
-        return F.toObject(poseidon([value, assetId, ownerAx, blinding]));
-    }
+    ): bigint => note.commitment(value, assetId, ownerAx, blinding);
 
-    function computeNullifier(commitment: bigint, spendingKey: bigint): bigint {
-        return F.toObject(poseidon([commitment, spendingKey]));
-    }
+    const computeNullifier = (commitment: bigint, spendingKey: bigint): bigint =>
+        note.nullifier(commitment, spendingKey);
 
     /** Derive Baby JubJub owner public key (Ax) from a spending key scalar. Mirrors BabyPbk in circuit. */
-    function computeOwnerAx(sk: bigint): bigint {
-        const point = babyJub.mulPointEscalar(babyJub.Base8, sk);
-        return F.toObject(point[0]);
-    }
+    const computeOwnerAx = (sk: bigint): bigint => note.ownerPubkey(sk);
 
     /** Sparse Merkle proof builder. Only materialises the O(N·depth) non-zero nodes,
      *  keeping runtime proportional to the number of leaves, not 2^depth. */
-    function buildMerkleProof(
+    const buildMerkleProof = (
         leaves: bigint[],
         leafIndex: number
-    ): { root: bigint; pathElements: bigint[]; pathIndices: number[] } {
-        const pathElements: bigint[] = [];
-        const pathIndices: number[] = [];
-        let level = new Map<number, bigint>();
-        for (let i = 0; i < leaves.length; i++) level.set(i, leaves[i]);
-        for (let d = 0; d < TREE_DEPTH; d++) {
-            const nodeIdx = leafIndex >> d;
-            const isRight = nodeIdx % 2 === 1;
-            pathIndices.push(isRight ? 1 : 0);
-            pathElements.push(level.get(isRight ? nodeIdx - 1 : nodeIdx + 1) ?? 0n);
-            const nextLevel = new Map<number, bigint>();
-            for (const [pos] of level) {
-                const parentPos = pos >> 1;
-                if (nextLevel.has(parentPos)) continue;
-                const l = level.get(parentPos * 2) ?? 0n;
-                const r = level.get(parentPos * 2 + 1) ?? 0n;
-                nextLevel.set(parentPos, F.toObject(poseidon([l, r])));
-            }
-            level = nextLevel;
-        }
-        return { root: level.get(0) ?? 0n, pathElements, pathIndices };
-    }
+    ): { root: bigint; pathElements: bigint[]; pathIndices: number[] } =>
+        note.merkleProof(leaves, leafIndex);
 
     /**
      * Build a complete valid transfer circuit input.
      * note0 (Alice) at index 0, note1 (Bob) at index 1 in the same tree.
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     function buildInput(opts: {
         value0: bigint;
         value1: bigint;
@@ -149,7 +120,6 @@ describe("Transfer Circuit (gasless)", function () {
      * (input_values[1] = 0). The dummy bypasses Merkle, nullifier derivation, and EdDSA checks.
      * The dummy nullifier must be supplied as 0 in the public inputs.
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     function buildDummyInput(opts: {
         value0: bigint;
         outValue0: bigint;
@@ -206,27 +176,14 @@ describe("Transfer Circuit (gasless)", function () {
     // ── Setup ─────────────────────────────────────────────────────────────────
 
     before(async function () {
-        poseidon = await buildPoseidon();
-        babyJub = await buildBabyjub();
-        F = poseidon.F;
+        note = await NoteCrypto.build();
 
         // Derive alice/bob pubkeys from their default spending keys via BabyPbk
-        alice = (() => {
-            const point = babyJub.mulPointEscalar(babyJub.Base8, SK0_DEFAULT);
-            return { Ax: F.toObject(point[0]) };
-        })();
-        bob = (() => {
-            const point = babyJub.mulPointEscalar(babyJub.Base8, SK1_DEFAULT);
-            return { Ax: F.toObject(point[0]) };
-        })();
+        alice = { Ax: note.ownerPubkey(SK0_DEFAULT) };
+        bob = { Ax: note.ownerPubkey(SK1_DEFAULT) };
 
-        if (!fs.existsSync(precompiledWasm)) {
-            console.log(
-                "  ⚠  Pre-compiled wasm not found. Run 'pnpm build-all' to enable circuit tests."
-            );
-            return;
-        }
-        circuit = await wasm_tester(circuitPath, { output: outputDir, recompile: true });
+        if (!requireArtifact(precompiledWasm, "transfer")) return;
+        circuitOrUndefined = await wasm_tester(circuitPath, { output: outputDir, recompile: true });
     });
 
     // ── 1. Commitment arithmetic (no wasm needed) ─────────────────────────────
@@ -262,7 +219,7 @@ describe("Transfer Circuit (gasless)", function () {
 
     describe("Gasless fee constraint (Constraint 5)", () => {
         it("accepts fee = 0 (input_sum = output_sum)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const input = buildInput({
                 value0: 500n,
                 value1: 500n,
@@ -275,7 +232,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("accepts fee > 0: input_sum = output_sum + fee", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const fee = 1_000_000_000_000_000n; // 0.001 ORB
             const inSum = 10_000_000_000_000_000_000n; // 10 ORB total input
             const outA = inSum - fee;
@@ -291,7 +248,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("accepts fee = entire input (all to fee, output = 0 + 0)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const total = 1000n;
             const input = buildInput({
                 value0: 600n,
@@ -305,7 +262,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("rejects: pre-gasless balance (output = input, fee = 1 → constraint failure)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             // input_sum=1000, output_sum=1000, fee=1 → 1000 ≠ 1001
             const input = buildInput({
                 value0: 500n,
@@ -323,7 +280,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("rejects: outputs exceed inputs (theft attempt)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const input = buildInput({
                 value0: 100n,
                 value1: 100n,
@@ -344,7 +301,7 @@ describe("Transfer Circuit (gasless)", function () {
 
     describe("Key derivation: BabyPbk(spending_key) \u2192 ownerPk (Constraint 3)", () => {
         it("accepts valid spending keys (both real notes)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const input = buildInput({
                 value0: 300n,
                 value1: 200n,
@@ -357,7 +314,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("rejects wrong spending_key for input[0] (wrong Ax \u2192 commitment mismatch \u2192 Merkle fails)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const input = buildInput({
                 value0: 300n,
                 value1: 200n,
@@ -376,7 +333,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("rejects wrong spending_key for input[1] (wrong Ax \u2192 commitment mismatch \u2192 Merkle fails)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const input = buildInput({
                 value0: 300n,
                 value1: 200n,
@@ -398,7 +355,7 @@ describe("Transfer Circuit (gasless)", function () {
 
     describe("Nullifier integrity (Constraint 2)", () => {
         it("rejects tampered public nullifier[0]", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const input = buildInput({
                 value0: 200n,
                 value1: 300n,
@@ -416,7 +373,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("rejects wrong spending_key[1]", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const input = buildInput({
                 value0: 200n,
                 value1: 300n,
@@ -438,7 +395,7 @@ describe("Transfer Circuit (gasless)", function () {
 
     describe("Merkle membership (Constraint 1)", () => {
         it("rejects wrong Merkle root", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const input = buildInput({
                 value0: 200n,
                 value1: 200n,
@@ -456,7 +413,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("rejects tampered path sibling", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const input = buildInput({
                 value0: 200n,
                 value1: 200n,
@@ -480,7 +437,7 @@ describe("Transfer Circuit (gasless)", function () {
 
     describe("Output commitment verification (Constraint 4)", () => {
         it("rejects tampered public output commitment", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const input = buildInput({
                 value0: 300n,
                 value1: 200n,
@@ -502,7 +459,7 @@ describe("Transfer Circuit (gasless)", function () {
 
     describe("Asset ID enforcement (Constraints 7 & 8)", () => {
         it("accepts non-native asset (USDT, asset_id = 1)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const input = buildInput({
                 value0: 500n,
                 value1: 500n,
@@ -516,7 +473,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("rejects public asset_id ≠ input note asset_id (Constraint 8)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const input = buildInput({
                 value0: 500n,
                 value1: 500n,
@@ -535,7 +492,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("rejects mixed-asset inputs: input_asset_ids[1] ≠ input_asset_ids[0] (Constraint 7)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             // Build a valid 2-note input where note1 has a different asset_id (1 vs 0)
             const input = buildInput({
                 value0: 500n,
@@ -556,7 +513,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("rejects mixed-asset output: output_asset_ids[0] ≠ input_asset_ids[0] (Constraint 7)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const input = buildInput({
                 value0: 500n,
                 value1: 500n,
@@ -586,7 +543,7 @@ describe("Transfer Circuit (gasless)", function () {
 
     describe("Distinct nullifiers (Constraint 10)", () => {
         it("accepts two different notes (nullifiers always distinct)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const input = buildInput({
                 value0: 500n,
                 value1: 500n,
@@ -599,7 +556,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("rejects duplicate nullifiers (same note spent twice in one tx)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             // Both input notes are the same: 500 + 500 = 999 + 0 + 1, conservation holds.
             // Without this constraint the circuit accepts and gives 2× value from one note.
             const input = buildInput({
@@ -623,7 +580,7 @@ describe("Transfer Circuit (gasless)", function () {
 
     describe("u128 range check (Constraint 6 & 6b)", () => {
         it("accepts 1000 ORB input notes", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const ORB = 10n ** 18n;
             const fee = 1_000_000_000_000_000n;
             const halfIn = 500n * ORB;
@@ -639,7 +596,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("accepts max u128 fee with matching inputs", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const MAX_FEE = 2n ** 128n - 1n;
             // value1 = 0 triggers is_dummy → must use buildDummyInput so nullifiers[1] = 0
             const input = buildDummyInput({
@@ -653,7 +610,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("rejects fee = 2^128 even when input/output values are valid u128", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const HALF = 2n ** 127n;
             const input = buildInput({
                 value0: HALF,
@@ -676,7 +633,7 @@ describe("Transfer Circuit (gasless)", function () {
 
     describe("Dummy note (Constraints 9 & 10)", () => {
         it("accepts 1 real note + dummy (value=0, nullifier=0)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const input = buildDummyInput({
                 value0: 1000n,
                 outValue0: 999n,
@@ -688,7 +645,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("accepts dummy with corrupted Merkle path (path is ignored)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const input = buildDummyInput({
                 value0: 500n,
                 outValue0: 499n,
@@ -702,7 +659,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("rejects dummy with non-zero nullifier (Constraint 9)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const input = buildDummyInput({
                 value0: 500n,
                 outValue0: 499n,
@@ -720,7 +677,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("accepts different fee values with dummy input", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const fee = 1_000_000_000_000_000n; // 0.001 ORB
             const input = buildDummyInput({
                 value0: 10_000_000_000_000_000_000n,
@@ -733,7 +690,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("rejects wrong spending key for the real note in 1-real+dummy scenario (Constraint 2)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const input = buildDummyInput({
                 value0: 500n,
                 outValue0: 499n,
@@ -751,7 +708,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("rejects tampered Merkle root for the real note in 1-real+dummy scenario (Constraint 1)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             const input = buildDummyInput({
                 value0: 500n,
                 outValue0: 499n,
@@ -768,7 +725,7 @@ describe("Transfer Circuit (gasless)", function () {
         });
 
         it("accepts dummy as input[0], real as input[1] (symmetric positions)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
             // Mirror of buildDummyInput: dummy at index 0, real note (Bob, sk1) at index 1
             const assetId = 0n;
             const bl1 = 0xccccccccddddddddccccccccdn;
@@ -788,8 +745,6 @@ describe("Transfer Circuit (gasless)", function () {
 
             const zeroPE = Array(TREE_DEPTH).fill(0n);
             const zeroPI = Array(TREE_DEPTH).fill(0);
-
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const input: any = {
                 merkle_root: root.toString(),
                 nullifiers: ["0", null1.toString()], // dummy nullifier is 0

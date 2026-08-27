@@ -1,9 +1,9 @@
 import path from "path";
-import fs from "fs";
 import { expect } from "chai";
 import { wasm as wasm_tester } from "circom_tester";
-import { buildPoseidon, buildBabyjub } from "circomlibjs";
 import type { WasmTester } from "circom_tester";
+import { needCircuit, requireArtifact } from "./helpers/artifacts";
+import { NoteCrypto } from "../scripts/lib/note";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,8 +23,6 @@ interface BuildInputOpts {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const TREE_DEPTH = 20;
-
 describe("Unshield Circuit (gasless)", function () {
     this.timeout(120_000);
 
@@ -32,59 +30,31 @@ describe("Unshield Circuit (gasless)", function () {
     const outputDir = path.join(__dirname, "..", "build");
     const precompiledWasm = path.join(outputDir, "unshield_js", "unshield.wasm");
 
-    let circuit: WasmTester;
-    let poseidon: any;
-    let babyJub: any;
-    let F: any;
+    let circuitOrUndefined: WasmTester | undefined;
+    let note: NoteCrypto;
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 
-    function computeCommitment(
+    const computeCommitment = (
         value: bigint,
         assetId: bigint,
         owner: bigint,
         blinding: bigint
-    ): bigint {
-        return F.toObject(poseidon([value, assetId, owner, blinding]));
-    }
+    ): bigint => note.commitment(value, assetId, owner, blinding);
 
-    function computeNullifier(commitment: bigint, spendingKey: bigint): bigint {
-        return F.toObject(poseidon([commitment, spendingKey]));
-    }
+    const computeNullifier = (commitment: bigint, spendingKey: bigint): bigint =>
+        note.nullifier(commitment, spendingKey);
 
     /** Derive Baby JubJub owner public key (Ax) from a spending key scalar. Mirrors BabyPbk in circuit. */
-    function computeOwnerAx(sk: bigint): bigint {
-        const point = babyJub.mulPointEscalar(babyJub.Base8, sk);
-        return F.toObject(point[0]);
-    }
+    const computeOwnerAx = (sk: bigint): bigint => note.ownerPubkey(sk);
 
     /** Sparse Merkle proof builder. Only materialises the O(N·depth) non-zero nodes,
      *  keeping runtime proportional to the number of leaves, not 2^depth. */
-    function buildMerkleProof(
+    const buildMerkleProof = (
         leaves: bigint[],
         leafIndex: number
-    ): { root: bigint; pathElements: bigint[]; pathIndices: number[] } {
-        const pathElements: bigint[] = [];
-        const pathIndices: number[] = [];
-        let level = new Map<number, bigint>();
-        for (let i = 0; i < leaves.length; i++) level.set(i, leaves[i]);
-        for (let d = 0; d < TREE_DEPTH; d++) {
-            const nodeIdx = leafIndex >> d;
-            const isRight = nodeIdx % 2 === 1;
-            pathIndices.push(isRight ? 1 : 0);
-            pathElements.push(level.get(isRight ? nodeIdx - 1 : nodeIdx + 1) ?? 0n);
-            const nextLevel = new Map<number, bigint>();
-            for (const [pos] of level) {
-                const parentPos = pos >> 1;
-                if (nextLevel.has(parentPos)) continue;
-                const l = level.get(parentPos * 2) ?? 0n;
-                const r = level.get(parentPos * 2 + 1) ?? 0n;
-                nextLevel.set(parentPos, F.toObject(poseidon([l, r])));
-            }
-            level = nextLevel;
-        }
-        return { root: level.get(0) ?? 0n, pathElements, pathIndices };
-    }
+    ): { root: bigint; pathElements: bigint[]; pathIndices: number[] } =>
+        note.merkleProof(leaves, leafIndex);
 
     /** Build a minimal valid circuit input. */
     function buildInput(opts: BuildInputOpts) {
@@ -143,16 +113,9 @@ describe("Unshield Circuit (gasless)", function () {
     // ── Setup ──────────────────────────────────────────────────────────────────
 
     before(async function () {
-        poseidon = await buildPoseidon();
-        babyJub = await buildBabyjub();
-        F = poseidon.F;
-        if (!fs.existsSync(precompiledWasm)) {
-            console.log(
-                "  ⚠  Pre-compiled wasm not found. Run 'pnpm build-all' to enable circuit tests."
-            );
-            return;
-        }
-        circuit = await wasm_tester(circuitPath, { output: outputDir, recompile: true });
+        note = await NoteCrypto.build();
+        if (!requireArtifact(precompiledWasm, "unshield")) return;
+        circuitOrUndefined = await wasm_tester(circuitPath, { output: outputDir, recompile: true });
     });
 
     // ── 1. Commitment arithmetic (no wasm needed) ─────────────────────────────
@@ -188,21 +151,21 @@ describe("Unshield Circuit (gasless)", function () {
 
     describe("Conservation of value (Constraint 1)", () => {
         it("total unshield: note_value = amount + fee, change_value = 0 (fee = 0)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 1000n, amount: 1000n, fee: 0n });
             const w = await circuit.calculateWitness(input);
             await circuit.checkConstraints(w);
         });
 
         it("total unshield: note_value = amount + fee (fee > 0)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 101n, amount: 100n, fee: 1n });
             const w = await circuit.calculateWitness(input);
             await circuit.checkConstraints(w);
         });
 
         it("total unshield: realistic 0.001 ORB fee", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const FEE = 1_000_000_000_000_000n;
             const NOTE = 10_000_000_000_000_000_000n; // 10 ORB
             const input = buildInput({ noteValue: NOTE, amount: NOTE - FEE, fee: FEE });
@@ -211,21 +174,21 @@ describe("Unshield Circuit (gasless)", function () {
         });
 
         it("total unshield: fee = entire note value (amount = 0)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 500n, amount: 0n, fee: 500n });
             const w = await circuit.calculateWitness(input);
             await circuit.checkConstraints(w);
         });
 
         it("partial unshield: amount = 50, fee = 1, change = 49, note = 100", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 100n, amount: 50n, fee: 1n, changeValue: 49n });
             const w = await circuit.calculateWitness(input);
             await circuit.checkConstraints(w);
         });
 
         it("partial unshield: amount = 1, fee = 0, change = note-1", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const NOTE = 1_000_000n;
             const input = buildInput({
                 noteValue: NOTE,
@@ -238,7 +201,7 @@ describe("Unshield Circuit (gasless)", function () {
         });
 
         it("partial unshield: realistic — withdraw 5 ORB from 10 ORB note", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const ORB = 10n ** 18n;
             const NOTE = 10n * ORB;
             const AMOUNT = 5n * ORB;
@@ -255,7 +218,7 @@ describe("Unshield Circuit (gasless)", function () {
         });
 
         it("rejects: amount + fee + change_value > note_value", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 100n, amount: 50n, fee: 1n, changeValue: 60n }); // 111 > 100
             // Override the conservation: make note_value inconsistent
             // We need to keep note_value as 100 but amount+fee+change = 111
@@ -269,7 +232,7 @@ describe("Unshield Circuit (gasless)", function () {
         });
 
         it("rejects: amount = note_value when fee > 0 and change = 0 (old over-spend pattern)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             // noteValue=1000, amount=1000, fee=1, change=0 → 1000 ≠ 1001
             const input = buildInput({ noteValue: 1000n, amount: 1000n, fee: 1n });
             try {
@@ -281,7 +244,7 @@ describe("Unshield Circuit (gasless)", function () {
         });
 
         it("rejects: amount > note_value (overspend)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 100n, amount: 200n, fee: 0n });
             try {
                 await circuit.calculateWitness(input);
@@ -296,21 +259,21 @@ describe("Unshield Circuit (gasless)", function () {
 
     describe("Merkle membership (Constraint 5)", () => {
         it("accepts valid proof at index 0", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 1000n, amount: 999n, fee: 1n });
             const w = await circuit.calculateWitness(input);
             await circuit.checkConstraints(w);
         });
 
         it("accepts valid proof at index 5", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 1000n, amount: 999n, fee: 1n, leafIndex: 5 });
             const w = await circuit.calculateWitness(input);
             await circuit.checkConstraints(w);
         });
 
         it("rejects wrong Merkle root", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 1000n, amount: 999n, fee: 1n });
             input.merkle_root = (BigInt(input.merkle_root) + 1n).toString();
             try {
@@ -322,7 +285,7 @@ describe("Unshield Circuit (gasless)", function () {
         });
 
         it("rejects wrong commitment (tampered spending_key → wrong Ax → commitment mismatch)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 1000n, amount: 999n, fee: 1n });
             // Change spending_key: circuit derives different Ax, builds different commitment,
             // Merkle check fails (derived commitment not in tree)
@@ -340,7 +303,7 @@ describe("Unshield Circuit (gasless)", function () {
 
     describe("Nullifier integrity (Constraint 6)", () => {
         it("rejects tampered public nullifier", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 1000n, amount: 999n, fee: 1n });
             input.nullifier = (BigInt(input.nullifier) + 1n).toString();
             try {
@@ -352,7 +315,7 @@ describe("Unshield Circuit (gasless)", function () {
         });
 
         it("rejects wrong spending_key", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({
                 noteValue: 500n,
                 amount: 499n,
@@ -373,14 +336,14 @@ describe("Unshield Circuit (gasless)", function () {
 
     describe("Asset ID enforcement (Constraint 7)", () => {
         it("accepts matching public asset_id and note asset_id", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 500n, amount: 499n, fee: 1n, assetId: 1n });
             const w = await circuit.calculateWitness(input);
             await circuit.checkConstraints(w);
         });
 
         it("rejects public asset_id ≠ note asset_id", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 500n, amount: 499n, fee: 1n, assetId: 1n });
             input.asset_id = "2"; // public says 2, note has 1
             try {
@@ -396,7 +359,7 @@ describe("Unshield Circuit (gasless)", function () {
 
     describe("u128 range check (Constraints 2 & 3)", () => {
         it("accepts max u128 note value", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const MAX = 2n ** 128n - 1n;
             const FEE = 1n;
             const input = buildInput({ noteValue: MAX, amount: MAX - FEE, fee: FEE });
@@ -405,7 +368,7 @@ describe("Unshield Circuit (gasless)", function () {
         });
 
         it("accepts 1000 ORB (exceeds old u64 limit)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const NOTE = 1000n * 10n ** 18n;
             const FEE = 1_000_000_000_000_000n;
             const input = buildInput({ noteValue: NOTE, amount: NOTE - FEE, fee: FEE });
@@ -414,7 +377,7 @@ describe("Unshield Circuit (gasless)", function () {
         });
 
         it("accepts max u128 fee (fee = 2^128 - 1)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const MAX_FEE = 2n ** 128n - 1n;
             const input = buildInput({ noteValue: MAX_FEE, amount: 0n, fee: MAX_FEE });
             const w = await circuit.calculateWitness(input);
@@ -422,7 +385,7 @@ describe("Unshield Circuit (gasless)", function () {
         });
 
         it("rejects fee = 2^128 (exceeds u128)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 0n, amount: 0n, fee: 0n });
             input.fee = (2n ** 128n).toString();
             input.note_value = (2n ** 128n).toString();
@@ -444,7 +407,7 @@ describe("Unshield Circuit (gasless)", function () {
             ["max u32 (4294967295)", 4294967295n],
         ] as const) {
             it(`accepts asset_id ${label}`, async function () {
-                if (!circuit) return this.skip();
+                const circuit = needCircuit(circuitOrUndefined, "unshield", this);
                 const input = buildInput({
                     noteValue: 1000n,
                     amount: 999n,
@@ -469,7 +432,7 @@ describe("Unshield Circuit (gasless)", function () {
         // ── 8a: total unshield (change_value == 0) ────────────────────────────
 
         it("total unshield: change_commitment = 0 is accepted", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             // change_value = 0 by default → change_commitment = 0
             const input = buildInput({ noteValue: 100n, amount: 99n, fee: 1n });
             expect(input.change_value).to.equal("0");
@@ -479,7 +442,7 @@ describe("Unshield Circuit (gasless)", function () {
         });
 
         it("total unshield: rejects non-zero change_commitment when change_value = 0 (Constraint 8b)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 100n, amount: 99n, fee: 1n });
             // Force a non-zero change_commitment while keeping change_value = 0
             input.change_commitment = "12345678901234567890";
@@ -494,7 +457,7 @@ describe("Unshield Circuit (gasless)", function () {
         // ── 8b: partial unshield (change_value > 0) ───────────────────────────
 
         it("partial unshield: correct change_commitment is accepted (Constraint 8a)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 100n, amount: 50n, fee: 1n, changeValue: 49n });
             expect(input.change_value).to.equal("49");
             expect(input.change_commitment).to.not.equal("0");
@@ -503,7 +466,7 @@ describe("Unshield Circuit (gasless)", function () {
         });
 
         it("partial unshield: tampered change_commitment is rejected (Constraint 8a)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 100n, amount: 50n, fee: 1n, changeValue: 49n });
             input.change_commitment = (BigInt(input.change_commitment) + 1n).toString();
             try {
@@ -515,7 +478,7 @@ describe("Unshield Circuit (gasless)", function () {
         });
 
         it("partial unshield: change_commitment = 0 when change_value > 0 is rejected (Constraint 8a)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 100n, amount: 50n, fee: 1n, changeValue: 49n });
             // Zero out the public change_commitment — must be rejected
             input.change_commitment = "0";
@@ -528,7 +491,7 @@ describe("Unshield Circuit (gasless)", function () {
         });
 
         it("partial unshield: wrong change_blinding produces wrong commitment → rejected", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({
                 noteValue: 200n,
                 amount: 100n,
@@ -547,7 +510,7 @@ describe("Unshield Circuit (gasless)", function () {
         });
 
         it("partial unshield: wrong change_owner_pubkey produces wrong commitment → rejected", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const sk = 0xdeadbeefcafebaben;
             const owner = computeOwnerAx(sk);
             // Build input with the correct owner
@@ -570,7 +533,7 @@ describe("Unshield Circuit (gasless)", function () {
         });
 
         it("partial unshield: change_commitment forged with wrong asset_id → rejected (Constraint 8a)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             // The circuit pins the change commitment to note_asset_id (== public asset_id, Constraint 7).
             // A change_commitment computed with any other asset_id must be rejected.
             const ASSET = 1n;
@@ -602,7 +565,7 @@ describe("Unshield Circuit (gasless)", function () {
         // ── 8c: same owner for change note (self-change) ─────────────────────
 
         it("partial unshield: change note to same owner is accepted", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const sk = 0xabcdef1234567890n;
             const owner = computeOwnerAx(sk);
             const input = buildInput({
@@ -618,7 +581,7 @@ describe("Unshield Circuit (gasless)", function () {
         });
 
         it("partial unshield: change note to different owner is accepted", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const sk = 0xabcdef1234567890n;
             const otherOwner = computeOwnerAx(0x9988776655443322n); // different key
             const input = buildInput({
@@ -636,7 +599,7 @@ describe("Unshield Circuit (gasless)", function () {
         // ── 8d: change_value range checks (Constraint 9) ─────────────────────
 
         it("change_value range: accepts max u128 change (note_value = max u128)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const MAX = 2n ** 128n - 1n;
             // note_value = MAX, amount = 0, fee = 0, change = MAX
             // Conservation: MAX === 0 + 0 + MAX ✓
@@ -647,7 +610,7 @@ describe("Unshield Circuit (gasless)", function () {
         });
 
         it("change_value range: rejects change_value = 2^128 (exceeds u128)", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 0n, amount: 0n, fee: 0n });
             // change_value = 2^128: both conservation (0 ≠ 2^128) and Num2Bits(128) fail.
             input.change_value = (2n ** 128n).toString();
@@ -664,7 +627,7 @@ describe("Unshield Circuit (gasless)", function () {
 
     describe("Public signals", () => {
         it("total unshield exposes change_commitment = 0 as public signal", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 100n, amount: 99n, fee: 1n });
             const w = await circuit.calculateWitness(input);
             // Public signals: [1, merkle_root, nullifier, amount, recipient, asset_id, fee, change_commitment]
@@ -675,7 +638,7 @@ describe("Unshield Circuit (gasless)", function () {
         });
 
         it("partial unshield exposes correct non-zero change_commitment as public signal", async function () {
-            if (!circuit) return this.skip();
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
             const input = buildInput({ noteValue: 100n, amount: 50n, fee: 1n, changeValue: 49n });
             const w = await circuit.calculateWitness(input);
             await circuit.checkConstraints(w);

@@ -52,13 +52,13 @@ Convert a specific circuit:
 
 ```bash
 # Value Proof circuit
-pnpm run convert:value-proof
+pnpm run convert value_proof
 
 # Transfer circuit
-pnpm run convert:transfer
+pnpm run convert transfer
 
 # Or use the script directly
-bash scripts/build/pack-proving-key.sh value_proof
+pnpm run convert value_proof
 ```
 
 ### Generated Files

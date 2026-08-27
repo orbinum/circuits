@@ -34,29 +34,3 @@ export function cleanupTestCircuits(circuitNames: string[]): void {
         }
     }
 }
-
-/**
- * Cleanup all test circuit files matching the pattern test_*
- */
-export function cleanupAllTestCircuits(): void {
-    const buildDir = path.join(__dirname, "..", "build");
-
-    if (!fs.existsSync(buildDir)) {
-        return;
-    }
-
-    const files = fs.readdirSync(buildDir);
-    const testCircuits = new Set<string>();
-
-    // Find all test circuit base names
-    for (const file of files) {
-        if (file.startsWith("test_")) {
-            // Extract base name without extension
-            const baseName = file.replace(/\.(circom|r1cs|sym)$/, "").replace(/_js$/, "");
-            testCircuits.add(baseName);
-        }
-    }
-
-    // Cleanup all found test circuits
-    cleanupTestCircuits(Array.from(testCircuits));
-}

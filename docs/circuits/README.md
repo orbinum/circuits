@@ -62,12 +62,11 @@ Each circuit document includes:
 
 ## Circuit Statistics
 
-| Circuit      | Constraints | Public Inputs | Private Inputs      | Tree Depth |
-| ------------ | ----------- | ------------- | ------------------- | ---------- |
-| Value Proof  | ~300        | 3             | 2                   | N/A        |
-| Transfer     | 33,687      | 7             | 9 (+40 Merkle path) | 20         |
-| Unshield     | 16,033      | 6             | 6 (+40 Merkle path) | 20         |
-| Private Link | 487         | 2             | 3                   | N/A        |
+| Circuit     | Constraints | Public Inputs | Private Inputs      | Tree Depth |
+| ----------- | ----------- | ------------- | ------------------- | ---------- |
+| Value Proof | 1,151       | 3 (+1 output) | 2                   | N/A        |
+| Transfer    | 33,687      | 7             | 9 (+40 Merkle path) | 20         |
+| Unshield    | 16,903      | 7             | 7 (+40 Merkle path) | 20         |
 
 ## Build Artifacts
 

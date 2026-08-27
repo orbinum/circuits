@@ -1,7 +1,7 @@
 # Orbinum Circuits
 
 [![npm version](https://img.shields.io/npm/v/@orbinum/circuits.svg)](https://www.npmjs.com/package/@orbinum/circuits)
-[![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 Zero-Knowledge circuits for Orbinum privacy blockchain.
 
@@ -73,7 +73,7 @@ ROTATE_CIRCUIT=transfer ROTATE_VERSION=2 pnpm run manifest
 A new version's key material must genuinely differ from the old one. The trusted setup is parametrized for this:
 
 ```bash
-SETUP_ENTROPY=... SETUP_BEACON=... SETUP_BEACON_ITERS=... pnpm run setup:transfer
+SETUP_ENTROPY=... SETUP_BEACON=... SETUP_BEACON_ITERS=... pnpm run setup transfer
 ```
 
 Defaults reproduce the original v1 setup byte-for-byte.
@@ -170,12 +170,12 @@ If you need to generate the `.ark` file yourself:
   keys/value_proof_pk.ark
 
 # Or via pnpm
-pnpm run convert:value-proof
+pnpm run convert value_proof
 ```
 
 ### Download Release Artifacts
 
-Get pre-built circuits from [GitHub Releases](../../releases):
+Get pre-built circuits from [GitHub Releases](https://github.com/orbinum/circuits/releases):
 
 ```bash
 # Download latest release
@@ -228,16 +228,16 @@ pnpm run build-all
 
 ```bash
 # Step 1: Compile circuit
-pnpm run compile:value-proof
+pnpm run compile value_proof
 
 # Step 2: Generate keys (requires compilation)
-pnpm run setup:value-proof
+pnpm run setup value_proof
 
 # Step 3: Convert to compatible format (optional)
-pnpm run convert:value-proof
+pnpm run convert value_proof
 
 # Or run all steps together
-pnpm run full-build:value-proof
+pnpm run build:circuit value_proof
 ```
 
 ### Generate WASM for Rust (Witness Calculator)
@@ -325,7 +325,7 @@ let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 
 **Statistics:**
 
-- Constraints: ~300
+- Constraints: 1,151
 - Private inputs: 2 (`owner_pubkey`, `blinding`)
 - Public inputs: 3 (`commitment`, `value`, `asset_id`)
 - Public outputs: 1 (`owner_hash`)
@@ -337,7 +337,8 @@ let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 - Owner hash: `owner_hash = Poseidon(owner_pubkey)` — reveals owner identity hash for audit without exposing the raw key
 - No Merkle proof, no spending key, no nullifier — proves note formation only
 - Prevents inflation attacks: relayer cannot claim `value=10000` if commitment was built with `value=1000`
-- Public signals layout (76 bytes): `commitment[0..32] | value[32..40] | asset_id[40..44] | owner_hash[44..76]`
+- Witness order: `owner_hash, commitment, value, asset_id` — Circom puts `signal output` first, so `owner_hash` is signal 0
+- On-chain byte layout (76 bytes): `commitment[0..32] | value[32..40] | asset_id[40..44] | owner_hash[44..76]` — a different ordering from the witness; see [value_proof.md](./docs/circuits/value_proof.md)
 
 ## Security Properties
 
@@ -364,7 +365,7 @@ circuits/
 ├── circuits/                  # Circom source files
 │   ├── transfer.circom        # 2-in/2-out private transfer (33,687 constraints)
 │   ├── unshield.circom        # Private → public withdrawal (16,903 constraints)
-│   ├── value_proof.circom     # Relay fee value proof, no Merkle/nullifier (~300 constraints)
+│   ├── value_proof.circom     # Relay fee value proof, no Merkle/nullifier (1,151 constraints)
 │   ├── note.circom            # NoteCommitment + Nullifier templates
 │   ├── merkle_tree.circom     # MerkleTreeVerifier template
 │   └── poseidon_wrapper.circom
@@ -427,4 +428,8 @@ pnpm run build-all
 
 ## License
 
-Apache 2.0 / GPL3 - See LICENSE files
+GNU General Public License v3.0 or later — see [LICENSE](./LICENSE).
+
+Copyright (C) 2026 Orbinum Team. This is free software; you may redistribute
+and modify it under the terms of the GPL. A derived work must be released
+under the same licence.
