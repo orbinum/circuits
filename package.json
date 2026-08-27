@@ -5,7 +5,7 @@
     "scripts": {
         "compile": "ts-node scripts/build/compile.ts",
         "setup": "bash scripts/build/setup.sh",
-        "convert": "bash scripts/build/pack-proving-key.sh",
+        "convert": "ts-node scripts/build/pack-proving-key.ts",
         "build:circuit": "ts-node scripts/build/full-pipeline.ts",
         "build-all": "ts-node scripts/build-all.ts",
         "fixture": "ts-node scripts/utils/make-fixture.ts",
