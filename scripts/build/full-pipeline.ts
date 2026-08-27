@@ -40,7 +40,7 @@ function main(): void {
 
     info("");
     info("[2/3] trusted setup");
-    run("bash", ["scripts/build/setup.sh", circuit]);
+    run("npx", ["ts-node", "scripts/build/setup.ts", circuit]);
 
     info("");
     info("[3/3] packing the proving key");

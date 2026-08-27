@@ -10,7 +10,7 @@
  * needed it, because "command not found: circom" three levels into a build tells
  * a reader nothing they can act on.
  */
-import { execFileSync, spawnSync } from "child_process";
+import { spawnSync } from "child_process";
 
 import { die } from "./log";
 import { ROOT } from "./paths";
@@ -39,6 +39,14 @@ export interface RunOptions {
     capture?: boolean;
     /** Extra environment for the child. */
     env?: NodeJS.ProcessEnv;
+    /**
+     * Text to write to the child's stdin.
+     *
+     * The trusted setup pipes its entropy in this way — `echo "$ENTROPY" |
+     * snarkjs zkey contribute` — and there is no way to pass it as an argument
+     * without it landing in the process table.
+     */
+    input?: string;
 }
 
 /**
@@ -49,11 +57,15 @@ export interface RunOptions {
  * Three shell scripts relied on the caller having already cd'd there.
  */
 export function run(cmd: string, args: string[], opts: RunOptions = {}): string {
-    const { capture = false, cwd = ROOT, env } = opts;
+    const { capture = false, cwd = ROOT, env, input } = opts;
     const result = spawnSync(cmd, args, {
         cwd,
         env,
-        stdio: capture ? (["ignore", "pipe", "pipe"] as const) : ("inherit" as const),
+        input,
+        // With `input` set, stdin must be a pipe for the child to read it.
+        stdio: capture
+            ? (["pipe", "pipe", "pipe"] as const)
+            : ([input === undefined ? "inherit" : "pipe", "inherit", "inherit"] as const),
         encoding: "utf8" as const,
     });
 
@@ -78,11 +90,12 @@ export function tryRun(
     args: string[],
     opts: RunOptions = {}
 ): { ok: boolean; stdout: string; stderr: string } {
-    const { cwd = ROOT, env } = opts;
+    const { cwd = ROOT, env, input } = opts;
     const result = spawnSync(cmd, args, {
         cwd,
         env,
-        stdio: ["ignore", "pipe", "pipe"] as const,
+        input,
+        stdio: ["pipe", "pipe", "pipe"] as const,
         encoding: "utf8" as const,
     });
     return {
@@ -91,10 +104,3 @@ export function tryRun(
         stderr: result.stderr ?? "",
     };
 }
-
-/** A pnpm script in this repository. */
-export function pnpm(script: string, args: string[] = []): void {
-    run("pnpm", ["run", script, ...args]);
-}
-
-export { execFileSync };

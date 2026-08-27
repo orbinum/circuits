@@ -4,7 +4,7 @@
     "description": "Zero-Knowledge circuits for Orbinum privacy blockchain",
     "scripts": {
         "compile": "ts-node scripts/build/compile.ts",
-        "setup": "bash scripts/build/setup.sh",
+        "setup": "ts-node scripts/build/setup.ts",
         "convert": "ts-node scripts/build/pack-proving-key.ts",
         "build:circuit": "ts-node scripts/build/full-pipeline.ts",
         "build-all": "ts-node scripts/build-all.ts",
