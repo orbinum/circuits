@@ -35,83 +35,22 @@
  */
 import fs from "fs";
 import path from "path";
-import { NoteCrypto, TREE_DEPTH } from "../../test/helpers/circuit-inputs";
+import {
+    SIGNAL_LAYOUT,
+    parseCircuit,
+    signalName,
+    signalValue,
+    type CircuitName,
+} from "../lib/circuits";
+import { die, info, ok } from "../lib/log";
+import { NoteCrypto, TREE_DEPTH } from "../lib/note";
+import { artifacts, fixtures, rel } from "../lib/paths";
 const snarkjs = require("snarkjs");
-
-const ROOT = path.resolve(__dirname, "..", "..");
 
 /**
  * A public signal: either a plain input name, or one element of an array input,
  * or a circuit output that has no corresponding input at all.
  */
-type Signal =
-    | { kind: "input"; name: string }
-    | { kind: "element"; name: string; index: number }
-    | { kind: "output"; name: string };
-
-const input = (name: string): Signal => ({ kind: "input", name });
-const element = (name: string, index: number): Signal => ({ kind: "element", name, index });
-const output = (name: string): Signal => ({ kind: "output", name });
-
-/**
- * The public-signal layout of each circuit, in witness order.
- *
- * The order is load-bearing: the witness carries public signals at indices
- * 1..=n in exactly this sequence, and a prover that assumes a different one
- * produces a proof that fails verification with no error to explain it.
- */
-const PUBLIC_SIGNALS: Record<string, readonly Signal[]> = {
-    unshield: [
-        input("merkle_root"),
-        input("nullifier"),
-        input("amount"),
-        input("recipient"),
-        input("asset_id"),
-        input("fee"),
-        input("change_commitment"),
-    ],
-    transfer: [
-        input("merkle_root"),
-        element("nullifiers", 0),
-        element("nullifiers", 1),
-        element("commitments", 0),
-        element("commitments", 1),
-        input("asset_id"),
-        input("fee"),
-    ],
-    // `owner_hash` is a `signal output`, and Circom places outputs before
-    // public inputs in the witness. Asserted against the real witness below,
-    // because the circuit's own header comment lists it last.
-    value_proof: [output("owner_hash"), input("commitment"), input("value"), input("asset_id")],
-};
-
-/** The value a signal should hold, given the circuit input it was built from. */
-function signalValue(
-    signal: Signal,
-    input: Record<string, unknown>,
-    outputs: Record<string, bigint>
-): bigint {
-    switch (signal.kind) {
-        case "input":
-            return BigInt(input[signal.name] as string);
-        case "element":
-            return BigInt((input[signal.name] as string[])[signal.index]);
-        case "output": {
-            const v = outputs[signal.name];
-            if (v === undefined) {
-                throw new Error(
-                    `builder did not report the expected value of output "${signal.name}"`
-                );
-            }
-            return v;
-        }
-    }
-}
-
-/** A human-readable name for a signal, for assertion messages. */
-function signalName(s: Signal): string {
-    return s.kind === "element" ? `${s.name}[${s.index}]` : s.name;
-}
 
 /**
  * The defaults from `test/unshield.test.ts`. Reproduced rather than imported
@@ -282,32 +221,22 @@ const BUILDERS: Record<string, () => Promise<Built>> = {
 };
 
 async function main() {
-    const circuit = process.argv[2] ?? "unshield";
-    const outDir = path.resolve(ROOT, process.argv[3] ?? "fixtures");
+    const circuit: CircuitName = parseCircuit(process.argv[2] ?? "unshield");
 
     const build = BUILDERS[circuit];
     if (!build) {
-        throw new Error(
-            `No fixture builder for "${circuit}". Available: ${Object.keys(BUILDERS).join(", ")}`
-        );
+        die(`no fixture builder for "${circuit}"`);
     }
 
-    const wasmPath = path.join(ROOT, "build", `${circuit}_js`, `${circuit}.wasm`);
+    const wasmPath = artifacts(circuit).wasm;
     if (!fs.existsSync(wasmPath)) {
-        throw new Error(
-            `Circuit wasm not found: ${wasmPath}. Run 'pnpm run compile ${circuit}' first.`
-        );
+        die(`circuit wasm not found: ${rel(wasmPath)}. Run 'pnpm run compile ${circuit}' first.`);
     }
 
-    fs.mkdirSync(outDir, { recursive: true });
-    const inputPath = path.join(outDir, `${circuit}.input.json`);
-    const wtnsPath = path.join(outDir, `${circuit}.wtns`);
-    const decimalPath = path.join(outDir, `${circuit}.witness.json`);
+    const { input: inputPath, wtns: wtnsPath, witnessJson: decimalPath } = fixtures(circuit);
+    fs.mkdirSync(path.dirname(inputPath), { recursive: true });
 
-    const signals = PUBLIC_SIGNALS[circuit];
-    if (!signals) {
-        throw new Error(`No public-signal layout for "${circuit}"`);
-    }
+    const signals = SIGNAL_LAYOUT[circuit];
 
     console.log(`Building ${circuit} input…`);
     const { input, outputs = {} } = await build();
@@ -349,15 +278,15 @@ async function main() {
         }
     }
 
-    console.log(`\n✓ ${path.relative(ROOT, inputPath)}`);
-    console.log(`✓ ${path.relative(ROOT, wtnsPath)} (${fs.statSync(wtnsPath).size} bytes)`);
-    console.log(`✓ ${path.relative(ROOT, decimalPath)}`);
-    console.log(`\n  witness elements:   ${witness.length}`);
-    console.log(`  public signals:     ${signals.length}`);
-    console.log(`  witness[0]:         ${witness[0]} (constant)`);
-    console.log(
-        `  witness[1..${signals.length}]:      verified — ${signals.map(signalName).join(", ")}`
-    );
+    info("");
+    ok(rel(inputPath));
+    ok(`${rel(wtnsPath)} (${fs.statSync(wtnsPath).size} bytes)`);
+    ok(rel(decimalPath));
+    info("");
+    info(`  witness elements:   ${witness.length}`);
+    info(`  public signals:     ${signals.length}`);
+    info(`  witness[0]:         ${witness[0]} (constant)`);
+    info(`  witness[1..${signals.length}]:      verified — ${signals.map(signalName).join(", ")}`);
 }
 
 main()

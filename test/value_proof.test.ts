@@ -4,7 +4,7 @@ import { expect } from "chai";
 import { wasm as wasm_tester } from "circom_tester";
 import type { WasmTester } from "circom_tester";
 
-import { NoteCrypto } from "./helpers/circuit-inputs";
+import { NoteCrypto } from "../scripts/lib/note";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -37,7 +37,7 @@ describe("ValueProof Circuit", function () {
 
     // ── Pure helpers ───────────────────────────────────────────────────────────
 
-    // The note primitives live in ./helpers/circuit-inputs, shared with the
+    // The note primitives live in scripts/lib/note.ts, shared with the
     // other circuit suites and with make-fixture.ts. These thin aliases keep
     // the cases below reading the way they did.
     const computeCommitment = (

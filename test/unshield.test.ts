@@ -3,7 +3,7 @@ import { expect } from "chai";
 import { wasm as wasm_tester } from "circom_tester";
 import type { WasmTester } from "circom_tester";
 import { needCircuit, requireArtifact } from "./helpers/artifacts";
-import { NoteCrypto } from "./helpers/circuit-inputs";
+import { NoteCrypto } from "../scripts/lib/note";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
