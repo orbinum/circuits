@@ -1,23 +1,23 @@
 /**
  * The note cryptography the circuits implement, in JavaScript.
  *
- * Every test that touches a circuit needs to compute what the circuit is about
- * to compute — a Poseidon commitment, a nullifier, a Merkle root — so it can
- * assert the circuit agrees. That code was written four times:
- * `computeCommitment` in `transfer.test.ts`, `unshield.test.ts`,
- * `value_proof.test.ts`, and again as `commit` inside
- * `scripts/utils/make-fixture.ts`. `buildMerkleProof` existed twice, and the two
- * bodies were byte-identical.
+ * This is a reference implementation, not test scaffolding. It mirrors the
+ * circom templates in `circuits/note.circom` and `circuits/merkle_tree.circom`,
+ * and it has two kinds of consumer: the circuit tests, which use it to compute
+ * what the circuit is about to compute and assert the two agree, and
+ * `scripts/utils/make-fixture.ts`, which uses it to build the golden fixtures
+ * this package publishes.
  *
- * That is the duplication that actually costs something. These functions mirror
- * the circom templates in `circuits/note.circom` and
- * `circuits/merkle_tree.circom`; if a circuit changes the order of its Poseidon
- * inputs, every copy has to change with it, and nothing warns you about the one
- * you missed. A proof built against a stale copy is well-formed and fails
- * verification with nothing to explain why.
+ * That second consumer is why it lives here rather than under `test/`. A build
+ * script importing from the test tree inverts the dependency: `test/` may reach
+ * into `scripts/`, never the other way round.
  *
- * `make-fixture.ts` reproduced them rather than importing because they lived
- * inside `describe()` closures. They live here now, so it imports.
+ * The duplication it replaced was worth removing. `computeCommitment` existed
+ * four times — once per circuit suite plus a `commit` inside `make-fixture.ts`
+ * — and `buildMerkleProof` twice, byte-identical. If a circuit changes the
+ * order of its Poseidon inputs, every copy has to change with it, and nothing
+ * warns you about the one you missed. A proof built against a stale copy is
+ * well-formed and fails verification with nothing to explain why.
  */
 import { buildBabyjub, buildPoseidon } from "circomlibjs";
 

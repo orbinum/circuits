@@ -1,44 +1,26 @@
 #!/usr/bin/env ts-node
 
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
-import { execFileSync } from "node:child_process";
-import { blake2b } from "@noble/hashes/blake2.js";
 
-import { CIRCUITS, type CircuitName } from "../lib/circuits";
-import { ROOT } from "../lib/paths";
-import { sha256Hex } from "../lib/manifest";
+import { CIRCUITS, parseCircuit, type CircuitName } from "../lib/circuits";
+import { MANIFEST_PATH, ROOT, rel } from "../lib/paths";
+import { ok } from "../lib/log";
+import {
+    sha256Hex,
+    type Artifact,
+    type ArtifactKind,
+    type Manifest,
+    type Version,
+} from "../lib/manifest";
+import { computeVkHash } from "../lib/vk-hash";
 
-type ArtifactKind = "wasm" | "zkey" | "ark" | "r1cs" | "vk_json";
-
-interface ArtifactEntry {
-    file: string;
-    localPath: string;
-    bytes: number;
-    sha256: string;
-}
-
-interface CircuitVersionEntry {
-    version: number;
-    vk_hash: string;
-    artifacts: Partial<Record<ArtifactKind, ArtifactEntry>>;
-}
-
-interface Manifest {
-    schema_version: string;
-    package_name: string;
-    package_version: string;
-    generated_at: string;
-    circuits: Record<
-        CircuitName,
-        {
-            active_version: number;
-            supported_versions: number[];
-            versions: Record<string, CircuitVersionEntry>;
-        }
-    >;
-}
+// The manifest's shape lives in ../lib/manifest, shared with everything that
+// reads the file. This script is the writer; redeclaring the types here would
+// let the two drift, which is exactly the failure the shared layer exists to
+// prevent.
+type ArtifactEntry = Artifact;
+type CircuitVersionEntry = Version;
 
 const packageJsonPath = path.join(ROOT, "package.json");
 
@@ -55,34 +37,6 @@ if (!Number.isFinite(defaultCircuitVersion) || defaultCircuitVersion < 1) {
 // The circuit list lives in scripts/lib/circuits.ts so adding one means
 // editing a single place.
 const circuits: readonly CircuitName[] = CIRCUITS;
-
-// snarkjs VK JSON → arkworks compressed binary. Same conversion the node's VK
-// registration runs, so its output is exactly the `key_data` stored on-chain.
-const PACK_VERIFYING_KEY_BIN =
-    process.env.PACK_VERIFYING_KEY_BIN ??
-    path.resolve(ROOT, "../groth16-proofs/target/release/pack-verifying-key");
-
-// Canonical VK hash = blake2_256 of the arkworks binary, identical to the chain's
-// sp_io::hashing::blake2_256(key_data). Hashing vk.json instead would be a different
-// hash of different bytes and never match the chain, so it fails closed if pack-verifying-key
-// is missing rather than falling back.
-function computeVkHash(vkJsonPath: string): string {
-    if (!fs.existsSync(PACK_VERIFYING_KEY_BIN)) {
-        throw new Error(
-            `pack-verifying-key binary not found at ${PACK_VERIFYING_KEY_BIN}. ` +
-                `Build it (cargo build --release -p groth16-proofs --bin pack-verifying-key) or set PACK_VERIFYING_KEY_BIN.`
-        );
-    }
-    const binPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "vkhash-")), "vk.bin");
-    try {
-        execFileSync(PACK_VERIFYING_KEY_BIN, [vkJsonPath, binPath], { stdio: "pipe" });
-        const bin = fs.readFileSync(binPath);
-        const digest = blake2b(new Uint8Array(bin), { dkLen: 32 });
-        return `0x${Buffer.from(digest).toString("hex")}`;
-    } finally {
-        fs.rmSync(path.dirname(binPath), { recursive: true, force: true });
-    }
-}
 
 function readArtifact(localPath: string): ArtifactEntry | null {
     const absPath = path.join(ROOT, localPath);
@@ -145,8 +99,19 @@ function buildVersionEntry(
 // Rotation controls: to add a version for ONE circuit, set ROTATE_CIRCUIT +
 // ROTATE_VERSION. The prior manifest's versions are reused verbatim (their
 // published bytes are canonical) and the new one is appended.
-const rotateCircuit = process.env.ROTATE_CIRCUIT ?? "";
+// Validated rather than compared raw: `circuit === rotateCircuit` against an
+// unchecked string means a typo — ROTATE_CIRCUIT=trasnfer — never matches, so
+// rotation silently falls through to the default path and emits a
+// single-version manifest with no error. A rotation that quietly does not
+// happen is worse than one that fails.
+const rotateCircuit = process.env.ROTATE_CIRCUIT ? parseCircuit(process.env.ROTATE_CIRCUIT) : "";
 const rotateVersion = Number(process.env.ROTATE_VERSION ?? "0");
+if (rotateCircuit && (!Number.isInteger(rotateVersion) || rotateVersion < 1)) {
+    throw new Error(
+        `ROTATE_CIRCUIT=${rotateCircuit} needs ROTATE_VERSION set to a positive integer, ` +
+            `got ${process.env.ROTATE_VERSION ?? "(unset)"}`
+    );
+}
 const priorManifest: Manifest | null = (() => {
     if (!rotateCircuit) return null;
     const p = path.join(ROOT, "manifest.json");
@@ -209,6 +174,5 @@ const manifest: Manifest = {
     circuits: Object.fromEntries(circuitsManifestEntries) as Manifest["circuits"],
 };
 
-const outPath = path.join(ROOT, "manifest.json");
-fs.writeFileSync(outPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-console.log(`✅ Manifest generated: ${outPath}`);
+fs.writeFileSync(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+ok(`manifest generated: ${rel(MANIFEST_PATH)}`);
