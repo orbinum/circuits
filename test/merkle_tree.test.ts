@@ -215,6 +215,50 @@ describe("Merkle Tree Circuit Components", function () {
             const computedRoot = witness[1];
             expect(computedRoot.toString()).to.equal(root);
         });
+
+        // The constraint at circuits/merkle_tree.circom:31 is
+        // `path_index[i] * (path_index[i] - 1) === 0`, and its own comment says it
+        // "prevents malicious Merkle proofs with invalid path indices". Nothing
+        // exercised it — not here, and not through transfer or unshield, which
+        // both build their paths from honest indices.
+        //
+        // Without it, Selector() is an unconstrained linear interpolation between
+        // the two inputs: `out = in[0] + s*(in[1] - in[0])`. A non-binary `s`
+        // yields a hash input that is neither sibling, which is a free hand to
+        // forge a path to any root.
+        it("rejects a non-binary path_index", async () => {
+            const l0 = 1111n;
+            const l1 = 2222n;
+            const l2 = 3333n;
+            const l3 = 4444n;
+
+            const h23 = F.toString(poseidon([l2, l3]));
+
+            for (const bad of ["2", "3", String(1n << 200n)]) {
+                const input = {
+                    leaf: l0.toString(),
+                    path_elements: [l1.toString(), h23],
+                    path_index: [bad, "0"],
+                };
+
+                try {
+                    const witness = await circuit.calculateWitness(input);
+                    await circuit.checkConstraints(witness);
+                    expect.fail(`path_index = ${bad} was accepted`);
+                } catch (err: any) {
+                    expect(err.message).to.include("Assert Failed");
+                }
+            }
+
+            // The honest path still works — the rejection above is the binarity
+            // constraint firing, not the fixture being wrong.
+            const ok = await circuit.calculateWitness({
+                leaf: l0.toString(),
+                path_elements: [l1.toString(), h23],
+                path_index: ["0", "0"],
+            });
+            await circuit.checkConstraints(ok);
+        });
     });
 
     describe("MerkleTreeVerifier - Depth 4", () => {

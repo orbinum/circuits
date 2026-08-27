@@ -386,9 +386,34 @@ describe("Unshield Circuit (gasless)", function () {
 
         it("rejects fee = 2^128 (exceeds u128)", async function () {
             const circuit = needCircuit(circuitOrUndefined, "unshield", this);
-            const input = buildInput({ noteValue: 0n, amount: 0n, fee: 0n });
-            input.fee = (2n ** 128n).toString();
-            input.note_value = (2n ** 128n).toString();
+            // Through buildInput, with conservation holding exactly
+            // (note_value === amount + fee + change), so Num2Bits on the fee is
+            // the only constraint that can reject this. Patching the fields in
+            // afterwards made the conservation check fire instead — the test then
+            // passed even with the range widened to Num2Bits(254).
+            const input = buildInput({ noteValue: 2n ** 128n, amount: 0n, fee: 2n ** 128n });
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        // The case above sets fee AND note_value out of range, so it passes even
+        // if only one of the two is range-checked. This isolates note_value.
+        //
+        // The value goes through buildInput rather than being patched in
+        // afterwards: the note commitment and the Merkle root are derived from
+        // it, so an override leaves the circuit comparing a 2^128 note_value
+        // against a commitment built for something else, and the conservation
+        // constraint at line 47 fires before the range check is reached. Verified
+        // by widening the range to Num2Bits(254) — a patched-in test still passed.
+        it("rejects note_value = 2^128 (isolates the range check)", async function () {
+            const circuit = needCircuit(circuitOrUndefined, "unshield", this);
+            const over = 2n ** 128n;
+            // Conservation holds exactly: note_value === amount + fee + change.
+            const input = buildInput({ noteValue: over, amount: over, fee: 0n });
             try {
                 await circuit.calculateWitness(input);
                 expect.fail("Should have thrown");
@@ -611,9 +636,14 @@ describe("Unshield Circuit (gasless)", function () {
 
         it("change_value range: rejects change_value = 2^128 (exceeds u128)", async function () {
             const circuit = needCircuit(circuitOrUndefined, "unshield", this);
-            const input = buildInput({ noteValue: 0n, amount: 0n, fee: 0n });
-            // change_value = 2^128: both conservation (0 ≠ 2^128) and Num2Bits(128) fail.
-            input.change_value = (2n ** 128n).toString();
+            // Conservation holds (note_value === change_value), so the rejection
+            // is Num2Bits(128) on change_value rather than the sum check.
+            const input = buildInput({
+                noteValue: 2n ** 128n,
+                amount: 0n,
+                fee: 0n,
+                changeValue: 2n ** 128n,
+            });
             try {
                 await circuit.calculateWitness(input);
                 expect.fail("Should have thrown");

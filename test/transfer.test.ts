@@ -627,6 +627,58 @@ describe("Transfer Circuit (gasless)", function () {
                 expect(err.message).to.include("Assert Failed");
             }
         });
+
+        // circuits/transfer.circom:131-137 puts all four value signals through
+        // Num2Bits(128), but only the fee had a rejection test. The input and
+        // output values are the ones an attacker controls.
+        //
+        // Two traps this test had to get past, both found by widening the range
+        // to Num2Bits(254) and watching the test still pass:
+        //
+        //   - Patching the value in after buildInput desynchronises the derived
+        //     commitments, so the *commitment* constraint fires and the range
+        //     check is never reached.
+        //   - A zero-valued second input trips is_dummy, and the conservation
+        //     constraint at line 125 fires first.
+        //
+        // Both make the test pass for the wrong reason. Passing the value through
+        // buildInput with two non-zero inputs leaves Num2Bits as the only
+        // constraint that can reject it.
+        it("rejects input_values[0] = 2^128", async function () {
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
+            const over = 2n ** 128n;
+            const input = buildInput({
+                value0: over,
+                value1: 1n,
+                outValue0: over,
+                outValue1: 1n,
+                fee: 0n,
+            });
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("rejects output_values[0] = 2^128", async function () {
+            const circuit = needCircuit(circuitOrUndefined, "transfer", this);
+            const over = 2n ** 128n;
+            const input = buildInput({
+                value0: 1n,
+                value1: over,
+                outValue0: over,
+                outValue1: 1n,
+                fee: 0n,
+            });
+            try {
+                await circuit.calculateWitness(input);
+                expect.fail("Should have thrown");
+            } catch (err: any) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
     });
 
     // ── 10. Dummy note (Constraints 9 & 10) ────────────────────────────────────
