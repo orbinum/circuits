@@ -1,87 +1,146 @@
-# CI only compiles and tests. It never publishes and never regenerates
+# CI only compiles, checks and tests. It never publishes and never regenerates
 # manifest.json — zkey/VK generation is nondeterministic, so a CI rebuild would
-# mint VKs that don't match what is published/registered on-chain. Releases are
-# manual: see docs/RELEASE.md.
-name: CI - Build and Test
+# mint VKs that don't match what is published and registered on-chain. Releases
+# are manual: see docs/RELEASE.md.
+name: CI
 
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
+    push:
+        branches: [main, develop]
+    pull_request:
+        branches: [main, develop]
 
 permissions:
-  contents: read
-  pull-requests: read
+    contents: read
+
+env:
+    CIRCOM_VERSION: v2.2.3
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup pnpm
-      uses: pnpm/action-setup@v4
+    lint:
+        name: Lint & Types
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20.x
+                  cache: pnpm
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20.x'
-        cache: 'pnpm'
-    
-    - name: Install Circom
-      run: |
-        wget https://github.com/iden3/circom/releases/download/v2.2.3/circom-linux-amd64
-        chmod +x circom-linux-amd64
-        sudo mv circom-linux-amd64 /usr/local/bin/circom
-        circom --version
-    
-    - name: Install dependencies
-      run: pnpm install --frozen-lockfile
-    
-    - name: Run linter
-      run: |
-        pnpm run format:check
-        pnpm run lint:circom
-    
-    - name: Build all circuits
-      run: pnpm run build-all
+            - run: pnpm install --frozen-lockfile
 
-    # Freshly built zkeys/VKs are non-canonical throwaways (nondeterministic
-    # setup) — they validate circuit logic only and are never uploaded.
-    # manifest_vk_hash.test.ts self-skips here (no pack-verifying-key); it runs locally
-    # before a release. manifest_schema.test.ts validates the committed manifest.
-    - name: Run tests
-      run: pnpm test
+            - name: ESLint
+              run: pnpm run lint
 
-  security:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Setup pnpm
-      uses: pnpm/action-setup@v4
+            # tsc never ran in CI before: the `build` script was `tsc` and nothing
+            # invoked it, so a type error in scripts/ could reach main unnoticed.
+            # ts-node type-checks test/ incidentally, but never the build scripts.
+            - name: Types
+              run: pnpm run typecheck
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20.x'
-        cache: 'pnpm'
-    
-    - name: Install dependencies
-      run: pnpm install --frozen-lockfile
-    
-    - name: Run security audit
-      run: pnpm audit --audit-level=moderate
-      continue-on-error: true
-    
-    - name: Check for secrets
-      uses: trufflesecurity/trufflehog@main
-      with:
-        path: ./
-        base: ${{ github.event.before }}
-        head: HEAD
-        extra_args: --only-verified
+            - name: Formatting
+              run: pnpm run format:check
+
+    test:
+        name: Build & Test
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20.x
+                  cache: pnpm
+
+            - name: Install circom
+              run: |
+                  set -euo pipefail
+                  wget -q "https://github.com/iden3/circom/releases/download/${CIRCOM_VERSION}/circom-linux-amd64"
+                  chmod +x circom-linux-amd64
+                  sudo mv circom-linux-amd64 /usr/local/bin/circom
+                  circom --version
+
+            - run: pnpm install --frozen-lockfile
+
+            - name: Lint circom sources
+              run: pnpm run lint:circom
+
+            # Freshly built zkeys/VKs are non-canonical throwaways (the setup is
+            # nondeterministic) — they validate circuit logic only and are never
+            # uploaded. --allow-skip-ark because CI has no Rust toolchain and the
+            # .ark artifacts are not what this job checks.
+            - name: Build all circuits
+              run: pnpm run build-all --allow-skip-ark
+
+            # test:strict, not test. Circuit suites skip themselves when the compiled
+            # wasm is absent, and roughly ninety tests turning into pending looks
+            # identical to a pass in the log. CIRCUITS_REQUIRE_ARTIFACTS makes an
+            # absent artifact a failure, which is the only reason this job's green
+            # means anything.
+            - name: Test
+              run: pnpm run test:strict
+
+    vk-hash:
+        name: Canonical vk_hash
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20.x
+                  cache: pnpm
+
+            # The manifest's vk_hash is what the chain registers a verifying key by,
+            # and manifest_vk_hash.test.ts is the only thing that checks it. It needs
+            # the pack-verifying-key binary from the sibling repo, which CI did not
+            # have — so the test self-skipped on every run and the property was
+            # guarded by a human remembering to run it locally before a release.
+            - name: Cache pack-verifying-key
+              id: cache-pvk
+              uses: actions/cache@v4
+              with:
+                  path: ~/.cargo-pvk
+                  key: pack-verifying-key-${{ runner.os }}-v1
+
+            - name: Build pack-verifying-key
+              if: steps.cache-pvk.outputs.cache-hit != 'true'
+              run: |
+                  set -euo pipefail
+                  git clone --depth 1 https://github.com/orbinum/groth16-proofs.git /tmp/g16
+                  cd /tmp/g16
+                  cargo build --release --bin pack-verifying-key
+                  mkdir -p ~/.cargo-pvk
+                  cp target/release/pack-verifying-key ~/.cargo-pvk/
+
+            - run: pnpm install --frozen-lockfile
+
+            - name: Verify vk_hash for every circuit
+              run: pnpm exec mocha --no-config --require ts-node/register test/manifest_vk_hash.test.ts
+              env:
+                  PACK_VERIFYING_KEY_BIN: /home/runner/.cargo-pvk/pack-verifying-key
+                  CIRCUITS_REQUIRE_ARTIFACTS: "1"
+
+    security:
+        name: Security
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20.x
+                  cache: pnpm
+
+            - run: pnpm install --frozen-lockfile
+
+            # No continue-on-error: an audit that cannot fail the build is a report
+            # nobody reads.
+            - name: Audit dependencies
+              run: pnpm audit --audit-level=moderate
+
+            - name: Scan for secrets
+              uses: trufflesecurity/trufflehog@v3.90.10
+              with:
+                  extra_args: --only-verified

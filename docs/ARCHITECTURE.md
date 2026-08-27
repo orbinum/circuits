@@ -7,101 +7,87 @@ Orbinum Circuits is a Zero-Knowledge proof system for privacy-preserving blockch
 ## Directory Structure
 
 ```
-orbinum-circuits/
-├── .github/                    # GitHub configuration
-│   ├── workflows/              # CI pipelines
-│   │   └── ci.yml              # Build, test, security audit (no publishing)
-│   ├── ISSUE_TEMPLATE/         # Issue templates
+circuits/
+├── .github/
+│   ├── ISSUE_TEMPLATE/
 │   ├── PULL_REQUEST_TEMPLATE.md
-│   └── PRE_COMMIT.md          # Pre-commit documentation
+│   └── workflows/ci.yml         # Four jobs: lint, test, vk-hash, security
 │
-├── circuits/                   # Circom circuit definitions (flat)
-│   ├── value_proof.circom      # Note formation proof (relay-fee claiming)
-│   ├── merkle_tree.circom      # Merkle tree component
-│   ├── note.circom             # Note commitment
-│   ├── poseidon_wrapper.circom # Poseidon hash wrapper
-│   ├── transfer.circom         # Private transfers (2-in/2-out, supports dummy inputs)
-│   └── unshield.circom         # Asset unshielding
+├── circuits/                    # Circom sources (flat)
+│   ├── poseidon_wrapper.circom  # Poseidon2 / Poseidon4 — the primitive layer
+│   ├── note.circom              # NoteCommitment, Nullifier
+│   ├── merkle_tree.circom       # Selector, MerkleTreeVerifier
+│   ├── value_proof.circom       # Note formation proof (relay-fee claiming)
+│   ├── transfer.circom          # Private transfer, 2-in/2-out, dummy inputs
+│   └── unshield.circom          # Asset unshielding
 │
-├── scripts/                    # Automation scripts
-│   ├── build/                  # Build pipeline
-│   │   ├── compile.sh
-│   │   ├── setup.sh
-│   │   ├── full-pipeline.sh
-│   │   ├── pack-proving-key.sh # drives pack-proving-key from groth16-proofs
-│   │   ├── extract-vk.rs       # Rust script (extract verifying key)
-│   │   └── generate-metadata.sh
-│   ├── e2e/                    # End-to-end tests
-│   │   └── e2e-transfer.ts
-│   ├── utils/                  # Utilities
-│   │   ├── check-artifacts.ts
-│   │   ├── generate-manifest.ts
-│   │   ├── health-check.sh
-│   │   └── lint-circom.sh
-│   ├── build-all.sh            # Main build script
-│   └── README.md
+├── scripts/
+│   ├── lib/                     # Shared by every script
+│   │   ├── circuits.ts          # The circuit list and their public-signal counts
+│   │   ├── paths.ts             # Repository layout, resolved once
+│   │   ├── log.ts               # Console output and colour
+│   │   ├── run.ts               # Process execution and tool presence
+│   │   └── manifest.ts          # Reading and traversing manifest.json
+│   ├── build/
+│   │   ├── compile.ts           # circom → .r1cs, .wasm, .sym
+│   │   ├── setup.sh             # Groth16 trusted setup (ptau, contribute, beacon)
+│   │   ├── pack-proving-key.sh  # .zkey → .ark v2, via groth16-proofs
+│   │   └── full-pipeline.ts     # The three above, for one circuit
+│   ├── release/
+│   │   ├── release.sh           # Manual release: pack, tag, publish
+│   │   ├── verify-artifacts.ts  # Fail-closed check against the manifest
+│   │   └── restore-artifacts.ts # Re-download drifted artifacts from npm
+│   ├── utils/
+│   │   ├── generate-manifest.ts # Emits manifest.json with canonical vk_hash
+│   │   ├── lint-circom.ts       # Static checks + a real compile
+│   │   └── make-fixture.ts      # Deterministic per-circuit test fixtures
+│   └── build-all.ts             # full-pipeline over every circuit
 │
-├── test/                       # Test suite (flat)
-│   ├── value_proof.test.ts
-│   ├── merkle_tree.test.ts
+├── test/
+│   ├── helpers/
+│   │   ├── circuit-inputs.ts    # The note cryptography in JavaScript
+│   │   └── artifacts.ts         # The artifact guard and strict mode
+│   ├── test-utils.ts            # Temp-circuit cleanup
+│   ├── poseidon_wrapper.test.ts # Component tests (compile a temp circuit)
 │   ├── note.test.ts
-│   ├── poseidon_compat.test.ts
-│   ├── poseidon_wrapper.test.ts
+│   ├── merkle_tree.test.ts
+│   ├── poseidon_compat.test.ts  # Cross-implementation Poseidon vectors
+│   ├── value_proof.test.ts      # Circuit tests (need the compiled wasm)
 │   ├── transfer.test.ts
 │   ├── unshield.test.ts
-│   └── test-utils.ts           # Shared test helpers
+│   ├── metadata.test.ts         # Arity and constraint counts, three sources
+│   ├── manifest_schema.test.ts  # The committed manifest's shape
+│   └── manifest_vk_hash.test.ts # vk_hash == blake2_256(packed VK)
 │
-├── benches/                    # Performance benchmarks
-│   ├── run-all.bench.ts
-│   ├── transfer.bench.ts
-│   ├── types.ts
-│   └── utils.ts
+├── fixtures/                    # Deterministic inputs; witnesses are generated
+│   ├── unshield.input.json
+│   ├── transfer.input.json
+│   └── value_proof.input.json
 │
-├── npm/                        # npm package template
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── RELEASE.md
+│   ├── circuits/                # One document per circuit and component
+│   └── guides/
+│
+├── npm/                         # What gets published: entry point and template
 │   ├── index.js
 │   ├── index.d.ts
 │   ├── package.json.template
 │   └── README.md
 │
-├── build/                      # Build artifacts (gitignored)
-│   ├── *_js/                   # WASM witness calculators
-│   ├── *.r1cs                  # Constraint systems
-│   ├── *.sym                   # Debug symbols
-│   └── verification_key_*.json # Verifying keys
-│
-├── keys/                       # Cryptographic keys (gitignored)
-│   ├── *_pk.zkey               # Proving keys (snarkjs)
-│   └── *_pk.ark                # Proving keys (arkworks)
-│
-├── dist/                       # TypeScript compilation output
-│
-├── docs/                       # Documentation
-│   ├── ARCHITECTURE.md
-│   ├── circuits/               # Circuit specifications
-│   │   ├── value_proof.md
-│   │   ├── merkle-tree.md
-│   │   ├── note.md
-│   │   ├── poseidon-wrapper.md
-│   │   ├── transfer.md
-│   │   └── unshield.md
-│   └── guides/                 # User guides
-│       ├── quick-start.md
-│       ├── arkworks-integration.md
-│       └── pre-push-check-rapido.md
-│
-├── types/                      # TypeScript type definitions
-│   └── circom_tester.d.ts
-│
-├── config/                     # Configuration files
-│   ├── circuits.config.json    # Circuit parameters
-│   └── build.config.json       # Build configuration
-│
-├── manifest.json               # Published artifact manifest
+├── types/circom_tester.d.ts
+├── manifest.json                # Published artifact manifest (generated)
+├── eslint.config.mjs
+├── .mocharc.json
+├── .prettierrc
 ├── package.json
-├── pnpm-lock.yaml
 └── tsconfig.json
-
 ```
+
+Generated directories, none of them committed: `build/` (circom output),
+`keys/` (proving and verifying keys), `ptau/` (the powers-of-tau file),
+`pkg/` and `release/` (assembled at publish time).
 
 ## Component Architecture
 
@@ -129,12 +115,10 @@ orbinum-circuits/
 
 **Components**:
 
-- `compile.sh`: Circom compilation (circom → R1CS + WASM)
+- `compile.ts`: Circom compilation (circom → R1CS + WASM + symbols)
 - `setup.sh`: Trusted setup (Powers of Tau → proving/verifying keys)
-- `full-pipeline.sh`: Complete build automation
+- `full-pipeline.ts`: The three phases above, for one circuit
 - `pack-proving-key.sh`: Convert `.zkey` to `.ark` v2, via the `pack-proving-key` binary from the sibling `groth16-proofs` checkout
-- `extract-vk.rs`: Extract verifying key from `.zkey` via Rust script
-- `generate-metadata.sh`: Generate circuit metadata
 
 **Workflow**:
 
@@ -150,168 +134,27 @@ orbinum-circuits/
 
 - `value_proof.test.ts`, `transfer.test.ts`, `unshield.test.ts`: Application circuit tests
 - `merkle_tree.test.ts`, `note.test.ts`, `poseidon_wrapper.test.ts`, `poseidon_compat.test.ts`: Component tests
-- `test-utils.ts`: Shared test helpers
+- `metadata.test.ts`: Public-signal arity and constraint counts, checked against three independent sources
+- `manifest_schema.test.ts`, `manifest_vk_hash.test.ts`: The committed manifest and its canonical `vk_hash`
+- `helpers/circuit-inputs.ts`: The note cryptography in JavaScript, shared by every suite
+- `helpers/artifacts.ts`: The artifact guard — see `CIRCUITS_REQUIRE_ARTIFACTS` below
+- `test-utils.ts`: Temp-circuit cleanup
 
-**End-to-End Tests** (`scripts/e2e/`): Full proof lifecycle
+**Strict mode**: circuit suites skip themselves when the compiled wasm is
+absent, so a fresh checkout is green. `CIRCUITS_REQUIRE_ARTIFACTS=1`
+(`pnpm test:strict`, which is what CI runs) turns that absence into a failure —
+a suite that skips everything is otherwise indistinguishable from one that
+passes everything.
+
+End-to-end proof generation and verification lives downstream, in
+[`groth16-proofs`](https://github.com/orbinum/groth16-proofs), which consumes
+these artifacts.
 
 **Tools**:
 
 - `circom_tester`: Circuit testing framework
 - `mocha` + `chai`: Test runner and assertions
 - `snarkjs`: Proof generation and verification
-
-### 4. **Benchmarking** (`benches/`)
-
-**Purpose**: Performance measurement and optimization
-
-**Files**:
-
-- `run-all.bench.ts`: Runs all benchmarks sequentially
-- `transfer.bench.ts`: Per-circuit benchmarks
-- `types.ts`, `utils.ts`: Shared benchmark helpers
-
-**Metrics**:
-
-- Witness generation time
-- Proof generation time
-- Verification time
-- Memory usage
-- Throughput (operations/second)
-
-### 5. **npm Package** (`npm/`)
-
-**Purpose**: Distributable npm package template for `@orbinum/circuits`
-
-- `index.js` / `index.d.ts`: Package entry point and TypeScript types
-- `package.json.template`: Version-stamped during release
-- Published manually via `scripts/release/release.sh` to npm (see [RELEASE.md](./RELEASE.md))
-
-### 7. **Documentation** (`docs/`)
-
-**Purpose**: Comprehensive project documentation
-
-**Structure**:
-
-- **ARCHITECTURE.md**: System design and component interactions (this file)
-- **circuits/**: Specifications for value_proof, transfer, unshield, note, merkle-tree, poseidon-wrapper
-- **guides/**: Quick start, arkworks integration, pre-push checks
-
-## Data Flow
-
-### Proof Generation Flow
-
-```
-1. Witness Calculation
-   └─> build/*_js/*.wasm
-        └─> Execute circuit logic
-        └─> Generate witness (.wtns)
-
-3. Proof Generation
-   └─> snarkjs + keys/*_pk.zkey
-        └─> Groth16 proving algorithm
-        └─> Output: proof.json + public.json
-
-4. Verification
-   └─> snarkjs + build/verification_key_*.json
-        └─> Verify proof validity
-        └─> Output: boolean (valid/invalid)
-```
-
-### Build Pipeline Flow
-
-```
-1. Dependency Check
-   └─> Verify circom, snarkjs installed
-   └─> Check node version ≥18
-
-2. Circuit Compilation
-   └─> Parse .circom files
-   └─> Generate R1CS constraints
-   └─> Generate WASM witness calculator
-
-3. Trusted Setup
-   └─> Download Powers of Tau (once)
-   └─> Circuit-specific setup
-   └─> Generate proving key
-   └─> Export verifying key
-
-4. Validation
-   └─> Verify setup integrity
-   └─> Run test suite
-   └─> Generate benchmarks
-```
-
-## Build Artifacts
-
-### Generated Files
-
-| File                      | Purpose                    | Location      |
-| ------------------------- | -------------------------- | ------------- |
-| `*.r1cs`                  | Constraint system          | `build/`      |
-| `*.sym`                   | Symbols for debugging      | `build/`      |
-| `*_js/*.wasm`             | Witness calculator         | `build/*_js/` |
-| `*_pk.zkey`               | Proving key (snarkjs)      | `keys/`       |
-| `*_pk.ark`                | Proving key (arkworks)     | `keys/`       |
-| `verification_key_*.json` | Verifying key              | `build/`      |
-| `manifest.json`           | Artifact manifest + hashes | root          |
-
-### Artifact Lifecycle
-
-- **Development**: Generated locally, excluded from git
-- **CI**: Rebuilt for validation only — never published (nondeterministic keys)
-- **Releases**: Manual, from the developer's machine (`scripts/release/release.sh`); published as npm package and GitHub release assets. Published artifacts are immutable.
-- **Integration**: Downloaded by consuming applications, sha256-verified against `manifest.json`
-
-## Security Considerations
-
-### Trusted Setup
-
-- **Development**: Single-party setup (insecure, for testing only)
-- **Production**: Multi-party ceremony required (50+ participants)
-- **Verification**: All contributions are cryptographically verifiable
-
-### Key Management
-
-- **Proving Keys**: Large files, stored separately from repository
-- **Verifying Keys**: Small, embedded in on-chain pallets
-- **Powers of Tau**: Downloaded from trusted ceremonies (Hermez)
-
-### Circuit Auditing
-
-1. **Constraint Analysis**: Verify constraint count and complexity
-2. **Soundness Check**: Ensure no invalid proofs can be generated
-3. **Completeness Check**: Ensure all valid inputs can be proven
-4. **Determinism**: Verify circuits produce consistent outputs
-
-## Development Workflow
-
-### Local Development
-
-```bash
-# 1. Clone and install
-git clone <repo>
-pnpm install
-
-# 2. Build circuits
-pnpm run build-all
-
-# 3. Run tests
-pnpm test
-
-# 4. Run benchmarks
-pnpm run bench
-
-# 5. Format code
-pnpm run format
-```
-
-### Adding New Circuits
-
-1. Create circuit file in `circuits/`
-2. Add compilation script in `package.json`
-3. Create test file in `test/circuits/`
-4. Add benchmark in `benches/`
-5. Update documentation
 
 ### Pre-commit Hooks
 
@@ -344,43 +187,28 @@ fail-closed verifies every artifact's sha256 against the committed
 `manifest.json` before publishing to npm and GitHub releases.
 Full flow and rationale: [RELEASE.md](./RELEASE.md).
 
-## Configuration Management
+## Circuit metadata
 
-### Circuit Parameters (`config/circuits.config.json`)
+There is no configuration file. A circuit's parameters live in the circom source
+that defines them, and the numbers that describe a circuit — its public-signal
+count above all — live in `scripts/lib/circuits.ts`:
 
-```json
-{
-    "value_proof": {
-        "constraints": 300
-    },
-    "transfer": {
-        "merkleDepth": 20,
-        "inputNotes": 2,
-        "outputNotes": 2,
-        "maxAssets": 8
-    },
-    "unshield": {
-        "merkleDepth": 20,
-        "maxAssets": 8
-    }
-}
+```ts
+export const PUBLIC_SIGNALS: Record<CircuitName, number> = {
+    value_proof: 4,
+    transfer: 7,
+    unshield: 7,
+};
 ```
 
-### Build Configuration (`config/build.config.json`)
+`test/metadata.test.ts` requires that table, the verifying key's `nPublic`, and
+the compiled `.r1cs` to agree. Three independent sources, so none can drift
+alone.
 
-```json
-{
-    "compiler": {
-        "version": "2.2.3",
-        "optimization": "O1",
-        "outputFormats": ["r1cs", "wasm", "sym"]
-    },
-    "setup": {
-        "ptauSize": 16,
-        "ceremony": { "type": "development" }
-    }
-}
-```
+This replaced `config/circuits.config.json`, which no code read. It claimed 300
+constraints for `value_proof`, which has 1151 — an error that survived because
+nothing checked it and nothing depended on it. A metadata file nobody reads is a
+trap, not documentation.
 
 ## Performance Targets
 
