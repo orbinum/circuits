@@ -19,6 +19,7 @@ export const KEYS_DIR = path.join(ROOT, "keys");
 export const PTAU_DIR = path.join(ROOT, "ptau");
 export const FIXTURES_DIR = path.join(ROOT, "fixtures");
 export const MANIFEST_PATH = path.join(ROOT, "manifest.json");
+export const PACKAGE_JSON = path.join(ROOT, "package.json");
 
 /** The circom source for a circuit. */
 export const circuitSource = (circuit: string): string =>

@@ -17,12 +17,13 @@ import * as path from "node:path";
 import { blake2b } from "@noble/hashes/blake2.js";
 import { expect } from "chai";
 
+// The circuit list is shared, so a fourth circuit is registered in one place.
+import { CIRCUITS } from "../scripts/lib/circuits";
+
 const ROOT = path.resolve(__dirname, "..");
 const PACK_VERIFYING_KEY_BIN =
     process.env.PACK_VERIFYING_KEY_BIN ??
     path.resolve(ROOT, "../groth16-proofs/target/release/pack-verifying-key");
-
-const CIRCUITS = ["value_proof", "transfer", "unshield"] as const;
 
 /** blake2_256 of the arkworks binary — must equal sp_io::hashing::blake2_256(key_data). */
 function canonicalVkHash(vkJsonPath: string): string {

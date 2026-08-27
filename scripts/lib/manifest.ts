@@ -15,7 +15,9 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 
-import { MANIFEST_PATH, ROOT } from "./paths";
+import { MANIFEST_PATH, PACKAGE_JSON, ROOT } from "./paths";
+
+export { PACKAGE_JSON };
 
 /** One artifact: a file the package publishes, with its integrity data. */
 export interface Artifact {

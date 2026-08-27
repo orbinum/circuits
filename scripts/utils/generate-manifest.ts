@@ -1,13 +1,15 @@
 #!/usr/bin/env ts-node
 
-import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import { blake2b } from "@noble/hashes/blake2.js";
 
-type CircuitName = "value_proof" | "transfer" | "unshield";
+import { CIRCUITS, type CircuitName } from "../lib/circuits";
+import { ROOT } from "../lib/paths";
+import { sha256Hex } from "../lib/manifest";
+
 type ArtifactKind = "wasm" | "zkey" | "ark" | "r1cs" | "vk_json";
 
 interface ArtifactEntry {
@@ -38,7 +40,6 @@ interface Manifest {
     >;
 }
 
-const ROOT = path.resolve(__dirname, "../../");
 const packageJsonPath = path.join(ROOT, "package.json");
 
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
@@ -51,11 +52,9 @@ if (!Number.isFinite(defaultCircuitVersion) || defaultCircuitVersion < 1) {
     throw new Error(`Invalid CIRCUIT_VERSION: ${process.env.CIRCUIT_VERSION}`);
 }
 
-const circuits: CircuitName[] = ["value_proof", "transfer", "unshield"];
-
-function sha256Hex(data: Buffer): string {
-    return crypto.createHash("sha256").update(data).digest("hex");
-}
+// The circuit list lives in scripts/lib/circuits.ts so adding one means
+// editing a single place.
+const circuits: readonly CircuitName[] = CIRCUITS;
 
 // snarkjs VK JSON → arkworks compressed binary. Same conversion the node's VK
 // registration runs, so its output is exactly the `key_data` stored on-chain.
