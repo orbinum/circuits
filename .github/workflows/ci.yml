@@ -1,7 +1,15 @@
-# CI only compiles, checks and tests. It never publishes and never regenerates
-# manifest.json — zkey/VK generation is nondeterministic, so a CI rebuild would
-# mint VKs that don't match what is published and registered on-chain. Releases
-# are manual: see docs/RELEASE.md.
+# CI compiles, checks and tests. It never publishes, never regenerates
+# manifest.json, and never runs the trusted setup.
+#
+# The setup is deliberately absent. It is nondeterministic — two runs of the same
+# ceremony produce different keys — so the zkeys and verifying keys a CI rebuild
+# mints can never match the sha256 the manifest records, and the vk_hash the chain
+# has registered. The job used to run it anyway and then throw the result away by
+# restoring the published artifacts on top, which cost a 72 MB download and three
+# setups per push to end up exactly where restoring alone would have.
+#
+# So: compile what this commit changes, restore what a compiler cannot produce.
+# Releases stay manual — see docs/RELEASE.md.
 name: CI
 
 on:
@@ -20,8 +28,12 @@ jobs:
     lint:
         name: Lint & Types
         runs-on: ubuntu-latest
+        timeout-minutes: 10
         steps:
             - uses: actions/checkout@v4
+            # No `version:` on purpose — the action reads `packageManager` from
+            # package.json, which pins pnpm with an integrity hash. Naming a
+            # version here would be a second, weaker source of truth.
             - uses: pnpm/action-setup@v4
             - uses: actions/setup-node@v4
               with:
@@ -42,9 +54,32 @@ jobs:
             - name: Formatting
               run: pnpm run format:check
 
+    # Cheap, artifact-free, and a gate for the expensive job below. Checks the
+    # manifest's shape and that its package_version matches package.json — a skew
+    # there means one of the two was regenerated and the other was not, which
+    # publishes a manifest describing a different release than the tarball.
+    manifest:
+        name: Manifest coherence
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20.x
+                  cache: pnpm
+
+            - run: pnpm install --frozen-lockfile
+
+            - name: Manifest schema
+              run: pnpm exec mocha --no-config --require ts-node/register test/manifest_schema.test.ts
+
     test:
         name: Build & Test
         runs-on: ubuntu-latest
+        timeout-minutes: 30
+        needs: manifest
         steps:
             - uses: actions/checkout@v4
             - uses: pnpm/action-setup@v4
@@ -62,62 +97,52 @@ jobs:
                   circom --version
 
             - run: pnpm install --frozen-lockfile
-            # rotation.test.ts drives generate-manifest, which computes a vk_hash for
-            # every version and shells out to this binary. Same cache key as the
-            # vk-hash job, so only the first of the two to run pays to build it.
-            - name: Cache pack-verifying-key
-              id: cache-pvk
-              uses: actions/cache@v4
-              with:
-                  path: ~/.cargo-pvk
-                  key: pack-verifying-key-${{ runner.os }}-v2
 
+            # rotation.test.ts drives generate-manifest, which computes a vk_hash
+            # for every version and shells out to this binary.
             - name: Build pack-verifying-key
-              if: steps.cache-pvk.outputs.cache-hit != 'true'
-              run: |
-                  set -euo pipefail
-                  git clone --depth 1 https://github.com/orbinum/groth16-proofs.git /tmp/g16
-                  cd /tmp/g16
-                  mkdir -p ~/.cargo-pvk
-                  if cargo build --release --bin pack-verifying-key 2>/dev/null; then
-                      cp target/release/pack-verifying-key ~/.cargo-pvk/
-                  else
-                      cargo build --release --bin convert-vk
-                      cp target/release/convert-vk ~/.cargo-pvk/pack-verifying-key
-                  fi
+              id: pvk
+              uses: ./.github/actions/pack-verifying-key
 
             - name: Lint circom sources
               run: pnpm run lint:circom
 
-            # Freshly built zkeys/VKs are non-canonical throwaways (the setup is
-            # nondeterministic) — they validate circuit logic only and are never
-            # uploaded. --allow-skip-ark because CI has no Rust toolchain and the
-            # .ark artifacts are not what this job checks.
-            - name: Build all circuits
-              run: pnpm run build-all --allow-skip-ark
+            # Compile and regenerate fixtures, but no ceremony — see the header.
+            # The fixtures come from the freshly built wasm in the same step
+            # because a .wtns built against a stale wasm is a witness for a circuit
+            # that no longer exists, and groth16.prove rejects it by length.
+            - name: Compile circuits and fixtures
+              run: pnpm run build-all --compile-only
 
-            # The build above regenerates the ceremony, and that is nondeterministic —
-            # the fresh zkeys and VKs cannot match the sha256 the manifest records.
-            # Tests asserting the manifest describes what is on disk would fail on
-            # artifacts never meant to be canonical, so the published bytes are pulled
-            # back (each checked against the manifest's own sha256) before the suite
-            # runs. The compiled wasm and r1cs are kept: those are what it tests.
-            - name: Restore canonical artifacts
-              run: pnpm run release:restore
+            # Only the ceremony outputs: zkey, verifying key and .ark. The wasm and
+            # r1cs stay as this commit compiled them, so a PR that changes a
+            # circuit is testing its own circuit rather than failing on a sha256
+            # mismatch against the published one.
+            - name: Restore ceremony artifacts
+              run: pnpm run release:restore --keys-only
 
-            # test:strict, not test. Circuit suites skip themselves when the compiled
-            # wasm is absent, and roughly ninety tests turning into pending looks
-            # identical to a pass in the log. CIRCUITS_REQUIRE_ARTIFACTS makes an
-            # absent artifact a failure, which is the only reason this job's green
-            # means anything.
+            # `release:verify` deliberately does NOT run here. It asserts the whole
+            # tree matches the manifest, wasm and r1cs included — so it fails on
+            # every commit that legitimately changes a circuit, which is the exact
+            # breakage this rewrite set out to remove. Measured: adding one
+            # constraint to value_proof.circom makes it report a wasm size and r1cs
+            # sha256 mismatch. It is a pre-publish gate, and docs/RELEASE.md keeps
+            # it there. What CI can check is that the *ceremony* artifacts match,
+            # and `release:restore` already fails closed if they do not.
+            # test:strict, not test. Circuit suites skip themselves when the
+            # compiled wasm is absent, and roughly ninety tests turning into
+            # pending looks identical to a pass in the log. CIRCUITS_REQUIRE_ARTIFACTS
+            # makes an absent artifact a failure, which is the only reason this
+            # job's green means anything.
             - name: Test
               run: pnpm run test:strict
               env:
-                  PACK_VERIFYING_KEY_BIN: /home/runner/.cargo-pvk/pack-verifying-key
+                  PACK_VERIFYING_KEY_BIN: ${{ steps.pvk.outputs.binary }}
 
     vk-hash:
         name: Canonical vk_hash
         runs-on: ubuntu-latest
+        timeout-minutes: 15
         steps:
             - uses: actions/checkout@v4
             - uses: pnpm/action-setup@v4
@@ -126,49 +151,30 @@ jobs:
                   node-version: 20.x
                   cache: pnpm
 
-            # The manifest's vk_hash is what the chain registers a verifying key by,
-            # and manifest_vk_hash.test.ts is the only thing that checks it. It needs
-            # the pack-verifying-key binary from the sibling repo, which CI did not
-            # have — so the test self-skipped on every run and the property was
-            # guarded by a human remembering to run it locally before a release.
-            - name: Cache pack-verifying-key
-              id: cache-pvk
-              uses: actions/cache@v4
-              with:
-                  path: ~/.cargo-pvk
-                  key: pack-verifying-key-${{ runner.os }}-v2
-
-            # The binary was named convert-vk before groth16-proofs 3.1.0. Both
-            # produce byte-identical output for a snarkjs VK — verified against
-            # all three circuits — so either yields the same vk_hash. Falling
-            # back keeps this job working while the rename is unpublished;
-            # delete the fallback once 3.1.0 is on main.
             - name: Build pack-verifying-key
-              if: steps.cache-pvk.outputs.cache-hit != 'true'
-              run: |
-                  set -euo pipefail
-                  git clone --depth 1 https://github.com/orbinum/groth16-proofs.git /tmp/g16
-                  cd /tmp/g16
-                  mkdir -p ~/.cargo-pvk
-                  if cargo build --release --bin pack-verifying-key 2>/dev/null; then
-                      cp target/release/pack-verifying-key ~/.cargo-pvk/
-                  else
-                      echo "pack-verifying-key not in this checkout; falling back to convert-vk"
-                      cargo build --release --bin convert-vk
-                      cp target/release/convert-vk ~/.cargo-pvk/pack-verifying-key
-                  fi
+              id: pvk
+              uses: ./.github/actions/pack-verifying-key
 
             - run: pnpm install --frozen-lockfile
+
+            # This job restores the verifying keys, and that is not incidental:
+            # build/ is gitignored, so without this step the keys are absent, every
+            # version is skipped, and the job reports green having checked nothing.
+            # Measured before the fix: 1 passing, 3 pending, exit 0. The test now
+            # throws under CIRCUITS_REQUIRE_ARTIFACTS when it checked zero versions.
+            - name: Restore ceremony artifacts
+              run: pnpm run release:restore --keys-only
 
             - name: Verify vk_hash for every circuit
               run: pnpm exec mocha --no-config --require ts-node/register test/manifest_vk_hash.test.ts
               env:
-                  PACK_VERIFYING_KEY_BIN: /home/runner/.cargo-pvk/pack-verifying-key
+                  PACK_VERIFYING_KEY_BIN: ${{ steps.pvk.outputs.binary }}
                   CIRCUITS_REQUIRE_ARTIFACTS: "1"
 
     security:
         name: Security
         runs-on: ubuntu-latest
+        timeout-minutes: 15
         steps:
             - uses: actions/checkout@v4
             - uses: pnpm/action-setup@v4

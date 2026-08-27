@@ -55,8 +55,21 @@ overwrite.**
     pnpm test                 # with pack-verifying-key present: canonical vk_hash check runs
     ```
 
-6. **Commit** the manifest + version bump and merge to `main` via PR (CI
-   validates the manifest schema; it does not regenerate it).
+6. **Commit** the manifest + version bump and merge to `main` via PR.
+
+    What CI checks on that PR:
+    - It **compiles** the circuits and regenerates the fixtures, but never runs
+      the trusted setup — the ceremony is nondeterministic, so keys it minted
+      could not match the manifest anyway. The canonical zkey, verifying key and
+      `.ark` come from `release:restore --keys-only`.
+    - It **regenerates the manifest and compares**. A commit that changes a
+      `.circom` without running `pnpm run manifest` fails here, with a message
+      saying so.
+    - It **verifies every `vk_hash`** against `blake2_256` of the packed
+      verifying key, and **proves and verifies all three circuits** for real.
+    - It does **not** run `release:verify`. That asserts the whole tree matches
+      the manifest, wasm and r1cs included, so it fails on any commit that
+      legitimately changes a circuit. It stays a pre-publish gate — step 5.
 
 7. **Dry-run** from a clean `main` checkout:
 

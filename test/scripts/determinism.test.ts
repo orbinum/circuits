@@ -104,7 +104,13 @@ describe("Script determinism", function () {
                 // `generated_at` is the one field that is meant to move.
                 delete before.generated_at;
                 delete after.generated_at;
-                expect(after).to.deep.equal(before);
+                expect(after).to.deep.equal(
+                    before,
+                    "the regenerated manifest differs from the committed one. If this " +
+                        "commit changes a .circom, that is expected — the compiled wasm and " +
+                        "r1cs moved, so the manifest that describes them has to move too. " +
+                        "Run 'pnpm run manifest' and commit the result."
+                );
             } catch (err) {
                 // A missing pack-verifying-key binary is a skip, not a failure:
                 // the manifest's vk_hash cannot be recomputed without it.

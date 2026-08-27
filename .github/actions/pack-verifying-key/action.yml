@@ -1,0 +1,80 @@
+# Build (or restore from cache) the binary that packs a snarkjs verifying key
+# into the arkworks bytes the chain stores.
+#
+# This lives in a composite action because two jobs need it and the copy-paste
+# had already drifted: one copy swallowed the build error with `2>/dev/null` and
+# said nothing when it fell back, the other announced it. The fallback logic is
+# subtle enough that having one authority for it matters more than the two lines
+# of YAML it saves.
+name: pack-verifying-key
+description: Build the pack-verifying-key binary from the groth16-proofs checkout, with caching.
+
+inputs:
+    ref:
+        description: >-
+            The groth16-proofs commit, tag or branch to build from. Defaults to the
+            default branch, which is a moving target: the binary computes the
+            vk_hash the chain registers a verifying key by, so pin this to a tag or
+            SHA once one is available. The cache key includes it, so changing it
+            invalidates the cache on its own rather than needing a manual bump.
+        required: false
+        default: main
+
+outputs:
+    binary:
+        description: Absolute path to the built pack-verifying-key binary.
+        value: ${{ steps.resolve.outputs.binary }}
+
+runs:
+    using: composite
+    steps:
+        - name: Resolve the binary path
+          id: resolve
+          shell: bash
+          run: echo "binary=$HOME/.cargo-pvk/pack-verifying-key" >> "$GITHUB_OUTPUT"
+
+        - name: Cache pack-verifying-key
+          id: cache
+          uses: actions/cache@v4
+          with:
+              path: ~/.cargo-pvk
+              key: pack-verifying-key-${{ runner.os }}-${{ inputs.ref }}
+
+        # Pinned rather than whatever ubuntu-latest happens to ship: the binary's
+        # output is consensus-relevant, so the toolchain that produces it should
+        # not change without someone deciding it should.
+        - name: Install Rust
+          if: steps.cache.outputs.cache-hit != 'true'
+          uses: dtolnay/rust-toolchain@1.90.0
+
+        # The binary was named convert-vk before groth16-proofs 3.1.0. Both produce
+        # byte-identical output for a snarkjs verifying key — verified against all
+        # three circuits — so either yields the same vk_hash. Delete the fallback
+        # once 3.1.0 is on the default branch.
+        #
+        # The probe writes to a log rather than /dev/null so a network or compiler
+        # failure is distinguishable from "this checkout predates the rename".
+        - name: Build pack-verifying-key
+          if: steps.cache.outputs.cache-hit != 'true'
+          shell: bash
+          run: |
+              set -euo pipefail
+              git clone --depth 1 --branch "${{ inputs.ref }}" \
+                  https://github.com/orbinum/groth16-proofs.git /tmp/g16
+              cd /tmp/g16
+              mkdir -p ~/.cargo-pvk
+
+              if cargo build --release --bin pack-verifying-key >/tmp/pvk-build.log 2>&1; then
+                  cp target/release/pack-verifying-key ~/.cargo-pvk/
+              else
+                  echo "pack-verifying-key not built; checking whether this predates the rename"
+                  if grep -q "no bin target named .pack-verifying-key" /tmp/pvk-build.log; then
+                      echo "falling back to convert-vk (identical output, pre-3.1.0 name)"
+                      cargo build --release --bin convert-vk
+                      cp target/release/convert-vk ~/.cargo-pvk/pack-verifying-key
+                  else
+                      echo "the build failed for a reason other than the rename:"
+                      cat /tmp/pvk-build.log
+                      exit 1
+                  fi
+              fi

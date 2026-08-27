@@ -19,6 +19,7 @@ import { expect } from "chai";
 
 // The circuit list is shared, so a fourth circuit is registered in one place.
 import { CIRCUITS } from "../scripts/lib/circuits";
+import { strict } from "./helpers/artifacts";
 
 const ROOT = path.resolve(__dirname, "..");
 const PACK_VERIFYING_KEY_BIN =
@@ -61,12 +62,26 @@ describe("manifest vk_hash is the canonical on-chain blake2_256", () => {
     for (const circuit of CIRCUITS) {
         it(`${circuit}: every version's manifest vk_hash == blake2_256(arkworks VK)`, function () {
             if (!hasManifest || !hasBin) {
-                this.skip(); // needs a built manifest + pack-verifying-key binary
+                // needs a built manifest + pack-verifying-key binary
+                if (strict()) {
+                    throw new Error(
+                        `${circuit}: cannot check vk_hash — ` +
+                            `${!hasManifest ? `no manifest at ${manifestPath}` : ""}` +
+                            `${!hasManifest && !hasBin ? ", " : ""}` +
+                            `${!hasBin ? `no pack-verifying-key at ${PACK_VERIFYING_KEY_BIN}` : ""}.`
+                    );
+                }
+                this.skip();
                 return;
             }
             const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
             const entry = manifest.circuits[circuit];
             if (!entry) {
+                if (strict()) {
+                    throw new Error(
+                        `${circuit}: not in the manifest, so its vk_hash is unchecked.`
+                    );
+                }
                 this.skip(); // circuit not in this manifest build
                 return;
             }
@@ -83,7 +98,21 @@ describe("manifest vk_hash is the canonical on-chain blake2_256", () => {
                 expect(manifestHash).to.match(/^0x[0-9a-f]{64}$/);
                 checked++;
             }
-            if (checked === 0) this.skip();
+            // The gate that mattered. This branch used to skip unconditionally,
+            // and the CI job that exists solely to check vk_hash restores no
+            // artifacts — so build/verification_key_*.json was never on disk, every
+            // version was `continue`d, and the job reported green having verified
+            // nothing. Measured on a cleaned build/: 1 passing, 3 pending.
+            if (checked === 0) {
+                if (strict()) {
+                    throw new Error(
+                        `${circuit}: no version's verifying key was on disk, so no vk_hash ` +
+                            `was checked. Looked for build/verification_key_${circuit}.json ` +
+                            `(and _v{n} variants). A skipped check is not a passing one.`
+                    );
+                }
+                this.skip();
+            }
         });
     }
 });

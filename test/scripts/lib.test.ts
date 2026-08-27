@@ -178,7 +178,19 @@ describe("scripts/lib/manifest", () => {
         const [ref] = allArtifacts(manifest);
         if (!fs.existsSync(ref.absolute)) return skipWithoutArtifacts(this);
 
-        const tampered = { ...ref, artifact: { ...ref.artifact, sha256: "0".repeat(64) } };
+        // The declared size is taken from the file rather than the manifest so
+        // this stays a test of the *hash* branch. checkArtifact reports size
+        // before hash, so on a commit that changes a circuit — where the wasm
+        // legitimately differs from the published one — the manifest's size would
+        // mismatch first and this would fail for an unrelated reason.
+        const tampered = {
+            ...ref,
+            artifact: {
+                ...ref.artifact,
+                bytes: fs.statSync(ref.absolute).size,
+                sha256: "0".repeat(64),
+            },
+        };
         expect(checkArtifact(tampered)).to.include("sha256 mismatch");
     });
 
@@ -202,6 +214,12 @@ describe("scripts/lib/manifest", () => {
             }
             return this.skip();
         }
-        expect(verifyAll(manifest)).to.deep.equal([]);
+        expect(verifyAll(manifest)).to.deep.equal(
+            [],
+            "the tree disagrees with the committed manifest. A wasm or r1cs mismatch " +
+                "means a .circom changed without the manifest being regenerated — run " +
+                "'pnpm run manifest'. A zkey, vk_json or ark mismatch means a ceremony " +
+                "artifact drifted, which 'pnpm run release:restore' pulls back."
+        );
     });
 });

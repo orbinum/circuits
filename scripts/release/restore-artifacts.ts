@@ -14,9 +14,18 @@
  * left alone.
  *
  * Usage:
- *   ts-node scripts/release/restore-artifacts.ts [--from <published-version>]
+ *   ts-node scripts/release/restore-artifacts.ts [--from <published-version>] [--keys-only]
  *
  * Defaults to the npm `latest` version.
+ *
+ * `--keys-only` restores just the ceremony outputs — zkey, verifying key, and
+ * `.ark` — and leaves wasm and r1cs alone. Those two are compiler output: they
+ * come from the `.circom` in the working tree, deterministically, so in CI they
+ * should be whatever this commit compiles to. Restoring them would overwrite the
+ * code under test with the published bytes, and any commit that legitimately
+ * changes a circuit would fail here on a sha256 mismatch rather than in a test.
+ * The ceremony outputs are the opposite: nondeterministic, so the published ones
+ * are the only ones that mean anything.
  */
 import fs from "fs";
 import path from "path";
@@ -32,9 +41,13 @@ function sourceVersion(): string {
     return run("npm", ["view", "@orbinum/circuits", "version"], { capture: true }).trim();
 }
 
+/** Artifact kinds that a compiler cannot reproduce, so must come from the publish. */
+const CEREMONY_KINDS: ReadonlySet<string> = new Set(["zkey", "vk_json", "ark"]);
+
 async function main(): Promise<void> {
     const manifest = readManifest();
     const version = sourceVersion();
+    const keysOnly = process.argv.includes("--keys-only");
     const base = `https://unpkg.com/@orbinum/circuits@${version}`;
 
     let canonical = 0;
@@ -43,6 +56,8 @@ async function main(): Promise<void> {
 
     for (const ref of allArtifacts(manifest)) {
         const { absolute, artifact, label } = ref;
+
+        if (keysOnly && !CEREMONY_KINDS.has(ref.kind)) continue;
 
         if (fs.existsSync(absolute) && sha256Hex(fs.readFileSync(absolute)) === artifact.sha256) {
             canonical++;
@@ -72,7 +87,10 @@ async function main(): Promise<void> {
         restored++;
     }
 
-    info(`  ${canonical} already canonical, ${restored} restored`);
+    info(
+        `  ${canonical} already canonical, ${restored} restored` +
+            (keysOnly ? " (ceremony artifacts only)" : "")
+    );
     if (errors.length > 0) {
         die(`could not restore:\n${errors.map((e) => `  - ${e}`).join("\n")}`);
     }
