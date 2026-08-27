@@ -1,7 +1,7 @@
 # Orbinum Circuits
 
 [![npm version](https://img.shields.io/npm/v/@orbinum/circuits.svg)](https://www.npmjs.com/package/@orbinum/circuits)
-[![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 Zero-Knowledge circuits for Orbinum privacy blockchain.
 
@@ -428,4 +428,8 @@ pnpm run build-all
 
 ## License
 
-Apache 2.0 / GPL3 - See LICENSE files
+GNU General Public License v3.0 or later — see [LICENSE](./LICENSE).
+
+Copyright (C) 2026 Orbinum Team. This is free software; you may redistribute
+and modify it under the terms of the GPL. A derived work must be released
+under the same licence.

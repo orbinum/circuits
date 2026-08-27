@@ -47,8 +47,8 @@
     "engines": {
         "node": ">=18.0.0"
     },
-    "author": "Orbinum Team",
-    "license": "Apache-2.0",
+    "author": "Orbinum",
+    "license": "GPL-3.0-or-later",
     "dependencies": {
         "@noble/hashes": "^2.2.0",
         "circomlibjs": "^0.1.7"

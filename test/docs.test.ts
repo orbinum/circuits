@@ -340,4 +340,64 @@ describe("Documentation", function () {
             }
         });
     });
+
+    describe("the licence is stated consistently", () => {
+        // Four sources declared the licence and two of them disagreed: the root
+        // package.json and the LICENSE file said Apache-2.0, while the npm
+        // template said GPL-3.0 — and the template is what npm serves. Every
+        // published version shipped Apache text under a GPL declaration.
+        //
+        // The identifier is checked rather than the prose because it is what
+        // tooling reads: a consumer's licence audit sees the SPDX string.
+        const EXPECTED = "GPL-3.0-or-later";
+
+        it("package.json and the published template agree", function () {
+            const root = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+            const template = JSON.parse(
+                fs.readFileSync(path.join(ROOT, "npm/package.json.template"), "utf8")
+            );
+
+            expect(root.license, "root package.json").to.equal(EXPECTED);
+            expect(
+                template.license,
+                "npm/package.json.template — this is what npm publishes"
+            ).to.equal(EXPECTED);
+        });
+
+        it("the LICENSE file is the licence it claims to be", function () {
+            const licence = fs.readFileSync(path.join(ROOT, "LICENSE"), "utf8");
+
+            expect(licence, "not the GPL").to.include("GNU GENERAL PUBLIC LICENSE");
+            expect(licence, "not version 3").to.include("Version 3, 29 June 2007");
+
+            // The file used to be seventeen lines — the per-file header Apache
+            // suggests, not a licence. `release.ts` packs this into every
+            // published tarball, so a stub means the package ships no terms.
+            expect(
+                licence.split("\n").length,
+                "the LICENSE looks like a header rather than the full text"
+            ).to.be.greaterThan(600);
+            expect(licence, "the operative terms are missing").to.include("TERMS AND CONDITIONS");
+        });
+
+        it("the LICENSE credits the copyright holder", function () {
+            // The GPL protects attribution by requiring the notice be kept.
+            // A licence with no copyright line has nothing to keep.
+            const licence = fs.readFileSync(path.join(ROOT, "LICENSE"), "utf8");
+            expect(licence).to.match(/Copyright \(C\)\s+\d{4}\s+\S/);
+        });
+
+        it("no document still claims another licence", function () {
+            for (const doc of docs) {
+                for (const [i, line] of doc.text.split("\n").entries()) {
+                    if (/apache/i.test(line)) {
+                        expect.fail(
+                            `${doc.name}:${i + 1} references Apache; this package is ` +
+                                `${EXPECTED}\n    ${line.trim()}`
+                        );
+                    }
+                }
+            }
+        });
+    });
 });
