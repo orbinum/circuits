@@ -1,5 +1,12 @@
 #!/bin/bash
-set -e
+set -euo pipefail
+
+# Every path below is relative to the repository root. Without this the script
+# runs from wherever it was invoked and reports "R1CS file not found", which
+# blames the circuit for what is a working-directory problem. `release.sh` has
+# had this preamble; this one did not.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Colors for output
 RED='\033[0;31m'
@@ -24,7 +31,24 @@ fi
 echo -e "${GREEN}✓${NC} snarkjs detected"
 
 # Get circuit name from argument or use default
-CIRCUIT_NAME=${1:-example}
+# No default: `example` was never a circuit, so a bare `pnpm run setup` failed
+# with "R1CS file not found: build/example.r1cs" — blaming a missing file for
+# what is a missing argument. The TypeScript entry points validate the name
+# against CIRCUITS and list the valid ones; this does the same.
+CIRCUIT_NAME="${1:-}"
+case "$CIRCUIT_NAME" in
+    value_proof | transfer | unshield) ;;
+    "")
+        echo -e "${RED}Usage: setup.sh <circuit>${NC}" >&2
+        echo "  where <circuit> is one of: value_proof, transfer, unshield" >&2
+        exit 1
+        ;;
+    *)
+        echo -e "${RED}Unknown circuit \"$CIRCUIT_NAME\"${NC}" >&2
+        echo "  expected one of: value_proof, transfer, unshield" >&2
+        exit 1
+        ;;
+esac
 R1CS_FILE="build/${CIRCUIT_NAME}.r1cs"
 
 # Trusted-setup entropy/beacon are overridable so a new version gets a distinct VK.
@@ -62,15 +86,59 @@ if [ ! -f "$POT_FILE" ]; then
     echo -e "      Source: Hermez trusted ceremony"
 
     mkdir -p ptau
-    # Download from Hermez's trusted ceremony (correct URL)
-    curl -L https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_16.ptau -o $POT_FILE
 
-    if [ $? -ne 0 ]; then
-        echo -e "${YELLOW}      Retrying with mirror...${NC}"
-        curl -L https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_16.ptau -o $POT_FILE
+    # Download to a temporary name and only move it into place once verified.
+    #
+    # Three things were wrong with the previous version, and they compounded:
+    #
+    #   1. `curl` without `-f` exits 0 on an HTTP error and writes the error
+    #      body to the output file. A 404 produced a 182-byte XML document that
+    #      the `[ ! -f "$POT_FILE" ]` guard above then treated as a cached ptau
+    #      on every subsequent run.
+    #   2. The `if [ $? -ne 0 ]` mirror fallback was unreachable: `set -e` is on,
+    #      so a failing curl killed the script before the test ran. This is the
+    #      same defect that `compile.sh` carried and `compile.ts` documents.
+    #   3. Nothing checked what was downloaded. This is 72 MB of trusted-setup
+    #      material that becomes the entropy basis for every proving key, and
+    #      every *output* artifact is sha256-verified against the manifest while
+    #      the *input* ceremony file was not.
+    POT_TMP="${POT_FILE}.partial"
+    downloaded=false
+
+    for url in \
+        "https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_16.ptau" \
+        "https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_16.ptau"
+    do
+        echo -e "      Trying ${url}"
+        # -f makes an HTTP error a non-zero exit instead of a written error body.
+        # `|| continue` keeps set -e from killing the loop on a failed mirror.
+        if curl -fL --retry 2 "$url" -o "$POT_TMP"; then
+            downloaded=true
+            break
+        fi
+        rm -f "$POT_TMP"
+    done
+
+    if [ "$downloaded" != "true" ]; then
+        echo -e "${RED}      ✗ Could not download the ptau file from any source${NC}"
+        rm -f "$POT_TMP"
+        exit 1
     fi
 
-    echo -e "${GREEN}      ✓ Download complete${NC}"
+    # A truncated or substituted ceremony file must not reach the setup. The
+    # expected size is a weak check compared to a hash, but it is the one that
+    # can be made without pinning a digest that upstream may legitimately
+    # republish; a wrong file is almost always wildly the wrong size.
+    POT_BYTES=$(wc -c < "$POT_TMP" | tr -d ' ')
+    if [ "$POT_BYTES" -lt 70000000 ]; then
+        echo -e "${RED}      ✗ Downloaded ptau is ${POT_BYTES} bytes, expected ~72 MB${NC}"
+        echo -e "      The download was truncated or the server returned an error page."
+        rm -f "$POT_TMP"
+        exit 1
+    fi
+
+    mv "$POT_TMP" "$POT_FILE"
+    echo -e "${GREEN}      ✓ Download complete (${POT_BYTES} bytes)${NC}"
 else
     echo -e "${GREEN}      ✓ Using cached file${NC}"
 fi
