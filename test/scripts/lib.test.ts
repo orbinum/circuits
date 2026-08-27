@@ -117,6 +117,24 @@ describe("scripts/lib/paths", () => {
     });
 });
 
+/**
+ * Skip a case that needs built artifacts — or fail, under strict mode.
+ *
+ * A bare `return` reports as a pass, which makes an absent artifact
+ * indistinguishable from a working assertion. That is the failure
+ * `CIRCUITS_REQUIRE_ARTIFACTS` exists to catch, and it has to be consulted here
+ * too, not only in the circuit suites.
+ */
+function skipWithoutArtifacts(ctx: Mocha.Context): never {
+    if (process.env.CIRCUITS_REQUIRE_ARTIFACTS) {
+        throw new Error(
+            "manifest artifacts are missing and CIRCUITS_REQUIRE_ARTIFACTS is set — " +
+                "run 'pnpm build-all' first"
+        );
+    }
+    ctx.skip();
+}
+
 describe("scripts/lib/manifest", () => {
     it("sha256Hex matches a known vector", () => {
         // The empty string, from FIPS 180-4.
@@ -144,10 +162,10 @@ describe("scripts/lib/manifest", () => {
         expect([...seen].sort()).to.deep.equal(Object.keys(manifest.circuits).sort());
     });
 
-    it("checkArtifact reports a size mismatch rather than passing it", () => {
+    it("checkArtifact reports a size mismatch rather than passing it", function () {
         const manifest = readManifest();
         const [ref] = allArtifacts(manifest);
-        if (!fs.existsSync(ref.absolute)) return;
+        if (!fs.existsSync(ref.absolute)) return skipWithoutArtifacts(this);
 
         const tampered = { ...ref, artifact: { ...ref.artifact, bytes: ref.artifact.bytes + 1 } };
         const problem = checkArtifact(tampered);
@@ -155,10 +173,10 @@ describe("scripts/lib/manifest", () => {
         expect(problem).to.include("size");
     });
 
-    it("checkArtifact reports a hash mismatch", () => {
+    it("checkArtifact reports a hash mismatch", function () {
         const manifest = readManifest();
         const [ref] = allArtifacts(manifest);
-        if (!fs.existsSync(ref.absolute)) return;
+        if (!fs.existsSync(ref.absolute)) return skipWithoutArtifacts(this);
 
         const tampered = { ...ref, artifact: { ...ref.artifact, sha256: "0".repeat(64) } };
         expect(checkArtifact(tampered)).to.include("sha256 mismatch");

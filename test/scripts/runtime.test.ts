@@ -13,12 +13,12 @@
  * module that turns a silently-skipped suite into a failure, and if `strict()`
  * returned the wrong thing, ninety tests would go back to pending with CI green.
  */
+import fs from "fs";
 import os from "os";
 import path from "path";
 
 import { expect } from "chai";
 
-import { blue, dim, green, red, yellow } from "../../scripts/lib/log";
 import { has, tryRun } from "../../scripts/lib/run";
 import { strict } from "../helpers/artifacts";
 
@@ -30,6 +30,64 @@ describe("scripts/lib/run", () => {
 
         it("does not find one that does not", () => {
             expect(has("definitely-not-a-real-binary-xyzzy")).to.equal(false);
+        });
+    });
+
+    describe("run", () => {
+        // `run` is what every build script uses, and its contract is the one the
+        // whole TypeScript port was justified by: a non-zero exit must stop the
+        // build. `tryRun` cannot stand in for it — that one returns failures,
+        // this one exits on them, and they share only their spawnSync setup.
+        //
+        // Exercised in a child process because `die()` calls `process.exit(1)`,
+        // which would take the test runner with it.
+        const inChild = (body: string) =>
+            tryRun("npx", ["ts-node", "-e", `import { run } from "./scripts/lib/run";\n${body}`]);
+
+        it("returns captured stdout on success", () => {
+            const result = inChild(
+                `process.stdout.write(run("node", ["-e", "console.log('ok')"], { capture: true }));`
+            );
+            expect(result.ok, result.stderr).to.equal(true);
+            expect(result.stdout.trim()).to.equal("ok");
+        });
+
+        it("exits non-zero when the command fails", () => {
+            const result = inChild(`run("node", ["-e", "process.exit(3)"]);`);
+            expect(result.ok, "a failing command did not stop the script").to.equal(false);
+            expect(result.status).to.equal(1);
+        });
+
+        it("names the command and its exit code in the failure", () => {
+            const result = inChild(`run("node", ["-e", "process.exit(7)"]);`);
+            expect(`${result.stdout}${result.stderr}`).to.include("exited 7");
+        });
+
+        it("surfaces the captured output when a captured command fails", () => {
+            // The reason `capture` is used for the quiet snarkjs calls: silent
+            // on success, but the diagnostic survives a failure. `setup.sh`
+            // redirected to /dev/null and lost it.
+            const result = inChild(
+                `run("node", ["-e", "console.error('the real reason'); process.exit(1)"], { capture: true });`
+            );
+            expect(result.ok).to.equal(false);
+            expect(`${result.stdout}${result.stderr}`).to.include("the real reason");
+        });
+
+        it("exits when the command does not exist", () => {
+            const result = inChild(`run("definitely-not-a-real-binary-xyzzy", []);`);
+            expect(result.ok).to.equal(false);
+            expect(`${result.stdout}${result.stderr}`).to.match(/could not be started|exited/);
+        });
+
+        it("writes input to the child's stdin", () => {
+            // The trusted setup pipes entropy this way rather than passing it as
+            // an argument, where it would be visible in the process table.
+            const result = inChild(
+                `process.stdout.write(run("cat", [], { capture: true, input: "piped-entropy" }));`
+            );
+            expect(result.ok, result.stderr).to.equal(true);
+            expect(result.stdout).to.equal("piped-entropy");
         });
     });
 
@@ -80,18 +138,37 @@ describe("scripts/lib/run", () => {
 });
 
 describe("scripts/lib/log", () => {
-    // Colour is suppressed when stdout is not a TTY, which is the case under
-    // mocha. That is the behaviour worth pinning: CI logs should not carry raw
-    // escape sequences, which the two remaining shell scripts still emit.
-    it("emits no escape sequences when stdout is not a TTY", () => {
-        for (const wrap of [red, green, yellow, blue, dim]) {
-            expect(wrap("plain")).to.equal("plain");
+    // `useColor` is decided once at import from `process.stdout.isTTY`, which is
+    // false under mocha — so asserting that the wrappers return their input
+    // here would be comparing a string to itself. What can be checked without a
+    // TTY is that the escape codes are distinct and well-formed, which is what
+    // a miscopied colour block gets wrong: `compile.sh` referenced a `BLUE` it
+    // never defined, and four lines printed uncoloured for as long as the file
+    // existed.
+    it("every colour has a distinct, well-formed escape code", () => {
+        const source = fs.readFileSync(
+            path.resolve(__dirname, "..", "..", "scripts", "lib", "log.ts"),
+            "utf8"
+        );
+        const codes = [...source.matchAll(/wrap\("([\d;]+)"\)/g)].map((m) => m[1]);
+
+        expect(codes.length, "expected five colour wrappers").to.equal(5);
+        expect(new Set(codes).size, "two colours share an escape code").to.equal(codes.length);
+        for (const code of codes) {
+            expect(code).to.match(/^\d+(;\d+)?$/);
         }
     });
 
-    it("every colour is a distinct function", () => {
-        const fns = new Set([red, green, yellow, blue, dim]);
-        expect(fns.size).to.equal(5);
+    it("suppresses colour when stdout is not a TTY", () => {
+        // Re-imported in a child with a pipe for stdout, which is the condition
+        // CI runs under. Asserting it in-process would pass trivially.
+        const probe = tryRun("npx", [
+            "ts-node",
+            "-e",
+            `import { green } from "./scripts/lib/log"; process.stdout.write(green("x"));`,
+        ]);
+        expect(probe.ok, probe.stderr).to.equal(true);
+        expect(probe.stdout, "escape sequences leaked into a piped stream").to.equal("x");
     });
 });
 
