@@ -20,6 +20,7 @@ import path from "path";
 import { expect } from "chai";
 
 import { has, tryRun } from "../../scripts/lib/run";
+import { canPack } from "../../scripts/build/pack-proving-key";
 import { strict } from "../helpers/artifacts";
 
 describe("scripts/lib/run", () => {
@@ -241,6 +242,45 @@ describe("test/helpers/artifacts", () => {
             const result = inChild(`needCircuit(undefined, "test", {} as never);`, true);
             expect(result.ok).to.equal(false);
             expect(`${result.stdout}${result.stderr}`).to.include("would have skipped silently");
+        });
+    });
+});
+
+describe("scripts/build/pack-proving-key", () => {
+    // Regression: the guard in full-pipeline used to probe for `cargo`, which is
+    // the wrong question. CI installs Rust but has no sibling checkout, so the
+    // probe said "yes" and --allow-skip-ark was never consulted — the build died
+    // in pack-proving-key instead of skipping the .ark.
+    describe("canPack", () => {
+        const saved = {
+            bin: process.env.PACK_PROVING_KEY_BIN,
+            dir: process.env.GROTH16_PROOFS_DIR,
+        };
+
+        afterEach(() => {
+            for (const [k, v] of [
+                ["PACK_PROVING_KEY_BIN", saved.bin],
+                ["GROTH16_PROOFS_DIR", saved.dir],
+            ] as const) {
+                if (v === undefined) delete process.env[k];
+                else process.env[k] = v;
+            }
+        });
+
+        it("is false when the checkout is absent, even with cargo installed", () => {
+            delete process.env.PACK_PROVING_KEY_BIN;
+            process.env.GROTH16_PROOFS_DIR = "/nonexistent-groth16-checkout";
+            expect(canPack()).to.equal(false);
+        });
+
+        it("is false when PACK_PROVING_KEY_BIN points at a missing file", () => {
+            process.env.PACK_PROVING_KEY_BIN = "/nonexistent-binary";
+            expect(canPack()).to.equal(false);
+        });
+
+        it("is true when PACK_PROVING_KEY_BIN points at a real file", () => {
+            process.env.PACK_PROVING_KEY_BIN = __filename;
+            expect(canPack()).to.equal(true);
         });
     });
 });

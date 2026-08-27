@@ -28,6 +28,23 @@ import { banner, cli, die, info, ok, step } from "../lib/log";
 import { parseCircuit } from "../lib/circuits";
 import { has, run } from "../lib/run";
 
+/**
+ * Whether `converter()` could produce a binary, without building anything.
+ *
+ * `converter()` resolves three ways — an explicit binary, a pre-built one in
+ * the checkout, or a `cargo build` — so "can we pack?" is not answerable by
+ * probing for cargo alone. CI has Rust but no sibling checkout, which is
+ * exactly the case a cargo probe gets wrong.
+ */
+export function canPack(): boolean {
+    const explicit = process.env.PACK_PROVING_KEY_BIN;
+    if (explicit) return fs.existsSync(explicit);
+
+    const checkout = process.env.GROTH16_PROOFS_DIR ?? path.join(ROOT, "..", "groth16-proofs");
+    if (fs.existsSync(path.join(checkout, "target", "release", "pack-proving-key"))) return true;
+    return fs.existsSync(checkout) && has("cargo");
+}
+
 /** Where the converter is, building it if a checkout is available. */
 function converter(): string {
     const explicit = process.env.PACK_PROVING_KEY_BIN;
@@ -82,4 +99,6 @@ function main(): void {
     info(`  snarkjs reads the .zkey; arkworks, wasm and mobile read the .ark`);
 }
 
-cli(main);
+// Guarded because full-pipeline imports canPack() from here. An unconditional
+// cli(main) would run the CLI — and abort on the missing argument — at import.
+if (require.main === module) cli(main);

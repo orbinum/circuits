@@ -22,7 +22,8 @@
  *   ts-node scripts/build/full-pipeline.ts <circuit> [--allow-skip-ark]
  */
 import { cli, banner, die, info, ok, warn } from "../lib/log";
-import { has, run } from "../lib/run";
+import { run } from "../lib/run";
+import { canPack } from "./pack-proving-key";
 import { parseCircuit } from "../lib/circuits";
 
 function main(): void {
@@ -44,15 +45,16 @@ function main(): void {
 
     info("");
     info("[3/3] packing the proving key");
-    if (!has("cargo")) {
+    if (!canPack()) {
         if (!allowSkipArk) {
             die(
-                "cargo not found, so the .ark artifact cannot be built. " +
-                    "Install Rust (https://rustup.rs), or pass --allow-skip-ark to " +
-                    "build only the snarkjs artifacts."
+                "the .ark artifact cannot be built: no pack-proving-key binary, and no " +
+                    "groth16-proofs checkout with cargo to build one. Clone it beside this " +
+                    "repository, set GROTH16_PROOFS_DIR or PACK_PROVING_KEY_BIN, or pass " +
+                    "--allow-skip-ark to build only the snarkjs artifacts."
             );
         }
-        warn("cargo not found — skipping .ark generation because --allow-skip-ark was passed");
+        warn("no pack-proving-key available — skipping .ark because --allow-skip-ark was passed");
     } else {
         run("npx", ["ts-node", "scripts/build/pack-proving-key.ts", circuit]);
     }
