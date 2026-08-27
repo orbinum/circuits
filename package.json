@@ -16,7 +16,7 @@
         "format": "prettier --write \"**/*.{ts,js,mjs,json,md,yml,yaml}\"",
         "format:check": "prettier --check \"**/*.{ts,js,mjs,json,md,yml,yaml}\"",
         "test": "mocha",
-        "test:strict": "CIRCUITS_REQUIRE_ARTIFACTS=1 mocha",
+        "test:strict": "CIRCUITS_REQUIRE_ARTIFACTS=1 mocha --forbid-pending",
         "check": "pnpm run lint && pnpm run typecheck && pnpm run format:check && pnpm run lint:circom && pnpm test",
         "release": "ts-node scripts/release/release.ts",
         "release:dry": "ts-node scripts/release/release.ts --dry-run",
