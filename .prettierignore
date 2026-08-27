@@ -7,6 +7,10 @@ ptau/
 *.sym
 *.wtns
 *.zkey
-*.json
+# Generated or machine-owned JSON. manifest.json is excluded because
+# generate-manifest.ts writes it and prettier would fight that; the fixtures
+# are generated too.
+manifest.json
+fixtures/
+pnpm-lock.yaml
 package-lock.json
-tsconfig.json

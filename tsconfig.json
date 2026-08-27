@@ -1,31 +1,22 @@
 {
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "commonjs",
-    "lib": ["ES2020"],
-    "outDir": "./dist",
-    "rootDir": "./",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "moduleResolution": "node10",
-    "ignoreDeprecations": "6.0",
-    "types": ["node", "mocha"],
-    "typeRoots": ["./node_modules/@types", "./types"],
-    "allowJs": true,
-    "checkJs": false
-  },
-  "include": [
-    "scripts/**/*.ts",
-    "test/**/*.ts",
-    "benches/**/*.ts",
-    "types/**/*.d.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "build",
-    "dist"
-  ]
+    "compilerOptions": {
+        "target": "ES2020",
+        "module": "commonjs",
+        "lib": ["ES2020"],
+        "outDir": "./dist",
+        "rootDir": "./",
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "resolveJsonModule": true,
+        "moduleResolution": "node10",
+        "ignoreDeprecations": "6.0",
+        "types": ["node", "mocha"],
+        "typeRoots": ["./node_modules/@types", "./types"],
+        "allowJs": true,
+        "checkJs": false
+    },
+    "include": ["scripts/**/*.ts", "test/**/*.ts", "types/**/*.d.ts"],
+    "exclude": ["node_modules", "build", "dist"]
 }
