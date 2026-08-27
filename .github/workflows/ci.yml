@@ -102,17 +102,27 @@ jobs:
               uses: actions/cache@v4
               with:
                   path: ~/.cargo-pvk
-                  key: pack-verifying-key-${{ runner.os }}-v1
+                  key: pack-verifying-key-${{ runner.os }}-v2
 
+            # The binary was named convert-vk before groth16-proofs 3.1.0. Both
+            # produce byte-identical output for a snarkjs VK — verified against
+            # all three circuits — so either yields the same vk_hash. Falling
+            # back keeps this job working while the rename is unpublished;
+            # delete the fallback once 3.1.0 is on main.
             - name: Build pack-verifying-key
               if: steps.cache-pvk.outputs.cache-hit != 'true'
               run: |
                   set -euo pipefail
                   git clone --depth 1 https://github.com/orbinum/groth16-proofs.git /tmp/g16
                   cd /tmp/g16
-                  cargo build --release --bin pack-verifying-key
                   mkdir -p ~/.cargo-pvk
-                  cp target/release/pack-verifying-key ~/.cargo-pvk/
+                  if cargo build --release --bin pack-verifying-key 2>/dev/null; then
+                      cp target/release/pack-verifying-key ~/.cargo-pvk/
+                  else
+                      echo "pack-verifying-key not in this checkout; falling back to convert-vk"
+                      cargo build --release --bin convert-vk
+                      cp target/release/convert-vk ~/.cargo-pvk/pack-verifying-key
+                  fi
 
             - run: pnpm install --frozen-lockfile
 
