@@ -196,4 +196,51 @@ describe("test/helpers/artifacts", () => {
         process.env.CIRCUITS_REQUIRE_ARTIFACTS = "true";
         expect(strict()).to.equal(true);
     });
+
+    describe("the strict-mode throws", () => {
+        // The escape hatches themselves. `strict()` returning the right boolean
+        // is only half of it — what matters is that the two guards act on it,
+        // and neither throw is reached in a normal run.
+        const inChild = (body: string, strictMode: boolean) =>
+            tryRun(
+                "npx",
+                [
+                    "ts-node",
+                    "-e",
+                    `import { requireArtifact, needCircuit } from "./test/helpers/artifacts";\n${body}`,
+                ],
+                {
+                    env: strictMode
+                        ? { ...process.env, CIRCUITS_REQUIRE_ARTIFACTS: "1" }
+                        : { ...process.env, CIRCUITS_REQUIRE_ARTIFACTS: "" },
+                }
+            );
+
+        it("requireArtifact returns undefined without strict mode", () => {
+            const result = inChild(
+                `const r = requireArtifact("/does/not/exist.wasm", "test"); ` +
+                    `process.stdout.write(String(r));`,
+                false
+            );
+            expect(result.ok, result.stderr).to.equal(true);
+            expect(result.stdout).to.include("undefined");
+        });
+
+        it("requireArtifact throws under strict mode", () => {
+            const result = inChild(`requireArtifact("/does/not/exist.wasm", "test");`, true);
+            expect(result.ok, "a missing artifact was tolerated under strict mode").to.equal(false);
+            expect(`${result.stdout}${result.stderr}`).to.include(
+                "indistinguishable from a passing one"
+            );
+        });
+
+        it("needCircuit throws under strict mode rather than skipping", () => {
+            // Mocha's `this.skip()` is unavailable outside a test, so the strict
+            // branch has to be the one that runs — which is the point: under
+            // strict mode it never reaches the skip.
+            const result = inChild(`needCircuit(undefined, "test", {} as never);`, true);
+            expect(result.ok).to.equal(false);
+            expect(`${result.stdout}${result.stderr}`).to.include("would have skipped silently");
+        });
+    });
 });
