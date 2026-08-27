@@ -537,18 +537,22 @@ Run transfer circuit tests:
 pnpm test -- test/transfer.test.ts
 ```
 
-Run end-to-end transfer test:
+Run the transfer circuit tests:
 
 ```bash
-pnpm run test:e2e:transfer
+pnpm test
 ```
+
+End-to-end proof generation and verification lives downstream, in
+[`groth16-proofs`](https://github.com/orbinum/groth16-proofs), which consumes
+these artifacts.
 
 ## Build Artifacts
 
 Generate transfer circuit artifacts:
 
 ```bash
-pnpm run build:transfer
+pnpm run build:circuit transfer
 ```
 
 This produces:

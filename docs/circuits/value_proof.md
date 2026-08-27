@@ -33,7 +33,23 @@ Used by `pallet-shielded-pool::claim_shielded_fees`. Without this proof, a relay
 | ------------ | ----- | -------------- | ----------------------------------------- |
 | `owner_hash` | Field | `[44..76]`     | `Poseidon(owner_pubkey)` — auxiliary hash |
 
-**On-chain public signals layout (76 bytes total):**
+**Witness order — read this before building a verifier.**
+
+Circom places a template's `signal output` **before** its public inputs in the
+witness, so a proof's public signals come out in this order:
+
+```
+owner_hash, commitment, value, asset_id
+```
+
+`owner_hash` is signal **0**, not the last. Verified against
+`build/value_proof.sym`, and asserted on every fixture regeneration by
+`scripts/utils/make-fixture.ts`. A verifier built from the byte layout below
+instead will produce proofs that are well-formed, are exactly 128 bytes, and
+fail verification with nothing in the output to say why.
+
+**On-chain byte layout (76 bytes total)** — how the pallet packs the same four
+values, which is a different ordering from the witness:
 
 ```
 commitment[0..32] | value[32..40] | asset_id[40..44] | owner_hash[44..76]
@@ -87,7 +103,7 @@ owner_hash = Poseidon(owner_pubkey)
 
 ## Circuit Parameters
 
-- **Constraints**: ~300 (estimate — depends on Poseidon round constants)
+- **Constraints**: 1,151 (measured from `build/value_proof.r1cs`)
 - **Public Inputs**: 3
 - **Public Outputs**: 1
 - **Private Inputs**: 2

@@ -182,24 +182,6 @@ pnpm test -- --grep "merkle"
 
 ## Benchmarking
 
-### Run Benchmarks
-
-```bash
-# Benchmark all circuits
-pnpm run bench
-```
-
-### Typical Results
-
-```
-📊 Value Proof Circuit Benchmarks
-  Witness Generation: <5ms avg
-  Proof Generation:   <50ms avg
-  Verification:       <5ms avg
-```
-
-Results saved to: `build/benchmark_results_value_proof.json`
-
 ## Common Tasks
 
 ### Clean Build Artifacts
@@ -234,31 +216,32 @@ pnpm run lint:circom
 
 ```
 circuits/
-├── circuits/           # Circuit definitions (.circom)
-├── build/             # Compiled artifacts (gitignored)
-├── keys/              # Proving keys (gitignored)
-├── scripts/           # Build and utility scripts
+├── circuits/          # Circuit definitions (.circom)
+├── scripts/
+│   ├── lib/           # Shared by every script: paths, logging, manifest, note crypto
+│   ├── build/         # compile, setup, pack-proving-key, full-pipeline
+│   ├── release/       # release, verify-artifacts, restore-artifacts
+│   └── utils/         # generate-manifest, make-fixture, lint-circom
 ├── test/              # Test suite
-├── benches/           # Performance benchmarks
-└── docs/              # Documentation
+├── fixtures/          # Deterministic circuit inputs (witnesses are generated)
+├── npm/               # What gets published: entry point and package template
+├── docs/              # Documentation
+├── build/             # Compiled artifacts (gitignored)
+└── keys/              # Proving keys (gitignored)
 ```
 
 ## Next Steps
 
 ### For Users
 
-1. **Integration**: See [Integration Guide](integration.md)
-2. **API Reference**: Check [API Documentation](../api/)
+1. **Consuming the artifacts**: See the [arkworks integration guide](arkworks-integration.md)
+2. **What each circuit proves**: [circuit documentation](../circuits/README.md)
 
 ### For Developers
 
 1. **Architecture**: Review [ARCHITECTURE.md](../ARCHITECTURE.md)
-
-### For Advanced Usage
-
-1. **Custom Circuits**: Learn to [create new circuits](custom-circuits.md)
-2. **Optimization**: Read about [constraint optimization](optimization.md)
-3. **Production Setup**: Follow [production deployment guide](production.md)
+2. **Working in this repository**: [CONTRIBUTING.md](../../CONTRIBUTING.md)
+3. **Releasing**: [RELEASE.md](../RELEASE.md)
 
 ## Troubleshooting
 
@@ -322,7 +305,7 @@ You've successfully set up Orbinum Circuits! Here are some next steps:
 
 Now you can:
 
-- 🔍 **Explore circuits** - Dive into [circuit documentation](../circuits/)
-- 🚀 **Deploy** - Follow [production guide](production.md)
+- 🔍 **Explore circuits** - Dive into [circuit documentation](../circuits/README.md)
+- 📦 **Consume the artifacts** - See the [arkworks integration guide](arkworks-integration.md)
 
 Happy building! 🎉

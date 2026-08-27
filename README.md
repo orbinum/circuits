@@ -175,7 +175,7 @@ pnpm run convert value_proof
 
 ### Download Release Artifacts
 
-Get pre-built circuits from [GitHub Releases](../../releases):
+Get pre-built circuits from [GitHub Releases](https://github.com/orbinum/circuits/releases):
 
 ```bash
 # Download latest release
@@ -325,7 +325,7 @@ let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 
 **Statistics:**
 
-- Constraints: ~300
+- Constraints: 1,151
 - Private inputs: 2 (`owner_pubkey`, `blinding`)
 - Public inputs: 3 (`commitment`, `value`, `asset_id`)
 - Public outputs: 1 (`owner_hash`)
@@ -337,7 +337,8 @@ let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 - Owner hash: `owner_hash = Poseidon(owner_pubkey)` — reveals owner identity hash for audit without exposing the raw key
 - No Merkle proof, no spending key, no nullifier — proves note formation only
 - Prevents inflation attacks: relayer cannot claim `value=10000` if commitment was built with `value=1000`
-- Public signals layout (76 bytes): `commitment[0..32] | value[32..40] | asset_id[40..44] | owner_hash[44..76]`
+- Witness order: `owner_hash, commitment, value, asset_id` — Circom puts `signal output` first, so `owner_hash` is signal 0
+- On-chain byte layout (76 bytes): `commitment[0..32] | value[32..40] | asset_id[40..44] | owner_hash[44..76]` — a different ordering from the witness; see [value_proof.md](./docs/circuits/value_proof.md)
 
 ## Security Properties
 
@@ -364,7 +365,7 @@ circuits/
 ├── circuits/                  # Circom source files
 │   ├── transfer.circom        # 2-in/2-out private transfer (33,687 constraints)
 │   ├── unshield.circom        # Private → public withdrawal (16,903 constraints)
-│   ├── value_proof.circom     # Relay fee value proof, no Merkle/nullifier (~300 constraints)
+│   ├── value_proof.circom     # Relay fee value proof, no Merkle/nullifier (1,151 constraints)
 │   ├── note.circom            # NoteCommitment + Nullifier templates
 │   ├── merkle_tree.circom     # MerkleTreeVerifier template
 │   └── poseidon_wrapper.circom

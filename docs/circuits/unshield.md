@@ -385,16 +385,30 @@ const spendingKey = deriveKey(masterSeed, "spending", noteIndex);
 
 ### Constraint Count Analysis
 
-| Section                  | Constraints |
-| ------------------------ | ----------- |
-| BabyPbk (key derivation) | ~2,500      |
-| Amount + Fee Check       | 1           |
-| Range Checks (Num2Bits)  | ~12,800     |
-| Commitment Computation   | ~200        |
-| Merkle Verification      | ~400        |
-| Nullifier Computation    | ~150        |
-| Asset ID Check           | 1           |
-| **Total**                | **16,033**  |
+Signal counts per component, from `build/unshield.sym`. These are signals
+rather than constraints — the two are close but not equal — and they are given
+this way because they can be re-derived from the compiled circuit rather than
+maintained by hand:
+
+```sh
+cut -d, -f4 build/unshield.sym | grep -oE 'main\.[a-z_]+' | sort | uniq -c | sort -rn
+```
+
+| Component                     | Signals |
+| ----------------------------- | ------- |
+| `merkle_verifier` (20 levels) | 15,543  |
+| `key_derivation` (BabyPbk)    | 10,114  |
+| `commitment_computer`         | 1,177   |
+| `change_commitment_computer`  | 1,177   |
+| `nullifier_computer`          | 773     |
+| range checks (3 × Num2Bits)   | 387     |
+
+Total constraints: **16,903** (`snarkjs r1cs info build/unshield.r1cs`).
+
+The Merkle verification dominates: twenty levels of Poseidon2 is most of the
+circuit, and it is where a depth change is felt. The range checks are the
+cheapest part, not the most expensive — an earlier version of this table had
+those two figures the other way round.
 
 ### Trusted Setup
 
@@ -423,7 +437,7 @@ pnpm test -- test/unshield.test.ts
 Generate unshield circuit artifacts:
 
 ```bash
-pnpm run build:unshield
+pnpm run build:circuit unshield
 ```
 
 This produces:
@@ -530,7 +544,7 @@ assert(circuitInput.asset_id === circuitInput.note_asset_id, "Asset IDs must mat
 | **Outputs**         | Public balance   | 2 notes            |
 | **Amount Revealed** | Yes (public)     | No (hidden)        |
 | **Recipient Type**  | Public address   | Private note owner |
-| **Constraints**     | ~12,000          | ~32,000            |
+| **Constraints**     | 16,903           | 33,687             |
 | **Proving Time**    | ~800ms           | ~2.5s              |
 
 ## Future Improvements
@@ -564,5 +578,4 @@ Add time-lock constraints:
 - [Note Circuit](note.md) - NoteCommitment and Nullifier components
 - [Merkle Tree Circuit](merkle-tree.md) - MerkleTreeVerifier component
 - [Transfer Circuit](transfer.md) - For splitting notes before unshielding
-- [API: Generate Unshield Input](../api/generate-unshield-input.md)
-- [API: Generate Unshield Proof](../api/generate-unshield-proof.md)
+- [Arkworks integration](../guides/arkworks-integration.md) - consuming the `.ark` artifacts

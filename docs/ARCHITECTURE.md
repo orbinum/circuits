@@ -212,12 +212,11 @@ trap, not documentation.
 
 ## Performance Targets
 
-| Circuit      | Constraints | Proof Time | Verify Time |
-| ------------ | ----------- | ---------- | ----------- |
-| Value Proof  | ~300        | <50ms      | <5ms        |
-| Transfer     | 33,687      | <3s        | <15ms       |
-| Unshield     | 16,903      | <1s        | <15ms       |
-| Private Link | 487         | <100ms     | <5ms        |
+| Circuit     | Constraints | Proof Time | Verify Time |
+| ----------- | ----------- | ---------- | ----------- |
+| Value Proof | 1,151       | <50ms      | <5ms        |
+| Transfer    | 33,687      | <3s        | <15ms       |
+| Unshield    | 16,903      | <1s        | <15ms       |
 
 ## Versioning Strategy
 
