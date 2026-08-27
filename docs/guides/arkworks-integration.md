@@ -58,7 +58,7 @@ pnpm run convert:value-proof
 pnpm run convert:transfer
 
 # Or use the script directly
-bash scripts/build/convert-to-ark.sh value_proof
+bash scripts/build/pack-proving-key.sh value_proof
 ```
 
 ### Generated Files

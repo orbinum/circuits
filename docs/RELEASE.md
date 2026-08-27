@@ -14,8 +14,8 @@ overwrite.**
 
 - `npm login` with publish rights to the `@orbinum` scope
 - `gh auth login`
-- `convert-vk` built in the sibling `groth16-proofs` checkout
-  (`cargo build --release --bin convert-vk`), or `CONVERT_VK_BIN` set
+- `pack-verifying-key` built in the sibling `groth16-proofs` checkout
+  (`cargo build --release --bin pack-verifying-key`), or `PACK_VERIFYING_KEY_BIN` set
 
 ## Steps
 
@@ -52,7 +52,7 @@ overwrite.**
 
     ```bash
     pnpm run release:verify   # local artifacts == committed manifest, fail-closed
-    pnpm test                 # with convert-vk present: canonical vk_hash check runs
+    pnpm test                 # with pack-verifying-key present: canonical vk_hash check runs
     ```
 
 6. **Commit** the manifest + version bump and merge to `main` via PR (CI

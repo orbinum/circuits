@@ -28,8 +28,7 @@ orbinum-circuits/
 │   │   ├── compile.sh
 │   │   ├── setup.sh
 │   │   ├── full-pipeline.sh
-│   │   ├── convert-to-ark.sh
-│   │   ├── convert-to-ark.rs   # Rust script (.zkey → .ark)
+│   │   ├── pack-proving-key.sh # drives pack-proving-key from groth16-proofs
 │   │   ├── extract-vk.rs       # Rust script (extract verifying key)
 │   │   └── generate-metadata.sh
 │   ├── e2e/                    # End-to-end tests
@@ -133,7 +132,7 @@ orbinum-circuits/
 - `compile.sh`: Circom compilation (circom → R1CS + WASM)
 - `setup.sh`: Trusted setup (Powers of Tau → proving/verifying keys)
 - `full-pipeline.sh`: Complete build automation
-- `convert-to-ark.sh` / `convert-to-ark.rs`: Convert `.zkey` to `.ark` (arkworks format)
+- `pack-proving-key.sh`: Convert `.zkey` to `.ark` v2, via the `pack-proving-key` binary from the sibling `groth16-proofs` checkout
 - `extract-vk.rs`: Extract verifying key from `.zkey` via Rust script
 - `generate-metadata.sh`: Generate circuit metadata
 

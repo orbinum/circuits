@@ -164,8 +164,8 @@ let proof = Groth16::<Bn254>::prove(&proving_key, circom, &mut rng)?;
 If you need to generate the `.ark` file yourself:
 
 ```bash
-# Using the Rust script
-cargo +nightly -Zscript scripts/build/convert-to-ark.rs \
+# Using the converter from the sibling groth16-proofs checkout
+../groth16-proofs/target/release/pack-proving-key \
   keys/value_proof_pk.zkey \
   keys/value_proof_pk.ark
 

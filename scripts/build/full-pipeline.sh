@@ -31,15 +31,15 @@ bash scripts/build/setup.sh "$CIRCUIT"
 # 3. Convert to Arkworks format
 #
 # The guard here used to test for an `ark-circom` binary, which does not exist —
-# ark-circom is a library, and convert-to-ark.sh reaches it through a
+# ark-circom is a library, and pack-proving-key.sh reaches it through a
 # `cargo +nightly -Zscript`. So the test never passed and every build silently
 # skipped .ark generation, which is how the checked-in keys drifted a month
 # behind their .zkey and how manifest.json ended up with no `ark` entries at all.
-# The real requirement is cargo, which convert-to-ark.sh validates itself.
+# The real requirement is cargo, which pack-proving-key.sh validates itself.
 echo ""
 echo -e "\033[0;34m[Phase 3/3]\033[0m Converting to Arkworks format...\n"
 if command -v cargo &> /dev/null; then
-    bash scripts/build/convert-to-ark.sh "$CIRCUIT" || echo -e "\033[1;33m      ⚠ Conversion skipped (non-critical)\033[0m"
+    bash scripts/build/pack-proving-key.sh "$CIRCUIT" || echo -e "\033[1;33m      ⚠ Conversion skipped (non-critical)\033[0m"
 else
     echo -e "\033[1;33m      ⚠ cargo not found, skipping .ark generation\033[0m"
     echo -e "      Install Rust: https://rustup.rs"
