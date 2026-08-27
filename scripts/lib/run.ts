@@ -89,7 +89,7 @@ export function tryRun(
     cmd: string,
     args: string[],
     opts: RunOptions = {}
-): { ok: boolean; stdout: string; stderr: string } {
+): { ok: boolean; status: number | null; stdout: string; stderr: string } {
     const { cwd = ROOT, env, input } = opts;
     const result = spawnSync(cmd, args, {
         cwd,
@@ -100,6 +100,10 @@ export function tryRun(
     });
     return {
         ok: result.status === 0,
+        // Callers that need to tell failures apart need the code: `git
+        // ls-remote` exits 2 for "no such ref" and 128 for "could not reach the
+        // remote", and treating those alike is how a guard fails open.
+        status: result.status,
         stdout: result.stdout ?? "",
         stderr: result.stderr ?? "",
     };
