@@ -19,18 +19,21 @@
  * Defaults to the npm `latest` version.
  *
  * `--keys-only` restores just the ceremony outputs — zkey, verifying key, and
- * `.ark` — and leaves wasm and r1cs alone. Those two are compiler output: they
- * come from the `.circom` in the working tree, deterministically, so in CI they
- * should be whatever this commit compiles to. Restoring them would overwrite the
- * code under test with the published bytes, and any commit that legitimately
- * changes a circuit would fail here on a sha256 mismatch rather than in a test.
- * The ceremony outputs are the opposite: nondeterministic, so the published ones
- * are the only ones that mean anything.
+ * `.ark` — and leaves the wasm and r1cs of the version the source builds alone.
+ * Those two are compiler output: they come from the `.circom` in the working
+ * tree, deterministically, so in CI they should be whatever this commit compiles
+ * to. Restoring them would overwrite the code under test with the published
+ * bytes, and any commit that legitimately changes a circuit would fail here on a
+ * sha256 mismatch rather than in a test. The ceremony outputs are the opposite:
+ * nondeterministic, so the published ones are the only ones that mean anything.
+ * Older published versions are restored whole: the source no longer compiles
+ * them, so their wasm and r1cs exist only in the package.
  */
 import fs from "fs";
 import path from "path";
 
 import { allArtifacts, readManifest, sha256Hex } from "../lib/manifest";
+import { sourceVersion as builtVersion } from "../lib/paths";
 import { die, info, ok } from "../lib/log";
 import { run } from "../lib/run";
 
@@ -57,7 +60,8 @@ async function main(): Promise<void> {
     for (const ref of allArtifacts(manifest)) {
         const { absolute, artifact, label } = ref;
 
-        if (keysOnly && !CEREMONY_KINDS.has(ref.kind)) continue;
+        const compiled = Number(ref.version) === builtVersion(ref.circuit);
+        if (keysOnly && compiled && !CEREMONY_KINDS.has(ref.kind)) continue;
 
         if (fs.existsSync(absolute) && sha256Hex(fs.readFileSync(absolute)) === artifact.sha256) {
             canonical++;
@@ -88,8 +92,7 @@ async function main(): Promise<void> {
     }
 
     info(
-        `  ${canonical} already canonical, ${restored} restored` +
-            (keysOnly ? " (ceremony artifacts only)" : "")
+        `  ${canonical} already canonical, ${restored} restored` + (keysOnly ? " (keys-only)" : "")
     );
     if (errors.length > 0) {
         die(`could not restore:\n${errors.map((e) => `  - ${e}`).join("\n")}`);

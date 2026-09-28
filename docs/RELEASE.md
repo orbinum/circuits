@@ -32,14 +32,26 @@ overwrite.**
 
 2. **Build only what changed**: `pnpm run build:circuit <name>`. Never rebuild a
    circuit whose on-chain VK must stay stable. If a circuit's logic changed,
-   that is a rotation — build with version-suffixed artifacts (see
-   `scripts/build/setup.sh` env vars `SETUP_ENTROPY`/`SETUP_BEACON` for a fresh
-   setup) and register the new version on-chain afterwards.
+   that is a rotation: set the rotation variables for the build too, so its
+   artifacts get the new version's `_v{n}` names and the published ones stay
+   untouched, and give the ceremony fresh entropy and a public beacon:
+
+    ```bash
+    export ROTATE_CIRCUIT=transfer,unshield ROTATE_VERSION=2
+    export SETUP_BEACON=<recent finalized block hash, no 0x> SETUP_BEACON_ITERS=10
+    SETUP_ENTROPY="$(openssl rand -hex 64)" pnpm run build:circuit transfer
+    SETUP_ENTROPY="$(openssl rand -hex 64)" pnpm run build:circuit unshield
+    ```
+
+    Record the beacon in the CHANGELOG. After the manifest step the source
+    builds the active version, so later compiles and fixtures need no variables.
+    For a runtime that embeds the keys (node spec 16), run
+    `node/scripts/vk/embed-v2.sh` with the new verifying keys and the manifest.
 
 3. **Bump version** in `package.json` and add a `CHANGELOG.md` entry.
 
 4. **Regenerate the manifest** (after the bump, so `package_version` matches):
-    - Rotation of one circuit: `ROTATE_CIRCUIT=<name> ROTATE_VERSION=<n> pnpm run manifest`
+    - Rotation: `ROTATE_CIRCUIT=<name>[,<name>…] ROTATE_VERSION=<n> pnpm run manifest`. Circuits not listed keep their published entry, so rotating them in separate runs is safe too.
       (previous version entries are reused verbatim — published bytes are canonical).
     - Removing a circuit / full regeneration from canonical local artifacts:
       `MANIFEST_REQUIRE_ALL=true pnpm run manifest`. This is only safe when every
@@ -70,6 +82,14 @@ overwrite.**
     - It does **not** run `release:verify`. That asserts the whole tree matches
       the manifest, wasm and r1cs included, so it fails on any commit that
       legitimately changes a circuit. It stays a pre-publish gate — step 5.
+
+    **Rotation release:** the new ceremony keys exist only on the release
+    machine until published, and CI restores keys from npm `latest`. So on the
+    release PR the `Build & Test` and `Canonical vk_hash` jobs fail with a 404
+    for the new version. Publish from the PR branch (clean tree; steps 7–8),
+    re-run CI — it now restores the new keys — and merge without squashing, so
+    the tag stays on a commit of `main`. Back up `keys/*_v{n}_pk.*` and
+    `build/verification_key_*_v{n}.json` until then.
 
 7. **Dry-run** from a clean `main` checkout:
 

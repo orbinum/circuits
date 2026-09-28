@@ -114,10 +114,12 @@ jobs:
             - name: Compile circuits and fixtures
               run: pnpm run build-all --compile-only
 
-            # Only the ceremony outputs: zkey, verifying key and .ark. The wasm and
-            # r1cs stay as this commit compiled them, so a PR that changes a
-            # circuit is testing its own circuit rather than failing on a sha256
-            # mismatch against the published one.
+            # The ceremony outputs (zkey, verifying key, .ark) of every version, and
+            # the wasm and r1cs of the published versions the source no longer
+            # builds. The active version's wasm and r1cs stay as this commit
+            # compiled them, so a PR that changes a circuit is testing its own
+            # circuit rather than failing on a sha256 mismatch against the
+            # published one.
             - name: Restore ceremony artifacts
               run: pnpm run release:restore --keys-only
 
@@ -125,8 +127,8 @@ jobs:
             # tree matches the manifest, wasm and r1cs included — so it fails on
             # every commit that legitimately changes a circuit, which is the exact
             # breakage this rewrite set out to remove. Measured: adding one
-            # constraint to value_proof.circom makes it report a wasm size and r1cs
-            # sha256 mismatch. It is a pre-publish gate, and docs/RELEASE.md keeps
+            # constraint to a circuit makes it report a wasm size and r1cs sha256
+            # mismatch. It is a pre-publish gate, and docs/RELEASE.md keeps
             # it there. What CI can check is that the *ceremony* artifacts match,
             # and `release:restore` already fails closed if they do not.
             # test:strict, not test. Circuit suites skip themselves when the

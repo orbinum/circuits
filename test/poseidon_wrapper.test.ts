@@ -1,3 +1,4 @@
+import fs from "fs";
 import path from "path";
 import { wasm as wasm_tester } from "circom_tester";
 import { buildPoseidon } from "circomlibjs";
@@ -27,7 +28,6 @@ describe("Poseidon Wrapper Circuit Components", function () {
             `;
 
             const tempCircuitPath = path.join(__dirname, "..", "build", "test_poseidon2.circom");
-            const fs = require("fs");
             fs.writeFileSync(tempCircuitPath, poseidon2Circuit);
 
             circuit = await wasm_tester(tempCircuitPath, {
@@ -155,7 +155,6 @@ describe("Poseidon Wrapper Circuit Components", function () {
             `;
 
             const tempCircuitPath = path.join(__dirname, "..", "build", "test_poseidon4.circom");
-            const fs = require("fs");
             fs.writeFileSync(tempCircuitPath, poseidon4Circuit);
 
             circuit = await wasm_tester(tempCircuitPath, {
@@ -349,7 +348,6 @@ describe("Poseidon Wrapper Circuit Components", function () {
                 component main = Poseidon4();
             `;
 
-            const fs = require("fs");
             const path2 = path.join(__dirname, "..", "build", "test_poseidon2.circom");
             const path4 = path.join(__dirname, "..", "build", "test_poseidon4.circom");
 

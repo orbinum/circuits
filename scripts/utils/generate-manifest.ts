@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { CIRCUITS, parseCircuit, type CircuitName } from "../lib/circuits";
-import { MANIFEST_PATH, ROOT, rel } from "../lib/paths";
+import { MANIFEST_PATH, ROOT, rel, versionSuffix } from "../lib/paths";
 import { ok } from "../lib/log";
 import {
     sha256Hex,
@@ -96,31 +96,36 @@ function buildVersionEntry(
     };
 }
 
-// Rotation controls: to add a version for ONE circuit, set ROTATE_CIRCUIT +
-// ROTATE_VERSION. The prior manifest's versions are reused verbatim (their
-// published bytes are canonical) and the new one is appended.
+// Rotation controls: to add a version, set ROTATE_CIRCUIT (one circuit or a
+// comma-separated list) + ROTATE_VERSION. The prior manifest's versions are
+// reused verbatim (their published bytes are canonical) and the new one is
+// appended. Circuits NOT being rotated keep their prior entry as is: rebuilding
+// them from the base artifacts would drop a version rotated in an earlier run —
+// running once per circuit used to erase the first circuit's new version.
 // Validated rather than compared raw: `circuit === rotateCircuit` against an
 // unchecked string means a typo — ROTATE_CIRCUIT=trasnfer — never matches, so
 // rotation silently falls through to the default path and emits a
 // single-version manifest with no error. A rotation that quietly does not
 // happen is worse than one that fails.
-const rotateCircuit = process.env.ROTATE_CIRCUIT ? parseCircuit(process.env.ROTATE_CIRCUIT) : "";
+const rotateCircuits: readonly CircuitName[] = (process.env.ROTATE_CIRCUIT ?? "")
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean)
+    .map(parseCircuit);
 const rotateVersion = Number(process.env.ROTATE_VERSION ?? "0");
-if (rotateCircuit && (!Number.isInteger(rotateVersion) || rotateVersion < 1)) {
+if (rotateCircuits.length > 0 && (!Number.isInteger(rotateVersion) || rotateVersion < 1)) {
     throw new Error(
-        `ROTATE_CIRCUIT=${rotateCircuit} needs ROTATE_VERSION set to a positive integer, ` +
+        `ROTATE_CIRCUIT=${rotateCircuits.join(",")} needs ROTATE_VERSION set to a positive integer, ` +
             `got ${process.env.ROTATE_VERSION ?? "(unset)"}`
     );
 }
-const priorManifest: Manifest | null = (() => {
-    if (!rotateCircuit) return null;
-    const p = path.join(ROOT, "manifest.json");
-    return fs.existsSync(p) ? (JSON.parse(fs.readFileSync(p, "utf8")) as Manifest) : null;
-})();
+const priorManifest: Manifest | null = fs.existsSync(MANIFEST_PATH)
+    ? (JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")) as Manifest)
+    : null;
 
 function buildCircuitEntry(circuit: CircuitName): Manifest["circuits"][CircuitName] | null {
     // Rotation path: this circuit gets a new version merged onto the prior ones.
-    if (circuit === rotateCircuit && rotateVersion > 0 && priorManifest) {
+    if (rotateCircuits.includes(circuit) && rotateVersion > 0 && priorManifest) {
         const prior = priorManifest.circuits[circuit];
         if (!prior) throw new Error(`ROTATE_CIRCUIT=${circuit} not in prior manifest`);
         const newEntry = buildVersionEntry(circuit, rotateVersion, `_v${rotateVersion}`);
@@ -132,7 +137,31 @@ function buildCircuitEntry(circuit: CircuitName): Manifest["circuits"][CircuitNa
         return { active_version: rotateVersion, supported_versions: supported, versions };
     }
 
-    // Default path: single-version entry from the base (unsuffixed) artifacts.
+    // Rotating another circuit: this one keeps what was published.
+    const prior = priorManifest?.circuits[circuit];
+    if (prior && rotateCircuits.length > 0) return prior;
+
+    // Regenerating: every recorded version is rebuilt from its local files, so
+    // a drifted artifact shows up as a diff. A version whose files are absent —
+    // an older one CI does not compile — keeps its recorded entry.
+    if (prior) {
+        const versions = Object.fromEntries(
+            Object.entries(prior.versions).map(([v, recorded]) => {
+                const rebuilt = buildVersionEntry(circuit, Number(v), versionSuffix(Number(v)));
+                if (!rebuilt && requireAllCircuits) {
+                    throw new Error(`MANIFEST_REQUIRE_ALL=true and ${circuit} v${v} is missing`);
+                }
+                return [v, rebuilt ?? recorded];
+            })
+        );
+        return {
+            active_version: prior.active_version,
+            supported_versions: prior.supported_versions,
+            versions,
+        };
+    }
+
+    // A circuit new to the manifest: one entry from the base (unsuffixed) artifacts.
     const entry = buildVersionEntry(circuit, defaultCircuitVersion, "");
     if (!entry) return null;
     return {

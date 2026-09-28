@@ -1,3 +1,4 @@
+import fs from "fs";
 import path from "path";
 import { wasm as wasm_tester } from "circom_tester";
 import { buildPoseidon } from "circomlibjs";
@@ -36,7 +37,6 @@ describe("Merkle Tree Circuit Components", function () {
             `;
 
             const tempCircuitPath = path.join(__dirname, "..", "build", "test_selector.circom");
-            const fs = require("fs");
             fs.writeFileSync(tempCircuitPath, selectorCircuit);
 
             circuit = await wasm_tester(tempCircuitPath, {
@@ -96,7 +96,6 @@ describe("Merkle Tree Circuit Components", function () {
             `;
 
             const tempCircuitPath = path.join(__dirname, "..", "build", "test_merkle_2.circom");
-            const fs = require("fs");
             fs.writeFileSync(tempCircuitPath, merkleCircuit);
 
             circuit = await wasm_tester(tempCircuitPath, {
@@ -272,7 +271,6 @@ describe("Merkle Tree Circuit Components", function () {
             `;
 
             const tempCircuitPath = path.join(__dirname, "..", "build", "test_merkle_4.circom");
-            const fs = require("fs");
             fs.writeFileSync(tempCircuitPath, merkleCircuit);
 
             circuit = await wasm_tester(tempCircuitPath, {

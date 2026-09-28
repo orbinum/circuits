@@ -51,14 +51,14 @@ The pipeline will automatically:
 Convert a specific circuit:
 
 ```bash
-# Value Proof circuit
-pnpm run convert value_proof
+# Unshield circuit
+pnpm run convert unshield
 
 # Transfer circuit
 pnpm run convert transfer
 
 # Or use the script directly
-pnpm run convert value_proof
+pnpm run convert unshield
 ```
 
 ### Generated Files
@@ -67,8 +67,8 @@ After successful conversion:
 
 ```
 keys/
-├── value_proof_pk.zkey    # For JavaScript/TypeScript
-└── value_proof_pk.ark     # For Rust
+├── unshield_v2_pk.zkey    # For JavaScript/TypeScript
+└── unshield_v2_pk.ark     # For Rust
 ```
 
 ## CI/CD Pipeline
@@ -90,19 +90,19 @@ Creates two release packages:
 **JavaScript/TypeScript Package:**
 
 ```bash
-value-proof-circuit-js-v0.1.0.tar.gz
-├── value_proof.wasm
-├── value_proof_pk.zkey
-└── verification_key_value_proof.json
+unshield-circuit-js-v0.1.0.tar.gz
+├── unshield_v2.wasm
+├── unshield_v2_pk.zkey
+└── verification_key_unshield_v2.json
 ```
 
 **Rust Package:**
 
 ```bash
-value-proof-circuit-rust-v0.1.0.tar.gz
-├── value_proof.wasm
-├── value_proof_pk.ark
-└── verification_key_value_proof.json
+unshield-circuit-rust-v0.1.0.tar.gz
+├── unshield_v2.wasm
+├── unshield_v2_pk.ark
+└── verification_key_unshield_v2.json
 ```
 
 ## Usage Examples
@@ -114,8 +114,8 @@ import { groth16 } from "snarkjs";
 
 const { proof, publicSignals } = await groth16.fullProve(
     input,
-    "build/value_proof_js/value_proof.wasm",
-    "keys/value_proof_pk.zkey" // ← Use .zkey
+    "build/unshield_js/unshield_v2.wasm",
+    "keys/unshield_v2_pk.zkey" // ← Use .zkey
 );
 ```
 
@@ -130,7 +130,7 @@ builder.setup();
 
 let circom = builder.build().unwrap();
 let proof = circom.prove(
-    "keys/value_proof_pk.ark"  // ← Use .ark
+    "keys/unshield_v2_pk.ark"  // ← Use .ark
 ).unwrap();
 ```
 
@@ -162,17 +162,17 @@ which ark-circom
 ```bash
 # 1. Verify .zkey file is valid
 snarkjs zkey verify \
-  build/value_proof.r1cs \
+  build/unshield_v2.r1cs \
   ptau/pot16_final.ptau \
-  keys/value_proof_pk.zkey
+  keys/unshield_v2_pk.zkey
 
 # 2. Check ark-circom version
 ark-circom --version
 
 # 3. Try manual conversion with verbose output
 ark-circom \
-  --input keys/value_proof_pk.zkey \
-  --output keys/value_proof_pk.ark
+  --input keys/unshield_v2_pk.zkey \
+  --output keys/unshield_v2_pk.ark
 ```
 
 ### Rust not installed in CI
@@ -218,30 +218,30 @@ This is **normal** if ark-circom is not installed. The build pipeline gracefully
 
 **Files needed**:
 
-- `value_proof.wasm` (witness calculator)
-- `value_proof_pk.zkey` (proving key)
+- `unshield_v2.wasm` (witness calculator)
+- `unshield_v2_pk.zkey` (proving key)
 
 **Download**:
 
 ```bash
 # From GitHub release
-wget https://github.com/orbinum/circuits/releases/download/v0.1.0/value-proof-circuit-js-v0.1.0.tar.gz
-tar -xzf value-proof-circuit-js-v0.1.0.tar.gz
+wget https://github.com/orbinum/circuits/releases/download/v0.1.0/unshield-circuit-js-v0.1.0.tar.gz
+tar -xzf unshield-circuit-js-v0.1.0.tar.gz
 ```
 
 ### Substrate Runtime (Rust)
 
 **Files needed**:
 
-- `value_proof.wasm` (witness calculator)
-- `value_proof_pk.ark` (proving key)
+- `unshield_v2.wasm` (witness calculator)
+- `unshield_v2_pk.ark` (proving key)
 
 **Download**:
 
 ```bash
 # From GitHub release
-wget https://github.com/orbinum/circuits/releases/download/v0.1.0/value-proof-circuit-rust-v0.1.0.tar.gz
-tar -xzf value-proof-circuit-rust-v0.1.0.tar.gz
+wget https://github.com/orbinum/circuits/releases/download/v0.1.0/unshield-circuit-rust-v0.1.0.tar.gz
+tar -xzf unshield-circuit-rust-v0.1.0.tar.gz
 ```
 
 **Integration**:
@@ -252,12 +252,12 @@ use ark_circom::CircomBuilder;
 
 pub fn generate_proof(input: CircuitInput) -> Result<Proof, Error> {
     let builder = CircomBuilder::<Bn254>::new(
-        std::include_bytes!("../circuits/value_proof.wasm")
+        std::include_bytes!("../circuits/unshield_v2.wasm")
     );
 
     // Use embedded .ark key
     let circom = builder.setup_with_ark(
-        std::include_bytes!("../circuits/value_proof_pk.ark")
+        std::include_bytes!("../circuits/unshield_v2_pk.ark")
     )?;
 
     circom.prove(input)
@@ -291,9 +291,9 @@ Currently, there's no direct verification tool for `.ark` files. Verify the sour
 
 ```bash
 snarkjs zkey verify \
-  build/value_proof.r1cs \
+  build/unshield_v2.r1cs \
   ptau/pot16_final.ptau \
-  keys/value_proof_pk.zkey
+  keys/unshield_v2_pk.zkey
 ```
 
 Then convert to `.ark` - the conversion preserves cryptographic validity.

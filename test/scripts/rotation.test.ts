@@ -12,8 +12,9 @@
  * register is computed for a version other than the first. Three properties
  * that exist solely on a path nothing exercised.
  *
- * The test builds its own suffixed artifacts by copying the v1 ones. That makes
- * the two versions share a `vk_hash`, which a real rotation never would — but
+ * The test rotates to the version after the highest one in the manifest, with
+ * artifacts copied from the version the source builds. That makes the two share
+ * a `vk_hash`, which a real rotation never would — but
  * the property under test is the *merge*: that prior versions survive verbatim,
  * that the new one is appended, and that `active_version` moves. A real
  * ceremony is not needed to check any of those, and requiring one would mean
@@ -24,7 +25,7 @@ import fs from "fs";
 
 import { expect } from "chai";
 
-import { MANIFEST_PATH, ROOT, artifacts } from "../../scripts/lib/paths";
+import { MANIFEST_PATH, ROOT, artifacts, sourceArtifacts } from "../../scripts/lib/paths";
 import { readManifest, type Manifest } from "../../scripts/lib/manifest";
 import { packVerifyingKeyBin } from "../../scripts/lib/vk-hash";
 
@@ -48,7 +49,16 @@ describe("Manifest rotation", function () {
     this.timeout(120_000);
 
     const CIRCUIT = "unshield";
-    const VERSION = 2;
+    /** One past the highest version either rotated circuit has. */
+    const VERSION =
+        Math.max(
+            ...(["unshield", "transfer"] as const).flatMap(
+                (c) => readManifest().circuits[c].supported_versions
+            )
+        ) + 1;
+    /** unshield's versions before the rotation. */
+    const PRIOR = readManifest().circuits[CIRCUIT].supported_versions.map(String).sort();
+    const expectedVersions = [...PRIOR, String(VERSION)].sort();
 
     /** The suffixed artifacts this test creates, removed afterwards. */
     let created: string[] = [];
@@ -68,16 +78,18 @@ describe("Manifest rotation", function () {
             return this.skip();
         }
 
-        const v1 = artifacts(CIRCUIT);
-        const v2 = artifacts(CIRCUIT, `_v${VERSION}`);
-
         // Rotation needs wasm, zkey and vk_json under the suffixed names. Copied
-        // from v1 rather than generated: see the header.
-        const pairs: [string, string][] = [
-            [v1.wasm, v2.wasm],
-            [v1.zkey, v2.zkey],
-            [v1.vkJson, v2.vkJson],
-        ];
+        // rather than generated: see the header. Both circuits get them, so a
+        // rotation of each can be exercised.
+        const pairs: [string, string][] = (["unshield", "transfer"] as const).flatMap((c) => {
+            const from = sourceArtifacts(c);
+            const to = artifacts(c, `_v${VERSION}`);
+            return [
+                [from.wasm, to.wasm],
+                [from.zkey, to.zkey],
+                [from.vkJson, to.vkJson],
+            ] as [string, string][];
+        });
 
         if (!pairs.every(([src]) => fs.existsSync(src))) {
             if (process.env.CIRCUITS_REQUIRE_ARTIFACTS) {
@@ -109,7 +121,7 @@ describe("Manifest rotation", function () {
 
     it("appends the new version and keeps the prior one verbatim", function () {
         const before = readManifest();
-        const priorV1 = before.circuits[CIRCUIT].versions["1"];
+        const prior = before.circuits[CIRCUIT].versions;
 
         const result = generate({
             ROTATE_CIRCUIT: CIRCUIT,
@@ -120,29 +132,33 @@ describe("Manifest rotation", function () {
         const after: Manifest = readManifest();
         const entry = after.circuits[CIRCUIT];
 
-        expect(Object.keys(entry.versions).sort()).to.deep.equal(["1", "2"]);
-        expect(entry.supported_versions).to.deep.equal([1, 2]);
+        expect(Object.keys(entry.versions).sort()).to.deep.equal(expectedVersions);
+        expect(entry.supported_versions.map(String).sort()).to.deep.equal(expectedVersions);
         expect(entry.active_version, "the new version becomes active").to.equal(VERSION);
 
         // The prior version's bytes are already published and immutable. If
         // regenerating changed them, every proof against v1 would stop
         // verifying — so this is the assertion that matters most here.
-        expect(entry.versions["1"], "the published v1 entry was rewritten").to.deep.equal(priorV1);
+        for (const v of PRIOR) {
+            expect(entry.versions[v], `the published v${v} entry was rewritten`).to.deep.equal(
+                prior[v]
+            );
+        }
     });
 
     it("names the new version's artifacts with the version suffix", function () {
         generate({ ROTATE_CIRCUIT: CIRCUIT, ROTATE_VERSION: String(VERSION) });
 
-        const v2 = readManifest().circuits[CIRCUIT].versions["2"];
+        const added = readManifest().circuits[CIRCUIT].versions[String(VERSION)];
         // Suffixed names are required: the npm package serves every artifact
-        // from one flat directory, so v1 and v2 would overwrite each other.
-        for (const artifact of Object.values(v2.artifacts)) {
+        // from one flat directory, so two versions would overwrite each other.
+        for (const artifact of Object.values(added.artifacts)) {
             expect(artifact?.file, `${artifact?.file} is not version-suffixed`).to.include(
                 `_v${VERSION}`
             );
         }
-        expect(v2.version).to.equal(VERSION);
-        expect(v2.vk_hash).to.match(/^0x[0-9a-f]{64}$/);
+        expect(added.version).to.equal(VERSION);
+        expect(added.vk_hash).to.match(/^0x[0-9a-f]{64}$/);
     });
 
     it("leaves the other circuits untouched", function () {
@@ -159,16 +175,49 @@ describe("Manifest rotation", function () {
         }
     });
 
-    it("without the env vars, every circuit has exactly one version", function () {
+    it("without the env vars, no version is added or dropped", function () {
+        const before = readManifest();
         const result = generate({ ROTATE_CIRCUIT: "", ROTATE_VERSION: "" });
         expect(result.ok, result.output).to.equal(true);
 
         for (const [circuit, entry] of Object.entries(readManifest().circuits)) {
-            expect(
-                Object.keys(entry.versions),
-                `${circuit} rotated without being asked`
-            ).to.have.length(1);
-            expect(entry.active_version).to.equal(1);
+            const was = before.circuits[circuit];
+            expect(Object.keys(entry.versions).sort(), `${circuit} versions changed`).to.deep.equal(
+                Object.keys(was.versions).sort()
+            );
+            expect(entry.active_version, `${circuit} active version moved`).to.equal(
+                was.active_version
+            );
+        }
+    });
+
+    it("rotating one circuit after the other keeps both new versions", function () {
+        expect(
+            generate({ ROTATE_CIRCUIT: "unshield", ROTATE_VERSION: String(VERSION) }).ok
+        ).to.equal(true);
+        expect(
+            generate({ ROTATE_CIRCUIT: "transfer", ROTATE_VERSION: String(VERSION) }).ok
+        ).to.equal(true);
+
+        const circuits = readManifest().circuits;
+        for (const c of ["unshield", "transfer"] as const) {
+            expect(Object.keys(circuits[c].versions), `${c} lost a version`).to.include(
+                String(VERSION)
+            );
+            expect(circuits[c].active_version).to.equal(VERSION);
+        }
+    });
+
+    it("a comma-separated list rotates every circuit in it", function () {
+        const result = generate({
+            ROTATE_CIRCUIT: "transfer,unshield",
+            ROTATE_VERSION: String(VERSION),
+        });
+        expect(result.ok, result.output).to.equal(true);
+        const circuits = readManifest().circuits;
+        for (const c of ["unshield", "transfer"] as const) {
+            expect(circuits[c].supported_versions).to.include(VERSION);
+            expect(circuits[c].active_version).to.equal(VERSION);
         }
     });
 

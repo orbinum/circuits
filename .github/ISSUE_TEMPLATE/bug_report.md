@@ -35,7 +35,6 @@ What actually happened.
 
 Which circuit is affected?
 
-- [ ] Value Proof
 - [ ] Transfer
 - [ ] Unshield
 - [ ] Other: \***\*\_\_\_\*\***

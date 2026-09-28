@@ -19,6 +19,7 @@ template Transfer(tree_depth) {
     signal input commitments[2];
     signal input asset_id;  // asset being transferred (must match input notes)
     signal input fee;       // gasless fee deducted from input sum; paid to block author
+    signal input memo_hash; // blake2_256(SCALE(output memos)) mod r — binds the memos
 
     // Private inputs — input notes (being spent)
     signal input input_values[2];
@@ -167,7 +168,15 @@ template Transfer(tree_depth) {
     signal must_be_distinct;
     must_be_distinct <== nullifiers_equal.out * both_real;
     must_be_distinct === 0;
+
+    // Constraint 11: bind the output memos
+    // They carry the output notes' secrets but are not otherwise part of the
+    // statement, so a copier could swap them and leave the recipients unable to
+    // recover their notes. As a public input the hash is fixed by the proof; the
+    // square keeps the compiler from optimising the unused signal away.
+    signal memo_hash_sq;
+    memo_hash_sq <== memo_hash * memo_hash;
 }
 
 // 2 inputs, 2 outputs, 20-level tree (matches pallet MAX_TREE_DEPTH)
-component main {public [merkle_root, nullifiers, commitments, asset_id, fee]} = Transfer(20);
+component main {public [merkle_root, nullifiers, commitments, asset_id, fee, memo_hash]} = Transfer(20);

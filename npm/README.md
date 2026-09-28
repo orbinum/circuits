@@ -13,14 +13,15 @@ npm install @orbinum/circuits
 
 ## 📦 Package Contents
 
-This package includes the artifacts for 3 circuits (value_proof, transfer, unshield):
+This package includes the artifacts for 2 circuits (transfer, unshield), every published version of each (`manifest.json` lists them):
 
-### For Each Circuit (value_proof, transfer, unshield):
+### For Each Circuit Version (`{name}` = `transfer`, `unshield`, or `transfer_v2`, `unshield_v2`, …):
 
-1. **`{circuit}.wasm`** - Witness calculator
-2. **`{circuit}.r1cs`** - R1CS constraint system — for custom provers / verification
-3. **`{circuit}_pk.zkey`** - Proving key for snarkjs
-4. **`verification_key_{circuit}.json`** - Verification key for on-chain verification
+1. **`{name}.wasm`** - Witness calculator
+2. **`{name}.r1cs`** - R1CS constraint system — for custom provers / verification
+3. **`{name}_pk.zkey`** - Proving key for snarkjs
+4. **`{name}_pk.ark`** - Proving key for arkworks
+5. **`verification_key_{name}.json`** - Verification key for on-chain verification
 
 ## 🔧 Usage
 
@@ -31,8 +32,11 @@ import { join } from "path";
 import { readFileSync } from "fs";
 import { getCircuitPaths } from "@orbinum/circuits";
 
-// Get all paths for a circuit
-const paths = getCircuitPaths("transfer"); // 'value_proof' | 'transfer' | 'unshield'
+// Get all paths for a circuit's active version
+const paths = getCircuitPaths("transfer"); // 'transfer' | 'unshield'
+
+// Or for a specific published version (see manifest.json `supported_versions`)
+const v1 = getCircuitPaths("transfer", 1);
 
 // Load WASM witness calculator
 const wasmBuffer = readFileSync(paths.wasm);
@@ -72,15 +76,11 @@ import verificationKey from "@orbinum/circuits/verification_key_transfer.json";
 
 ## 📋 Available Circuits
 
-### 1. **Value Proof** (`value_proof_*`)
-
-Proves that a note commitment encodes exactly the declared relay fee amount. Used by `pallet-shielded-pool::claim_shielded_fees` to prevent inflation attacks. `CircuitId = 6`.
-
-### 2. **Transfer** (`transfer_*`)
+### 1. **Transfer** (`transfer_*`)
 
 Private token transfer circuit with 2 inputs and 2 outputs.
 
-### 3. **Unshield** (`unshield_*`)
+### 2. **Unshield** (`unshield_*`)
 
 Withdrawal circuit from private pool to public account.
 
@@ -95,7 +95,7 @@ Withdrawal circuit from private pool to public account.
 import { generateProof, CircuitType } from "@orbinum/proof-generator";
 
 // Proof generator automatically loads circuits from @orbinum/circuits
-const result = await generateProof(CircuitType.ValueProof, witnessInputs, numPublicSignals);
+const result = await generateProof(CircuitType.Unshield, witnessInputs, numPublicSignals);
 
 console.log("Proof:", result.proof);
 console.log("Public signals:", result.publicSignals);

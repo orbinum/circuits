@@ -24,7 +24,7 @@ import fs from "fs";
 import { expect } from "chai";
 
 import { CIRCUITS } from "../../scripts/lib/circuits";
-import { MANIFEST_PATH, ROOT, artifacts, fixtures } from "../../scripts/lib/paths";
+import { MANIFEST_PATH, ROOT, sourceArtifacts, fixtures } from "../../scripts/lib/paths";
 
 /** Run a repository script, failing the test with its output. */
 function script(args: string[]): void {
@@ -51,7 +51,7 @@ describe("Script determinism", function () {
         for (const circuit of CIRCUITS) {
             it(`${circuit}: regenerating produces byte-identical files`, function () {
                 const f = fixtures(circuit);
-                const wasm = artifacts(circuit).wasm;
+                const wasm = sourceArtifacts(circuit).wasm;
 
                 if (!fs.existsSync(f.input) || !fs.existsSync(wasm)) {
                     if (process.env.CIRCUITS_REQUIRE_ARTIFACTS) {
@@ -132,11 +132,11 @@ describe("Script determinism", function () {
         // The .r1cs and .wasm are what every proof is built against, so a
         // recompile producing different bytes would silently invalidate every
         // key derived from the previous ones.
-        it("value_proof: recompiling produces byte-identical artifacts", function () {
-            const a = artifacts("value_proof");
+        it("unshield: recompiling produces byte-identical artifacts", function () {
+            const a = sourceArtifacts("unshield");
             if (!fs.existsSync(a.r1cs)) {
                 if (process.env.CIRCUITS_REQUIRE_ARTIFACTS) {
-                    throw new Error("value_proof not compiled — run 'pnpm build-all' first");
+                    throw new Error("unshield not compiled — run 'pnpm build-all' first");
                 }
                 return this.skip();
             }
@@ -146,7 +146,7 @@ describe("Script determinism", function () {
                 wasm: fs.readFileSync(a.wasm),
             };
 
-            script(["scripts/build/compile.ts", "value_proof"]);
+            script(["scripts/build/compile.ts", "unshield"]);
 
             expect(fs.readFileSync(a.r1cs).equals(before.r1cs), ".r1cs changed").to.equal(true);
             expect(fs.readFileSync(a.wasm).equals(before.wasm), ".wasm changed").to.equal(true);

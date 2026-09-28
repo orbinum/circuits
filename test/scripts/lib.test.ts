@@ -49,15 +49,10 @@ describe("scripts/lib/circuits", () => {
     });
 
     describe("name spellings", () => {
-        // A circuit is `value_proof` on disk and `value-proof` in a script
-        // name. Both must reach the same circuit, because both appear in the
-        // documentation and in muscle memory.
+        // A circuit named `a_b` on disk is `a-b` in a script name. Both must
+        // reach the same circuit.
         it("accepts the on-disk spelling", () => {
-            expect(parseCircuit("value_proof")).to.equal("value_proof");
-        });
-
-        it("accepts the script spelling", () => {
-            expect(parseCircuit("value-proof")).to.equal("value_proof");
+            expect(parseCircuit("unshield")).to.equal("unshield");
         });
 
         it("round-trips through scriptName", () => {
@@ -68,7 +63,7 @@ describe("scripts/lib/circuits", () => {
 
         it("rejects an unknown name, listing the valid ones", () => {
             expect(() => parseCircuit("nope")).to.throw(/unknown circuit "nope"/);
-            expect(() => parseCircuit("nope")).to.throw(/value_proof/);
+            expect(() => parseCircuit("nope")).to.throw(/transfer, unshield/);
         });
 
         it("isCircuit narrows correctly", () => {

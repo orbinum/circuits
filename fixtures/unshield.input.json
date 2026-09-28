@@ -6,6 +6,7 @@
   "asset_id": "0",
   "fee": "0",
   "change_commitment": "0",
+  "memo_hash": "1835363695",
   "note_value": "1000",
   "note_asset_id": "0",
   "note_blinding": "18364757930599072545",

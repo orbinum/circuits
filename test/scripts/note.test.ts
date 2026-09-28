@@ -128,12 +128,5 @@ describe("scripts/lib/note", function () {
             expect(note.ownerPubkey(5n)).to.equal(note.ownerPubkey(5n));
             expect(note.ownerPubkey(5n)).to.not.equal(note.ownerPubkey(6n));
         });
-
-        it("ownerHash hides the key it was derived from", function () {
-            const pk = note.ownerPubkey(5n);
-            const hash = note.ownerHash(pk);
-            expect(hash).to.not.equal(pk);
-            expect(note.ownerHash(pk)).to.equal(hash);
-        });
     });
 });

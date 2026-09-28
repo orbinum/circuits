@@ -1,3 +1,4 @@
+import fs from "fs";
 import path from "path";
 import { wasm as wasm_tester } from "circom_tester";
 import { buildPoseidon } from "circomlibjs";
@@ -32,7 +33,6 @@ describe("Note Circuit Components", function () {
                 "build",
                 "test_note_commitment.circom"
             );
-            const fs = require("fs");
             fs.writeFileSync(tempCircuitPath, noteCommitmentCircuit);
 
             circuit = await wasm_tester(tempCircuitPath, {
@@ -189,7 +189,6 @@ describe("Note Circuit Components", function () {
             `;
 
             const tempCircuitPath = path.join(__dirname, "..", "build", "test_nullifier.circom");
-            const fs = require("fs");
             fs.writeFileSync(tempCircuitPath, nullifierCircuit);
 
             circuit = await wasm_tester(tempCircuitPath, {
@@ -342,7 +341,6 @@ describe("Note Circuit Components", function () {
                 component main = Nullifier();
             `;
 
-            const fs = require("fs");
             const commitmentPath = path.join(
                 __dirname,
                 "..",

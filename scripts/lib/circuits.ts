@@ -1,7 +1,7 @@
 /**
  * The circuits this package builds, and the two names each one has.
  *
- * A circuit is `value_proof` on disk and `value-proof` in a pnpm script, and
+ * A circuit named `a_b` on disk is `a-b` in a pnpm script, and
  * the two were bridged ad hoc: `build-all.sh:42` did `${CIRCUIT//_/-}`, the
  * package.json spelled out all fifteen combinations by hand, and the list of
  * circuit names itself appeared in five places. Adding a fourth circuit meant
@@ -9,17 +9,12 @@
  */
 
 /** A circuit's canonical name — the one used on disk and in the manifest. */
-export type CircuitName = "value_proof" | "transfer" | "unshield";
+export type CircuitName = "transfer" | "unshield";
 
-/**
- * Every circuit, in manifest order.
- *
- * `value_proof` leads because it is the smallest, so a pipeline that breaks
- * breaks quickly.
- */
-export const CIRCUITS: readonly CircuitName[] = ["value_proof", "transfer", "unshield"] as const;
+/** Every circuit, in manifest order. */
+export const CIRCUITS: readonly CircuitName[] = ["transfer", "unshield"] as const;
 
-/** The pnpm-script spelling: `value_proof` → `value-proof`. */
+/** The pnpm-script spelling: underscores become hyphens. */
 export function scriptName(circuit: CircuitName): string {
     return circuit.replace(/_/g, "-");
 }
@@ -48,7 +43,6 @@ export type Signal =
 
 const input = (name: string): Signal => ({ kind: "input", name });
 const element = (name: string, index: number): Signal => ({ kind: "element", name, index });
-const output = (name: string): Signal => ({ kind: "output", name });
 
 /**
  * The public-signal layout of each circuit, in witness order.
@@ -58,21 +52,13 @@ const output = (name: string): Signal => ({ kind: "output", name });
  * produces a proof that is well-formed, is exactly 128 bytes, and fails
  * verification with nothing in the output to say why.
  *
- * Two entries are not what a reader of the circom would guess:
- *
- * - **`transfer`** declares five names but has seven signals: `nullifiers` and
- *   `commitments` are arrays of two, flattened one after the other rather than
- *   interleaved.
- * - **`value_proof`** declares three inputs and has four signals. `owner_hash`
- *   is a `signal output`, and **Circom places outputs before public inputs in
- *   the witness** — so it is signal 0, not the last. The circuit's own header
- *   comment lists it last; the header is describing the on-chain byte layout,
- *   which is a different thing. `scripts/utils/make-fixture.ts` asserts this
- *   against the real witness every time a fixture is generated, which is how it
- *   is known rather than believed.
+ * **`transfer`** declares six names but has eight signals: `nullifiers` and
+ * `commitments` are arrays of two, flattened one after the other rather than
+ * interleaved. A `signal output` would come before every public input — Circom
+ * places outputs first in the witness. `scripts/utils/make-fixture.ts` asserts
+ * each layout against the real witness every time a fixture is generated.
  */
 export const SIGNAL_LAYOUT: Record<CircuitName, readonly Signal[]> = {
-    value_proof: [output("owner_hash"), input("commitment"), input("value"), input("asset_id")],
     transfer: [
         input("merkle_root"),
         element("nullifiers", 0),
@@ -81,6 +67,7 @@ export const SIGNAL_LAYOUT: Record<CircuitName, readonly Signal[]> = {
         element("commitments", 1),
         input("asset_id"),
         input("fee"),
+        input("memo_hash"),
     ],
     unshield: [
         input("merkle_root"),
@@ -90,6 +77,7 @@ export const SIGNAL_LAYOUT: Record<CircuitName, readonly Signal[]> = {
         input("asset_id"),
         input("fee"),
         input("change_commitment"),
+        input("memo_hash"),
     ],
 };
 

@@ -5,6 +5,62 @@ All notable changes to Orbinum Circuits will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.15.0] - 2026-09-28
+
+Ships `transfer` and `unshield` **v2** beside the published v1 (active: v2). The
+chain activates v2 in the runtime spec 16 upgrade.
+
+### Ceremony (v2)
+
+- Single-contributor development ceremony on `pot16_final.ptau` (Hermez), fresh
+  random entropy per circuit, final beacon = Orbinum testnet finalized block
+  #1045242 `0x39c0d3042e4de951d72540b487175894ae4e3092237c4d71833e2884acb1f6ec`,
+  2^10 iterations.
+- `vk_hash` v2 — transfer `0x8eb9dbb295ce10498fbe7088a4b0f327a675094d657170725d02770711634525`, unshield `0x729c4cced3306e89d0dd977448768cc9c39cc806a393dea8cd8fe2946eb19bab`.
+  v1 artifacts and `vk_hash` are byte-identical to 0.14.0.
+
+### Added
+
+- **`getCircuitPaths(circuit, version?)`** returns the files of one version,
+  the active one by default, and the `version` they belong to. It read the
+  unsuffixed (v1) names before, which would have handed v2 consumers v1 keys.
+
+### Removed
+
+- **`value_proof` circuit.** Relay fees are claimed publicly since runtime spec
+  16 (`claim_relay_fees`, no note, no proof), so circuit id 6 has no caller; no
+  node or client ever proved it. Its source, tests, fixture, manifest entry and
+  docs are gone, and `getCircuitPaths` / `CircuitType` accept only `transfer`
+  and `unshield`. Packages up to 0.14.0 keep its artifacts.
+
+### Fixed
+
+- **A rotated circuit builds beside its published versions.** The source builds
+  the manifest's active version (or `ROTATE_VERSION` for a circuit in
+  `ROTATE_CIRCUIT`) under that version's `_v{n}` names: compile, setup, the
+  `.ark` pack, fixtures and the artifact tests all follow it. Compiling used to
+  overwrite the v1 wasm and r1cs and delete `<circuit>_js/`.
+- **`pnpm run manifest` without rotation keeps every version.** It rebuilt each
+  circuit as a single v1 entry, so the CI regeneration check — and any plain
+  regeneration — would drop v2. Each recorded version is now rebuilt from its
+  local files, or kept as recorded when those are absent.
+- **Manifest rotation keeps other circuits' versions.** `ROTATE_CIRCUIT` accepts a comma-separated list, and circuits not being rotated keep their prior manifest entry instead of being rebuilt as v1-only from the base artifacts. Rotating transfer and then unshield in two runs used to erase transfer's v2, leaving clients no artifacts for the version the chain requires.
+
+### Changed
+
+- **`transfer` and `unshield` bind their memos (circuit version 2).** A new last
+  public input, `memo_hash = blake2_256(SCALE(memos)) mod r`, constrained only by
+  a square so the compiler keeps it. The memos carry the output / change notes'
+  secrets but were not part of the statement, so a copier could swap them in a
+  pending spend and leave the notes unrecoverable. Transfer hashes its two output
+  memos in order; unshield its change memo (empty for a total unshield).
+  **Breaking:** 8 public signals instead of 7, +1 constraint each (33,688 /
+  16,904). This is a rotation: v1 artifacts stay as published; v2 needs a new
+  ceremony (`SETUP_ENTROPY` / `SETUP_BEACON`), `_v2` artifacts and
+  `ROTATE_CIRCUIT=<c> ROTATE_VERSION=2 pnpm run manifest`.
+
 ## [0.14.0] - 2026-08-26
 
 ### Fixed

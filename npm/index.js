@@ -5,27 +5,40 @@
  */
 
 const { join } = require("path");
+const manifest = require("./manifest.json");
 
-const CIRCUITS = ["value_proof", "transfer", "unshield"];
+const CIRCUITS = ["transfer", "unshield"];
 
 /**
- * Get paths to all files for a specific circuit
- * @param {string} circuit - Circuit name: 'value_proof', 'transfer', or 'unshield'
- * @returns {Object} Paths to circuit files
+ * Get paths to all files of one version of a circuit
+ * @param {string} circuit - Circuit name: 'transfer' or 'unshield'
+ * @param {number} [version] - Circuit version; defaults to the active one
+ * @returns {Object} Paths to circuit files, and the version they belong to
  */
-function getCircuitPaths(circuit) {
+function getCircuitPaths(circuit, version) {
     if (!CIRCUITS.includes(circuit)) {
         throw new Error(`Invalid circuit: ${circuit}. Must be one of: ${CIRCUITS.join(", ")}`);
     }
 
-    const basePath = __dirname;
+    const entry = manifest.circuits[circuit];
+    const v = version ?? entry.active_version;
+    const published = entry.versions[String(v)];
+    if (!published) {
+        throw new Error(
+            `${circuit} has no version ${v}; this package ships ${Object.keys(entry.versions).join(", ")}`
+        );
+    }
+
+    const file = (kind) =>
+        published.artifacts[kind] && join(__dirname, published.artifacts[kind].file);
 
     return {
-        wasm: join(basePath, `${circuit}.wasm`),
-        r1cs: join(basePath, `${circuit}.r1cs`),
-        zkey: join(basePath, `${circuit}_pk.zkey`),
-        ark: join(basePath, `${circuit}_pk.ark`),
-        verificationKey: join(basePath, `verification_key_${circuit}.json`),
+        version: v,
+        wasm: file("wasm"),
+        r1cs: file("r1cs"),
+        zkey: file("zkey"),
+        ark: file("ark"),
+        verificationKey: file("vk_json"),
     };
 }
 

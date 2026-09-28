@@ -6,7 +6,6 @@ This directory contains detailed technical documentation for each zero-knowledge
 
 ### Core Privacy Circuits
 
-- **[Value Proof](value_proof.md)** - Prove note formation (value + asset_id encoded in commitment) for relay-fee claiming
 - **[Transfer](transfer.md)** - Private token transfers with BabyPbk ownership verification (discrete log proof)
 - **[Unshield](unshield.md)** - Convert private notes to public tokens (withdrawal)
 
@@ -62,11 +61,10 @@ Each circuit document includes:
 
 ## Circuit Statistics
 
-| Circuit     | Constraints | Public Inputs | Private Inputs      | Tree Depth |
-| ----------- | ----------- | ------------- | ------------------- | ---------- |
-| Value Proof | 1,151       | 3 (+1 output) | 2                   | N/A        |
-| Transfer    | 33,687      | 7             | 9 (+40 Merkle path) | 20         |
-| Unshield    | 16,903      | 7             | 7 (+40 Merkle path) | 20         |
+| Circuit  | Constraints | Public Inputs | Private Inputs      | Tree Depth |
+| -------- | ----------- | ------------- | ------------------- | ---------- |
+| Transfer | 33,688      | 8             | 9 (+40 Merkle path) | 20         |
+| Unshield | 16,904      | 8             | 7 (+40 Merkle path) | 20         |
 
 ## Build Artifacts
 

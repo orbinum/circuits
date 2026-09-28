@@ -8,6 +8,7 @@
  * assumed the working directory was already the root — so half the pipeline was
  * cwd-independent and half was not.
  */
+import fs from "fs";
 import path from "path";
 
 /** The repository root, regardless of where a script was invoked from. */
@@ -44,6 +45,31 @@ export function artifacts(circuit: string, suffix = "") {
         ark: path.join(KEYS_DIR, `${name}_pk.ark`),
     };
 }
+
+/** The artifact-name suffix of a version: none for 1, `_v{n}` otherwise. */
+export const versionSuffix = (version: number): string => (version === 1 ? "" : `_v${version}`);
+
+/**
+ * The version the circom source builds.
+ *
+ * During a rotation (`ROTATE_CIRCUIT` lists the circuit, `ROTATE_VERSION` = n)
+ * it is n; otherwise the manifest's `active_version`. The published versions
+ * before it keep their own names, so building the source never overwrites them.
+ */
+export function sourceVersion(circuit: string): number {
+    const rotating = (process.env.ROTATE_CIRCUIT ?? "").split(",").map((c) => c.trim());
+    const rotateVersion = Number(process.env.ROTATE_VERSION ?? "0");
+    if (rotating.includes(circuit) && Number.isInteger(rotateVersion) && rotateVersion >= 1) {
+        return rotateVersion;
+    }
+    if (!fs.existsSync(MANIFEST_PATH)) return 1;
+    const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
+    return manifest.circuits?.[circuit]?.active_version ?? 1;
+}
+
+/** The artifacts of the version the source builds (see {@link sourceVersion}). */
+export const sourceArtifacts = (circuit: string) =>
+    artifacts(circuit, versionSuffix(sourceVersion(circuit)));
 
 /** A circuit's deterministic test fixture. */
 export function fixtures(circuit: string) {

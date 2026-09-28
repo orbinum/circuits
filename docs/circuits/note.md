@@ -68,7 +68,6 @@ template NoteCommitment() {
 
 Used by:
 
-- **Value Proof**: Verify commitment matches declared note fields
 - **Transfer**: Compute input/output note commitments
 - **Unshield**: Verify note commitment exists in tree
 
@@ -475,6 +474,5 @@ Enable stateless nullifier verification:
 ## Related Documentation
 
 - [Poseidon Wrapper](poseidon-wrapper.md) - Poseidon hash implementations
-- [Value Proof Circuit](value_proof.md) - Uses NoteCommitment
 - [Transfer Circuit](transfer.md) - Uses both NoteCommitment and Nullifier
 - [Unshield Circuit](unshield.md) - Uses both NoteCommitment and Nullifier

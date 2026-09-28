@@ -1,7 +1,7 @@
 /**
  * The numbers, commands and links the documentation states.
  *
- * Documentation drifts, and this repository has the receipts: `value_proof`'s
+ * Documentation drifts, and this repository has the receipts: a circuit's
  * constraint count was documented as `~300` against a real 1151 — a figure that
  * survived being called out as wrong in three separate places, including nine
  * lines above one of the tables that still printed it. Three different test
@@ -24,8 +24,8 @@ import path from "path";
 
 import { expect } from "chai";
 
-import { CIRCUITS, PUBLIC_SIGNALS, SIGNAL_LAYOUT, signalName } from "../scripts/lib/circuits";
-import { ROOT, artifacts } from "../scripts/lib/paths";
+import { CIRCUITS, PUBLIC_SIGNALS } from "../scripts/lib/circuits";
+import { ROOT, sourceArtifacts } from "../scripts/lib/paths";
 import { allArtifacts, readManifest } from "../scripts/lib/manifest";
 
 const rel = (f: string) => path.relative(ROOT, f);
@@ -106,7 +106,7 @@ describe("Documentation", function () {
         it("no document states a constraint count that is no longer real", function () {
             const real = new Map<string, number>();
             for (const circuit of CIRCUITS) {
-                const r1cs = artifacts(circuit).r1cs;
+                const r1cs = sourceArtifacts(circuit).r1cs;
                 if (fs.existsSync(r1cs)) real.set(circuit, r1csConstraints(r1cs));
             }
             if (real.size === 0) {
@@ -120,7 +120,7 @@ describe("Documentation", function () {
             // changed. Each maps to the circuit it used to describe, so the
             // failure message can say what to write instead.
             const superseded: Record<string, string> = {
-                "300": "value_proof",
+                "300": "(a removed circuit)",
                 "16,033": "unshield",
                 "16033": "unshield",
                 "12,000": "unshield",
@@ -161,7 +161,7 @@ describe("Documentation", function () {
                 const file = fs.existsSync(doc)
                     ? doc
                     : path.join(ROOT, "docs", "circuits", `${circuit}.md`);
-                const r1cs = artifacts(circuit).r1cs;
+                const r1cs = sourceArtifacts(circuit).r1cs;
                 if (!fs.existsSync(file) || !fs.existsSync(r1cs)) continue;
 
                 const real = r1csConstraints(r1cs);
@@ -181,7 +181,7 @@ describe("Documentation", function () {
     describe("public-signal counts match the verifying keys", () => {
         for (const circuit of CIRCUITS) {
             it(`${circuit}'s declared arity matches its key`, function () {
-                const vkJson = artifacts(circuit).vkJson;
+                const vkJson = sourceArtifacts(circuit).vkJson;
                 if (!fs.existsSync(vkJson)) {
                     if (process.env.CIRCUITS_REQUIRE_ARTIFACTS) {
                         throw new Error(`${circuit} has no verifying key — run 'pnpm build-all'`);
@@ -192,40 +192,6 @@ describe("Documentation", function () {
                 expect(PUBLIC_SIGNALS[circuit]).to.equal(vk.nPublic);
             });
         }
-
-        it("no document puts value_proof's owner_hash last", function () {
-            // Circom places `signal output` before public inputs in the witness,
-            // so `owner_hash` is signal 0. Documenting it last is not a cosmetic
-            // error: a verifier built from that ordering produces proofs that
-            // fail with nothing in the output to explain why.
-            const order = SIGNAL_LAYOUT.value_proof.map(signalName);
-            expect(order[0], "the layout itself changed").to.equal("owner_hash");
-
-            // The byte layout the pallet packs genuinely does put owner_hash
-            // last, so the ordering alone is not the error — presenting it as
-            // the *witness* order is. A line that says which one it means is
-            // fine; one that leaves it ambiguous is the trap.
-            // A byte-offset layout, which is the shape the confusion takes:
-            // four names with ranges, owner_hash last.
-            const byteLayout =
-                /commitment\[[^\]]*\][^\n]*value\[[^\]]*\][^\n]*asset_id\[[^\]]*\][^\n]*owner_hash\[/;
-            const disambiguated = /byte layout|on-chain|\bpallet\b/i;
-
-            for (const doc of docs) {
-                const lines = doc.text.split("\n");
-                for (const [i, line] of lines.entries()) {
-                    if (!byteLayout.test(line)) continue;
-                    // The label usually sits a line or two above, outside the
-                    // code fence the layout is written in.
-                    const context = lines.slice(Math.max(0, i - 4), i + 1).join(" ");
-                    if (disambiguated.test(context)) continue;
-                    expect.fail(
-                        `${doc.name}:${i + 1} orders owner_hash last without saying it is the ` +
-                            `on-chain byte layout; in the witness it is signal 0\n    ${line.trim()}`
-                    );
-                }
-            }
-        });
     });
 
     describe("every documented command exists", () => {

@@ -18,15 +18,12 @@
  * Each circuit's entry in `PUBLIC_SIGNALS` is the layout a verifier must use,
  * and it is not always the `public [...]` list read left to right:
  *
- *   - `transfer` declares five names, two of which are arrays of two, so the
- *     seven signals are `merkle_root, nullifiers[0], nullifiers[1],
- *     commitments[0], commitments[1], asset_id, fee`.
- *   - `value_proof` declares three names but has four signals, because Circom
- *     places a template's `signal output` ahead of its public inputs in the
- *     witness. `owner_hash` is an output.
+ *   - `transfer` declares six names, two of which are arrays of two, so the
+ *     eight signals are `merkle_root, nullifiers[0], nullifiers[1],
+ *     commitments[0], commitments[1], asset_id, fee, memo_hash`.
  *
- * Both are asserted below against the real witness rather than trusted, which
- * is the only way to know rather than believe.
+ * It is asserted below against the real witness rather than trusted, which is
+ * the only way to know rather than believe.
  *
  * Usage:
  *   pnpm exec ts-node scripts/utils/make-fixture.ts [circuit] [outDir]
@@ -44,8 +41,8 @@ import {
 } from "../lib/circuits";
 import { die, info, ok } from "../lib/log";
 import { NoteCrypto, TREE_DEPTH } from "../lib/note";
-import { artifacts, fixtures, rel } from "../lib/paths";
-const snarkjs = require("snarkjs");
+import { fixtures, rel, sourceArtifacts } from "../lib/paths";
+import * as snarkjs from "snarkjs";
 
 /**
  * A public signal: either a plain input name, or one element of an array input,
@@ -56,6 +53,12 @@ const snarkjs = require("snarkjs");
  * The defaults from `test/unshield.test.ts`. Reproduced rather than imported
  * because they live inside a `describe()` closure there.
  */
+/**
+ * Stand-in for `blake2_256(SCALE(memos)) mod r`. The circuits only bind it as a
+ * public input, so a fixed value keeps the fixture reproducible.
+ */
+const MEMO_HASH = 0x6d656d6fn;
+
 const DEFAULTS = {
     noteValue: 1000n,
     amount: 1000n,
@@ -95,6 +98,7 @@ async function buildUnshieldInput(): Promise<Built> {
             asset_id: d.assetId.toString(),
             fee: d.fee.toString(),
             change_commitment: changeCommitment.toString(),
+            memo_hash: MEMO_HASH.toString(),
             // private
             note_value: d.noteValue.toString(),
             // Supplied even though --O1 eliminated it (varIdx -1 in unshield.sym): the
@@ -139,14 +143,6 @@ const TRANSFER_DEFAULTS = {
     leafIndex: 0,
 };
 
-/** The defaults from `test/value_proof.test.ts`. */
-const VALUE_PROOF_DEFAULTS = {
-    ownerPubkey: 0xdeadbeef_cafebabe_12345678_90abcdefn,
-    blinding: 0xfedcba09_87654321_aabbccdd_eeff0011n,
-    value: 1_000n,
-    assetId: 0n,
-};
-
 async function buildTransferInput(): Promise<Built> {
     const note = await NoteCrypto.build();
     const d = TRANSFER_DEFAULTS;
@@ -175,6 +171,7 @@ async function buildTransferInput(): Promise<Built> {
             commitments: commitments.map(String),
             asset_id: d.assetId.toString(),
             fee: d.fee.toString(),
+            memo_hash: MEMO_HASH.toString(),
             // private — input notes
             input_values: [d.inputValue.toString(), "0"],
             input_asset_ids: [d.assetId.toString(), d.assetId.toString()],
@@ -191,33 +188,9 @@ async function buildTransferInput(): Promise<Built> {
     };
 }
 
-async function buildValueProofInput(): Promise<Built> {
-    const note = await NoteCrypto.build();
-    const d = VALUE_PROOF_DEFAULTS;
-
-    const commitment = note.commitment(d.value, d.assetId, d.ownerPubkey, d.blinding);
-    const ownerHash = note.ownerHash(d.ownerPubkey);
-
-    return {
-        input: {
-            // public
-            commitment: commitment.toString(),
-            value: d.value.toString(),
-            asset_id: d.assetId.toString(),
-            // private
-            owner_pubkey: d.ownerPubkey.toString(),
-            blinding: d.blinding.toString(),
-        },
-        // `owner_hash` is a public signal but not an input, so its expected
-        // value has to come from here for the layout assertion to check it.
-        outputs: { owner_hash: ownerHash },
-    };
-}
-
 const BUILDERS: Record<string, () => Promise<Built>> = {
     unshield: buildUnshieldInput,
     transfer: buildTransferInput,
-    value_proof: buildValueProofInput,
 };
 
 async function main() {
@@ -228,7 +201,7 @@ async function main() {
         die(`no fixture builder for "${circuit}"`);
     }
 
-    const wasmPath = artifacts(circuit).wasm;
+    const wasmPath = sourceArtifacts(circuit).wasm;
     if (!fs.existsSync(wasmPath)) {
         die(`circuit wasm not found: ${rel(wasmPath)}. Run 'pnpm run compile ${circuit}' first.`);
     }
@@ -244,10 +217,11 @@ async function main() {
 
     console.log("Calculating witness…");
     const wtns = { type: "mem" } as { type: string; data?: Uint8Array };
-    await snarkjs.wtns.calculate(input, fs.readFileSync(wasmPath), wtns);
+    await snarkjs.wtns.calculate(input as snarkjs.CircuitSignals, fs.readFileSync(wasmPath), wtns);
     fs.writeFileSync(wtnsPath, Buffer.from(wtns.data!));
 
-    const witness: bigint[] = await snarkjs.wtns.exportJson(wtns);
+    // exportJson accepts the in-memory witness; its typings only name a path.
+    const witness = (await snarkjs.wtns.exportJson(wtns as unknown as string)) as bigint[];
     fs.writeFileSync(
         decimalPath,
         `${JSON.stringify(
@@ -260,10 +234,7 @@ async function main() {
     // The witness layout is an unchecked contract with the proving key. Assert it
     // here, where a mismatch is one confusing line, rather than downstream where
     // it surfaces as a proof that verifies against nothing.
-    //
-    // This is also where the layouts in PUBLIC_SIGNALS stop being a claim: for
-    // value_proof in particular, it is the only evidence of whether Circom puts
-    // the `owner_hash` output before the public inputs or after them.
+    // This is also where the layouts in PUBLIC_SIGNALS stop being a claim.
     if (witness[0] !== 1n) {
         throw new Error(`witness[0] is ${witness[0]}, expected the constant 1`);
     }

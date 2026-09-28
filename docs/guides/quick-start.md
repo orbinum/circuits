@@ -85,47 +85,47 @@ For more control, build circuits individually:
 #### Step 1: Compile Circuit
 
 ```bash
-# Compile value_proof circuit
-pnpm run compile value_proof
+# Compile the unshield circuit (active version 2, so `_v2` names)
+pnpm run compile unshield
 
 # Output:
-# - build/value_proof.r1cs
-# - build/value_proof.sym
-# - build/value_proof_js/value_proof.wasm
+# - build/unshield_v2.r1cs
+# - build/unshield_v2.sym
+# - build/unshield_js/unshield_v2.wasm
 ```
 
 #### Step 2: Generate Keys
 
 ```bash
 # Generate proving and verifying keys
-pnpm run setup value_proof
+pnpm run setup unshield
 
 # Output:
-# - keys/value_proof_pk.zkey
-# - build/verification_key_value_proof.json
+# - keys/unshield_v2_pk.zkey
+# - build/verification_key_unshield_v2.json
 ```
 
 #### Step 3: Test Circuit
 
 ```bash
 # Run tests
-pnpm test -- --grep "ValueProof"
+pnpm test -- --grep "Unshield"
 ```
 
 ## Your First Proof
 
 ### 1. Generate Test Input
 
-Build a valid input manually using `circomlibjs` (see [value_proof.md](../circuits/value_proof.md#usage-example) for the full snippet) or copy from `test/value_proof.test.ts`.
+`pnpm run fixture unshield` writes a valid, deterministic input to `fixtures/unshield.input.json` (see [unshield.md](../circuits/unshield.md) for the signals).
 
 ### 2. Generate Proof
 
 ```bash
 # Using snarkjs directly
 npx snarkjs groth16 fullprove \
-  build/value_proof_input.json \
-  build/value_proof_js/value_proof.wasm \
-  keys/value_proof_pk.zkey \
+  fixtures/unshield.input.json \
+  build/unshield_js/unshield_v2.wasm \
+  keys/unshield_v2_pk.zkey \
   build/proof.json \
   build/public.json
 ```
@@ -135,14 +135,14 @@ This generates:
 - `build/proof.json` - The zero-knowledge proof
 - `build/public.json` - Public signals
 
-**Expected time**: <50ms
+**Expected time**: <1s
 
 ### 3. Verify Proof
 
 ```bash
 # Using snarkjs directly
 npx snarkjs groth16 verify \
-  build/verification_key_value_proof.json \
+  build/verification_key_unshield_v2.json \
   build/public.json \
   build/proof.json
 ```
@@ -163,7 +163,7 @@ pnpm test
 
 ```bash
 # Test a specific circuit
-pnpm test -- --grep "ValueProof"
+pnpm test -- --grep "Unshield"
 
 # Test a specific component
 pnpm test -- --grep "merkle"
@@ -173,7 +173,6 @@ pnpm test -- --grep "merkle"
 
 | Test Suite            | Tests | Purpose                                              |
 | --------------------- | ----- | ---------------------------------------------------- |
-| `value_proof.test.ts` | 16    | Note formation proof, inflation attack prevention    |
 | `transfer.test.ts`    | 79    | Private transfer validation                          |
 | `unshield.test.ts`    | 44    | Asset unshielding (total + partial with change note) |
 | `merkle_tree.test.ts` | 15    | Merkle proof verification                            |

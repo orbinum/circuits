@@ -38,7 +38,7 @@ pnpm run build-all
 This automatically:
 
 - Installs dependencies
-- Compiles circuits (value_proof.circom → R1CS + WASM)
+- Compiles circuits (transfer, unshield → R1CS + WASM)
 - Downloads Powers of Tau (72MB, one-time)
 - Generates cryptographic keys (proving + verifying keys)
 - Converts to compatible formats
@@ -62,13 +62,13 @@ A single `manifest.json` can carry **multiple verifying keys per circuit** at on
 
 ```bash
 # Append a new version onto the existing manifest
-ROTATE_CIRCUIT=transfer ROTATE_VERSION=2 pnpm run manifest
+ROTATE_CIRCUIT=transfer,unshield ROTATE_VERSION=2 pnpm run manifest
 ```
 
 - Prior versions are reused verbatim; the new one is appended.
 - `supported_versions` grows; `active_version` becomes the new version.
 - Artifacts are version-suffixed (`transfer_v2_pk.zkey`, …) so they don't collide in a flat served directory.
-- Without the env vars, the generator produces a single-version manifest as before.
+- Without the env vars, every recorded version is kept and rebuilt from its local files.
 
 A new version's key material must genuinely differ from the old one. The trusted setup is parametrized for this:
 
@@ -80,9 +80,11 @@ Defaults reproduce the original v1 setup byte-for-byte.
 
 **Output:**
 
-- `build/value_proof_js/value_proof.wasm` (<1MB) - Witness calculator
-- `keys/value_proof_pk.zkey` (<1MB) - Proving key
-- `build/verification_key_value_proof.json` (3.4KB) - Verifying key
+Per circuit, under the active version's names (`_v2` for transfer and unshield):
+
+- `build/unshield_js/unshield_v2.wasm` - Witness calculator
+- `keys/unshield_v2_pk.zkey` - Proving key
+- `build/verification_key_unshield_v2.json` - Verifying key
 
 ## Using with Rust/Substrate
 
@@ -166,11 +168,11 @@ If you need to generate the `.ark` file yourself:
 ```bash
 # Using the converter from the sibling groth16-proofs checkout
 ../groth16-proofs/target/release/pack-proving-key \
-  keys/value_proof_pk.zkey \
-  keys/value_proof_pk.ark
+  keys/unshield_v2_pk.zkey \
+  keys/unshield_v2_pk.ark
 
 # Or via pnpm
-pnpm run convert value_proof
+pnpm run convert unshield
 ```
 
 ### Download Release Artifacts
@@ -185,8 +187,8 @@ wget https://github.com/orb-labs/circuits/releases/latest/download/orbinum-circu
 tar -xzf orbinum-circuits-v*.tar.gz
 
 # Use in your Rust project
-cp value_proof_pk.zkey /path/to/your/rust/project/
-cp value_proof.wasm /path/to/your/rust/project/
+cp unshield_v2_pk.zkey /path/to/your/rust/project/
+cp unshield_v2.wasm /path/to/your/rust/project/
 ```
 
 ## Testing
@@ -199,7 +201,6 @@ pnpm test
 
 **Test Suites:**
 
-- `value_proof.test.ts` - Relay fee value proof (16 tests)
 - `transfer.test.ts` - Private transfer logic
 - `unshield.test.ts` - Multi-asset support
 - `merkle_tree.test.ts` - Merkle proof verification
@@ -209,7 +210,7 @@ pnpm test
 ### Run Specific Test
 
 ```bash
-pnpm test -- --grep "value_proof"
+pnpm test -- --grep "Unshield"
 ```
 
 ## Development Workflow
@@ -228,16 +229,16 @@ pnpm run build-all
 
 ```bash
 # Step 1: Compile circuit
-pnpm run compile value_proof
+pnpm run compile unshield
 
 # Step 2: Generate keys (requires compilation)
-pnpm run setup value_proof
+pnpm run setup unshield
 
 # Step 3: Convert to compatible format (optional)
-pnpm run convert value_proof
+pnpm run convert unshield
 
 # Or run all steps together
-pnpm run build:circuit value_proof
+pnpm run build:circuit unshield
 ```
 
 ### Generate WASM for Rust (Witness Calculator)
@@ -254,19 +255,19 @@ The `primitives/encrypted-memo` primitive can use WASM to calculate the complete
 **From circuits/circuits/ directory:**
 
 ```bash
-# Compile value_proof.circom to WASM
-circom value_proof.circom --wasm --output ../build/
+# Compile unshield.circom to WASM
+circom unshield.circom --wasm --output ../build/
 ```
 
 **Generated file:**
 
-- `build/value_proof_js/value_proof.wasm` (<1MB)
+- `build/unshield_js/unshield.wasm` (`pnpm run compile unshield` names it `unshield_v2.wasm`)
 
 **Usage in Rust:**
 
 ```rust
 // With feature flag: wasm-witness
-let wasm_bytes = std::fs::read("circuits/build/value_proof_js/value_proof.wasm")?;;
+let wasm_bytes = std::fs::read("circuits/build/unshield_js/unshield_v2.wasm")?;
 let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 ```
 
@@ -280,9 +281,9 @@ let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 
 **Statistics:**
 
-- Constraints: 33,687
+- Constraints: 33,688
 - Private inputs: 9 scalars + 40 Merkle path elements (2×20)
-- Public inputs: 7 (`merkle_root`, `nullifiers[2]`, `commitments[2]`, `asset_id`, `fee`)
+- Public inputs: 8 (`merkle_root`, `nullifiers[2]`, `commitments[2]`, `asset_id`, `fee`, `memo_hash`)
 - Tree depth: 20
 
 **Features:**
@@ -296,6 +297,7 @@ let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 - Value conservation: `Σinput = Σoutput + fee` (fee is a public signal, cryptographically bound to the proof)
 - u128 range checks on all input values, output values, and fee
 - Asset ID consistency across all 4 notes; public `asset_id` bound to note asset IDs
+- Memo binding: `memo_hash = blake2_256(SCALE(memos)) mod r` is a public input, so a copy with swapped memos no longer verifies (v2)
 
 ### Unshield Circuit — `circuits/unshield.circom`
 
@@ -303,9 +305,9 @@ let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 
 **Statistics:**
 
-- Constraints: 16,903
+- Constraints: 16,904
 - Private inputs: 8 scalars + 20 Merkle path elements
-- Public inputs: 7 (`merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, `fee`, `change_commitment`)
+- Public inputs: 8 (`merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, `fee`, `change_commitment`, `memo_hash`)
 - Tree depth: 20
 
 **Features:**
@@ -318,27 +320,7 @@ let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 - u128 range checks on `note_value`, `fee`, and `change_value`
 - Asset ID binding: `note_asset_id === asset_id`; change commitment pinned to same asset
 - `recipient` is a public signal (validated non-zero in the pallet)
-
-### Value Proof Circuit — `circuits/value_proof.circom`
-
-**Purpose:** Proves a note commitment encodes exactly the declared relay fee amount before the runtime inserts it into the Merkle tree. Used by `pallet-shielded-pool::claim_shielded_fees`.
-
-**Statistics:**
-
-- Constraints: 1,151
-- Private inputs: 2 (`owner_pubkey`, `blinding`)
-- Public inputs: 3 (`commitment`, `value`, `asset_id`)
-- Public outputs: 1 (`owner_hash`)
-- CircuitId: `6` (`CircuitId::VALUE_PROOF`)
-
-**Features:**
-
-- Commitment preimage proof: `commitment === Poseidon(value, asset_id, owner_pubkey, blinding)`
-- Owner hash: `owner_hash = Poseidon(owner_pubkey)` — reveals owner identity hash for audit without exposing the raw key
-- No Merkle proof, no spending key, no nullifier — proves note formation only
-- Prevents inflation attacks: relayer cannot claim `value=10000` if commitment was built with `value=1000`
-- Witness order: `owner_hash, commitment, value, asset_id` — Circom puts `signal output` first, so `owner_hash` is signal 0
-- On-chain byte layout (76 bytes): `commitment[0..32] | value[32..40] | asset_id[40..44] | owner_hash[44..76]` — a different ordering from the witness; see [value_proof.md](./docs/circuits/value_proof.md)
+- Memo binding: `memo_hash` over the change memo (empty for a total unshield) is a public input (v2)
 
 ## Security Properties
 
@@ -365,13 +347,12 @@ circuits/
 ├── circuits/                  # Circom source files
 │   ├── transfer.circom        # 2-in/2-out private transfer (33,687 constraints)
 │   ├── unshield.circom        # Private → public withdrawal (16,903 constraints)
-│   ├── value_proof.circom     # Relay fee value proof, no Merkle/nullifier (1,151 constraints)
 │   ├── note.circom            # NoteCommitment + Nullifier templates
 │   ├── merkle_tree.circom     # MerkleTreeVerifier template
 │   └── poseidon_wrapper.circom
 ├── build/                     # Compiled artifacts
-│   ├── transfer_js/transfer.wasm
-│   ├── value_proof_js/value_proof.wasm
+│   ├── transfer_js/transfer.wasm, transfer_v2.wasm
+│   ├── unshield_js/unshield.wasm, unshield_v2.wasm
 │   └── verification_key_*.json
 ├── keys/                      # Cryptographic keys
 │   ├── *_pk.zkey              # snarkjs proving keys

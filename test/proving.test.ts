@@ -45,7 +45,7 @@ import * as snarkjs from "snarkjs";
 import type { Groth16Proof, PublicSignals } from "snarkjs";
 
 import { CIRCUITS, SIGNAL_LAYOUT, signalName } from "../scripts/lib/circuits";
-import { artifacts, fixtures, rel } from "../scripts/lib/paths";
+import { sourceArtifacts, fixtures, rel } from "../scripts/lib/paths";
 import { strict } from "./helpers/artifacts";
 
 /** What one circuit needs before it can be proved. */
@@ -65,7 +65,7 @@ interface Inputs {
  * missing artifact is the failure it would be in CI.
  */
 function load(circuit: string, ctx: Mocha.Context): Inputs | undefined {
-    const { zkey, vkJson, sym } = artifacts(circuit);
+    const { zkey, vkJson, sym } = sourceArtifacts(circuit);
     const { wtns } = fixtures(circuit);
 
     const missing = [zkey, vkJson, sym, wtns].filter((p) => !fs.existsSync(p));

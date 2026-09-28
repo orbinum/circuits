@@ -5,7 +5,7 @@
  * recorded in several places: the compiled `.r1cs`, the verifying key's
  * `nPublic`, the manifest, and a table in `scripts/lib/circuits.ts`. Nothing
  * compared them, and they drifted: `config/circuits.config.json` claimed 300
- * constraints for `value_proof` where the real circuit has 1151, a factor of
+ * constraints for a circuit that had 1151, a factor of
  * 3.8 out, sitting unnoticed because no code read the file and no test checked
  * it.
  *
@@ -22,7 +22,7 @@ import path from "path";
 import { expect } from "chai";
 
 import { CIRCUITS, PUBLIC_SIGNALS, type CircuitName } from "../scripts/lib/circuits";
-import { artifacts } from "../scripts/lib/paths";
+import { sourceArtifacts } from "../scripts/lib/paths";
 import { readManifest } from "../scripts/lib/manifest";
 
 /**
@@ -79,7 +79,7 @@ describe("Circuit metadata", function () {
     this.timeout(30_000);
 
     /** Circuits whose build artifacts are present, so this suite can say what it checked. */
-    const built = CIRCUITS.filter((c) => fs.existsSync(artifacts(c).r1cs));
+    const built = CIRCUITS.filter((c) => fs.existsSync(sourceArtifacts(c).r1cs));
 
     before(function () {
         if (built.length === 0 && process.env.CIRCUITS_REQUIRE_ARTIFACTS) {
@@ -93,7 +93,7 @@ describe("Circuit metadata", function () {
     describe("public-signal arity agrees across every source", () => {
         for (const circuit of CIRCUITS) {
             it(`${circuit}: table, verifying key and .r1cs agree`, function () {
-                const { r1cs, vkJson } = artifacts(circuit);
+                const { r1cs, vkJson } = sourceArtifacts(circuit);
                 if (!fs.existsSync(r1cs) || !fs.existsSync(vkJson)) return this.skip();
 
                 const declared = PUBLIC_SIGNALS[circuit as CircuitName];
@@ -105,9 +105,7 @@ describe("Circuit metadata", function () {
                 );
 
                 // Circom counts outputs and public inputs separately; a verifier
-                // sees their sum. `value_proof` is the case that matters: it
-                // declares three public inputs and has a fourth signal,
-                // `owner_hash`, which is an output.
+                // sees their sum.
                 expect(
                     publicOutputs + publicInputs,
                     `${circuit}: .r1cs disagrees with the table`
@@ -160,7 +158,7 @@ describe("Circuit metadata", function () {
         // catches is a truncated or absent .r1cs, not a redesign.
         for (const circuit of CIRCUITS) {
             it(`${circuit}: the .r1cs reports a usable constraint count`, function () {
-                const { r1cs } = artifacts(circuit);
+                const { r1cs } = sourceArtifacts(circuit);
                 if (!fs.existsSync(r1cs)) return this.skip();
 
                 const n = r1csConstraints(r1cs);
@@ -173,7 +171,7 @@ describe("Circuit metadata", function () {
 
         it("reports what it measured", function () {
             for (const circuit of built) {
-                const n = r1csConstraints(artifacts(circuit).r1cs);
+                const n = r1csConstraints(sourceArtifacts(circuit).r1cs);
                 console.log(`      ${circuit}: ${n} constraints`);
             }
             if (built.length === 0) this.skip();
