@@ -27,15 +27,21 @@ In both cases the prover proves ownership of a note in the Merkle tree without r
 
 ## Public Inputs (Visible On-Chain)
 
-| Input               | Type  | Description                                                                      |
-| ------------------- | ----- | -------------------------------------------------------------------------------- |
-| `merkle_root`       | Field | Current Merkle tree root                                                         |
-| `nullifier`         | Field | Nullifier to prevent double-spend                                                |
-| `amount`            | Field | Net withdrawal amount (recipient receives this)                                  |
-| `recipient`         | Field | Recipient address (validated non-zero in runtime)                                |
-| `asset_id`          | Field | Asset ID being unshielded (publicly revealed)                                    |
-| `fee`               | Field | Gasless fee deducted from note value; paid to block author                       |
-| `change_commitment` | Field | `0` for total unshield; `NoteCommitment(change_value, ...)` for partial unshield |
+| Input               | Type  | Description                                                                                    |
+| ------------------- | ----- | ---------------------------------------------------------------------------------------------- |
+| `merkle_root`       | Field | Current Merkle tree root                                                                       |
+| `nullifier`         | Field | Nullifier to prevent double-spend                                                              |
+| `amount`            | Field | Net withdrawal amount (recipient receives this)                                                |
+| `recipient`         | Field | `blake2_256(AccountId32) mod r` from v2 (v1: `AccountId32 mod r`); non-zero checked in runtime |
+| `asset_id`          | Field | Asset ID being unshielded (publicly revealed)                                                  |
+| `fee`               | Field | Gasless fee deducted from note value; paid to block author                                     |
+| `change_commitment` | Field | `0` for total unshield; `NoteCommitment(change_value, ...)` for partial unshield               |
+| `memo_hash`         | Field | `blake2_256(SCALE(change memo)) mod r` — binds the change memo (v2)                            |
+
+`memo_hash` has no constraint beyond a square that keeps the compiler from
+dropping it: being a public input is what binds it. It covers the change memo,
+the only copy of the change note's secrets; a total unshield hashes the empty
+memo.
 
 ## Private Inputs (Known Only to Prover)
 
@@ -159,8 +165,8 @@ note_asset_id === asset_id;
 ## Circuit Parameters
 
 - **Tree Depth**: 20 levels (supports up to 2^20 = 1,048,576 notes)
-- **Constraints**: 16,903
-- **Public Inputs**: 7 (`merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, `fee`, `change_commitment`)
+- **Constraints**: 16,904
+- **Public Inputs**: 8 (`merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, `fee`, `change_commitment`, `memo_hash`)
 - **Private Inputs**: 9 signals (+ 40 for Merkle proof path)
 - **Proving Time**: ~750ms (local machine)
 - **Verification Time**: ~15ms
@@ -402,8 +408,9 @@ cut -d, -f4 build/unshield.sym | grep -oE 'main\.[a-z_]+' | sort | uniq -c | sor
 | `change_commitment_computer`  | 1,177   |
 | `nullifier_computer`          | 773     |
 | range checks (3 × Num2Bits)   | 387     |
+| memo binding (`memo_hash²`)   | 1       |
 
-Total constraints: **16,903** (`snarkjs r1cs info build/unshield.r1cs`).
+Total constraints: **16,904** (`snarkjs r1cs info build/unshield.r1cs`).
 
 The Merkle verification dominates: twenty levels of Poseidon2 is most of the
 circuit, and it is where a depth change is felt. The range checks are the
@@ -544,7 +551,7 @@ assert(circuitInput.asset_id === circuitInput.note_asset_id, "Asset IDs must mat
 | **Outputs**         | Public balance   | 2 notes            |
 | **Amount Revealed** | Yes (public)     | No (hidden)        |
 | **Recipient Type**  | Public address   | Private note owner |
-| **Constraints**     | 16,903           | 33,687             |
+| **Constraints**     | 16,904           | 33,688             |
 | **Proving Time**    | ~800ms           | ~2.5s              |
 
 ## Future Improvements

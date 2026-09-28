@@ -31,8 +31,11 @@ import { join } from "path";
 import { readFileSync } from "fs";
 import { getCircuitPaths } from "@orbinum/circuits";
 
-// Get all paths for a circuit
+// Get all paths for a circuit's active version
 const paths = getCircuitPaths("transfer"); // 'value_proof' | 'transfer' | 'unshield'
+
+// Or for a specific published version (see manifest.json `supported_versions`)
+const v1 = getCircuitPaths("transfer", 1);
 
 // Load WASM witness calculator
 const wasmBuffer = readFileSync(paths.wasm);

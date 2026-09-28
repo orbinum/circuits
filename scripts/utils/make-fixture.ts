@@ -44,8 +44,8 @@ import {
 } from "../lib/circuits";
 import { die, info, ok } from "../lib/log";
 import { NoteCrypto, TREE_DEPTH } from "../lib/note";
-import { artifacts, fixtures, rel } from "../lib/paths";
-const snarkjs = require("snarkjs");
+import { fixtures, rel, sourceArtifacts } from "../lib/paths";
+import * as snarkjs from "snarkjs";
 
 /**
  * A public signal: either a plain input name, or one element of an array input,
@@ -56,6 +56,12 @@ const snarkjs = require("snarkjs");
  * The defaults from `test/unshield.test.ts`. Reproduced rather than imported
  * because they live inside a `describe()` closure there.
  */
+/**
+ * Stand-in for `blake2_256(SCALE(memos)) mod r`. The circuits only bind it as a
+ * public input, so a fixed value keeps the fixture reproducible.
+ */
+const MEMO_HASH = 0x6d656d6fn;
+
 const DEFAULTS = {
     noteValue: 1000n,
     amount: 1000n,
@@ -95,6 +101,7 @@ async function buildUnshieldInput(): Promise<Built> {
             asset_id: d.assetId.toString(),
             fee: d.fee.toString(),
             change_commitment: changeCommitment.toString(),
+            memo_hash: MEMO_HASH.toString(),
             // private
             note_value: d.noteValue.toString(),
             // Supplied even though --O1 eliminated it (varIdx -1 in unshield.sym): the
@@ -175,6 +182,7 @@ async function buildTransferInput(): Promise<Built> {
             commitments: commitments.map(String),
             asset_id: d.assetId.toString(),
             fee: d.fee.toString(),
+            memo_hash: MEMO_HASH.toString(),
             // private — input notes
             input_values: [d.inputValue.toString(), "0"],
             input_asset_ids: [d.assetId.toString(), d.assetId.toString()],
@@ -228,7 +236,7 @@ async function main() {
         die(`no fixture builder for "${circuit}"`);
     }
 
-    const wasmPath = artifacts(circuit).wasm;
+    const wasmPath = sourceArtifacts(circuit).wasm;
     if (!fs.existsSync(wasmPath)) {
         die(`circuit wasm not found: ${rel(wasmPath)}. Run 'pnpm run compile ${circuit}' first.`);
     }
@@ -244,10 +252,11 @@ async function main() {
 
     console.log("Calculating witness…");
     const wtns = { type: "mem" } as { type: string; data?: Uint8Array };
-    await snarkjs.wtns.calculate(input, fs.readFileSync(wasmPath), wtns);
+    await snarkjs.wtns.calculate(input as snarkjs.CircuitSignals, fs.readFileSync(wasmPath), wtns);
     fs.writeFileSync(wtnsPath, Buffer.from(wtns.data!));
 
-    const witness: bigint[] = await snarkjs.wtns.exportJson(wtns);
+    // exportJson accepts the in-memory witness; its typings only name a path.
+    const witness = (await snarkjs.wtns.exportJson(wtns as unknown as string)) as bigint[];
     fs.writeFileSync(
         decimalPath,
         `${JSON.stringify(

@@ -35,13 +35,19 @@ The Transfer circuit enables private token transfers with zero-knowledge proofs.
 
 ## Public Inputs (Visible On-Chain)
 
-| Input            | Type     | Description                                               |
-| ---------------- | -------- | --------------------------------------------------------- |
-| `merkle_root`    | Field    | Current Merkle tree root                                  |
-| `nullifiers[2]`  | Field[2] | Nullifiers for the two input notes                        |
-| `commitments[2]` | Field[2] | Commitments for the two output notes                      |
-| `asset_id`       | Field    | Asset being transferred (must match all note asset IDs)   |
-| `fee`            | Field    | Gasless fee deducted from input sum; paid to block author |
+| Input            | Type     | Description                                                    |
+| ---------------- | -------- | -------------------------------------------------------------- |
+| `merkle_root`    | Field    | Current Merkle tree root                                       |
+| `nullifiers[2]`  | Field[2] | Nullifiers for the two input notes                             |
+| `commitments[2]` | Field[2] | Commitments for the two output notes                           |
+| `asset_id`       | Field    | Asset being transferred (must match all note asset IDs)        |
+| `fee`            | Field    | Gasless fee deducted from input sum; paid to block author      |
+| `memo_hash`      | Field    | `blake2_256(SCALE(memos)) mod r` — binds the output memos (v2) |
+
+`memo_hash` has no constraint beyond a square that keeps the compiler from
+dropping it: being a public input is what binds it. Without it a copier could
+swap the encrypted memos of a pending transfer — they are not otherwise part of
+the statement — and leave the recipients unable to recover their notes.
 
 ## Private Inputs (Known Only to Prover)
 
@@ -295,8 +301,8 @@ must_be_distinct === 0;
 ## Circuit Parameters
 
 - **Tree Depth**: 20 levels (supports up to 2^20 = 1,048,576 notes)
-- **Constraints**: 33,687 (includes BabyPbk ×2 + dummy-input gates: 2×IsZero + conditional signals)
-- **Public Inputs**: 7 (`merkle_root` + 2 `nullifiers` + 2 `commitments` + `asset_id` + `fee`)
+- **Constraints**: 33,688 (includes BabyPbk ×2 + dummy-input gates: 2×IsZero + conditional signals)
+- **Public Inputs**: 8 (`merkle_root` + 2 `nullifiers` + 2 `commitments` + `asset_id` + `fee` + `memo_hash`)
 - **Private Inputs**: 9 scalars + 40 Merkle path elements (2×20)
 - **Proving Time**: ~2-3 seconds (local machine)
 - **Verification Time**: ~15ms
@@ -513,7 +519,8 @@ const ownerPubkey = F.toObject(ownerAx); // Ax coordinate used in commitments
 | Balance Conservation        | ~100        |
 | Range Checks (×4+fee)       | ~12,500     |
 | Asset Consistency           | ~100        |
-| **Total**                   | **33,687**  |
+| Memo binding (`memo_hash²`) | 1           |
+| **Total**                   | **33,688**  |
 
 ### Trusted Setup
 

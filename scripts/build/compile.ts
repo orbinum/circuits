@@ -19,8 +19,9 @@
  *   ts-node scripts/build/compile.ts <circuit>
  */
 import fs from "fs";
+import path from "path";
 
-import { BUILD_DIR, artifacts, circuitSource, rel } from "../lib/paths";
+import { BUILD_DIR, circuitSource, rel, sourceArtifacts, sourceVersion } from "../lib/paths";
 import { cli, banner, die, info, ok, step, yellow } from "../lib/log";
 import { parseCircuit, scriptName } from "../lib/circuits";
 import { requireTool, run, tryRun } from "../lib/run";
@@ -55,20 +56,38 @@ function main(): void {
     info(`  ${tryRun("circom", ["--version"]).stdout.trim()}`);
 
     // A stale .r1cs beside a fresh .wasm is a circuit that proves one statement
-    // and verifies another, so the old outputs go first.
-    const out = artifacts(circuit);
-    const stale = [out.r1cs, out.sym].filter(fs.existsSync);
-    if (stale.length > 0 || fs.existsSync(out.wasmDir)) {
+    // and verifies another, so the old outputs go first. Only this version's:
+    // `<circuit>_js/` also holds the published versions' wasm.
+    const version = sourceVersion(circuit);
+    const out = sourceArtifacts(circuit);
+    const stale = [out.r1cs, out.sym, out.wasm].filter(fs.existsSync);
+    if (stale.length > 0) {
         step("  removing previous build artifacts");
         stale.forEach((f) => fs.rmSync(f));
-        fs.rmSync(out.wasmDir, { recursive: true, force: true });
     }
 
-    fs.mkdirSync(BUILD_DIR, { recursive: true });
+    // circom names its outputs after the source, so it compiles into a scratch
+    // directory and the outputs move to this version's names.
+    const scratch = path.join(BUILD_DIR, `.compile-${circuit}`);
+    fs.rmSync(scratch, { recursive: true, force: true });
+    fs.mkdirSync(scratch, { recursive: true });
 
-    step("  compiling");
-    run("circom", [rel(source), "--r1cs", "--wasm", "--sym", "--O1", "-o", rel(BUILD_DIR)]);
-    ok(`compiled ${circuit}`);
+    step(`  compiling (version ${version})`);
+    try {
+        run("circom", [rel(source), "--r1cs", "--wasm", "--sym", "--O1", "-o", rel(scratch)]);
+
+        const js = path.join(scratch, `${circuit}_js`);
+        fs.mkdirSync(out.wasmDir, { recursive: true });
+        for (const file of fs.readdirSync(js)) {
+            const dest = file === `${circuit}.wasm` ? out.wasm : path.join(out.wasmDir, file);
+            fs.renameSync(path.join(js, file), dest);
+        }
+        fs.renameSync(path.join(scratch, `${circuit}.r1cs`), out.r1cs);
+        fs.renameSync(path.join(scratch, `${circuit}.sym`), out.sym);
+    } finally {
+        fs.rmSync(scratch, { recursive: true, force: true });
+    }
+    ok(`compiled ${circuit} → ${rel(out.r1cs)}, ${rel(out.wasm)}`);
 
     const { constraints, wires } = stats(out.r1cs);
     if (constraints) {

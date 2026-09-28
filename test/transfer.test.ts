@@ -1,9 +1,14 @@
+import fs from "fs";
 import path from "path";
 import { expect } from "chai";
 import { wasm as wasm_tester } from "circom_tester";
 import type { WasmTester } from "circom_tester";
 import { needCircuit, requireArtifact } from "./helpers/artifacts";
 import { NoteCrypto } from "../scripts/lib/note";
+import { sourceArtifacts } from "../scripts/lib/paths";
+
+/** Any value: the circuit binds `memo_hash` as a public input, nothing more. */
+const MEMO_HASH = 0x6d656d6fn;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -13,8 +18,10 @@ describe("Transfer Circuit (gasless)", function () {
     this.timeout(180_000);
 
     const circuitPath = path.join(__dirname, "..", "circuits", "transfer.circom");
-    const outputDir = path.join(__dirname, "..", "build");
-    const precompiledWasm = path.join(outputDir, "transfer_js", "transfer.wasm");
+    // Its own directory: recompiling into build/ would overwrite the published
+    // versions' artifacts, which share the source's base names.
+    const outputDir = path.join(__dirname, "..", "build", "test-circuits");
+    const precompiledWasm = sourceArtifacts("transfer").wasm;
 
     let circuitOrUndefined: WasmTester | undefined;
     let note: NoteCrypto;
@@ -102,6 +109,7 @@ describe("Transfer Circuit (gasless)", function () {
             commitments: [outComm0.toString(), outComm1.toString()],
             asset_id: assetId.toString(),
             fee: opts.fee.toString(),
+            memo_hash: MEMO_HASH.toString(),
             input_values: [opts.value0.toString(), opts.value1.toString()],
             input_asset_ids: [assetId.toString(), assetId.toString()],
             input_blindings: [bl0.toString(), bl1.toString()],
@@ -160,6 +168,7 @@ describe("Transfer Circuit (gasless)", function () {
             commitments: [outComm0.toString(), outComm1.toString()],
             asset_id: assetId.toString(),
             fee: opts.fee.toString(),
+            memo_hash: MEMO_HASH.toString(),
             input_values: [opts.value0.toString(), "0"], // dummy has value = 0
             input_asset_ids: [assetId.toString(), assetId.toString()],
             input_blindings: [bl0.toString(), "0"],
@@ -183,6 +192,7 @@ describe("Transfer Circuit (gasless)", function () {
         bob = { Ax: note.ownerPubkey(SK1_DEFAULT) };
 
         if (!requireArtifact(precompiledWasm, "transfer")) return;
+        fs.mkdirSync(outputDir, { recursive: true });
         circuitOrUndefined = await wasm_tester(circuitPath, { output: outputDir, recompile: true });
     });
 
@@ -803,6 +813,7 @@ describe("Transfer Circuit (gasless)", function () {
                 commitments: [outComm0.toString(), outComm1.toString()],
                 asset_id: assetId.toString(),
                 fee: "1",
+                memo_hash: MEMO_HASH.toString(),
                 input_values: ["0", value1.toString()], // dummy at index 0
                 input_asset_ids: [assetId.toString(), assetId.toString()],
                 input_blindings: ["0", bl1.toString()],

@@ -31,7 +31,7 @@
  */
 import fs from "fs";
 
-import { BUILD_DIR, KEYS_DIR, PTAU_DIR, artifacts, rel } from "../lib/paths";
+import { BUILD_DIR, KEYS_DIR, PTAU_DIR, rel, sourceArtifacts } from "../lib/paths";
 import { banner, blue, cli, die, info, ok, warn, yellow } from "../lib/log";
 import { parseCircuit } from "../lib/circuits";
 import { requireTool, run, tryRun } from "../lib/run";
@@ -113,7 +113,7 @@ function main(): void {
         die("usage: setup.ts <circuit>");
     }
     const circuit = parseCircuit(name);
-    const { r1cs, zkey, vkJson } = artifacts(circuit);
+    const { r1cs, zkey, vkJson } = sourceArtifacts(circuit);
     const { entropy, beacon, beaconIters } = config();
 
     if (!fs.existsSync(r1cs)) {

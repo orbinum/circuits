@@ -81,6 +81,7 @@ export const SIGNAL_LAYOUT: Record<CircuitName, readonly Signal[]> = {
         element("commitments", 1),
         input("asset_id"),
         input("fee"),
+        input("memo_hash"),
     ],
     unshield: [
         input("merkle_root"),
@@ -90,6 +91,7 @@ export const SIGNAL_LAYOUT: Record<CircuitName, readonly Signal[]> = {
         input("asset_id"),
         input("fee"),
         input("change_commitment"),
+        input("memo_hash"),
     ],
 };
 

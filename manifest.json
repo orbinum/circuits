@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0.0",
   "package_name": "orbinum-circuits",
-  "package_version": "0.14.0",
-  "generated_at": "2026-08-27T00:36:54.234Z",
+  "package_version": "0.15.0",
+  "generated_at": "2026-09-28T17:06:40.009Z",
   "circuits": {
     "value_proof": {
       "active_version": 1,
@@ -49,9 +49,10 @@
       }
     },
     "transfer": {
-      "active_version": 1,
+      "active_version": 2,
       "supported_versions": [
-        1
+        1,
+        2
       ],
       "versions": {
         "1": {
@@ -89,13 +90,50 @@
               "sha256": "889b2d9eed48592f2e79f8c79709baa1ffc3e51be36753dcd60b094e8400f1f9"
             }
           }
+        },
+        "2": {
+          "version": 2,
+          "vk_hash": "0x8eb9dbb295ce10498fbe7088a4b0f327a675094d657170725d02770711634525",
+          "artifacts": {
+            "wasm": {
+              "file": "transfer_v2.wasm",
+              "localPath": "build/transfer_js/transfer_v2.wasm",
+              "bytes": 2572734,
+              "sha256": "136229085a1d7e3642818950395994d2beb86801423c34d39000efa65fbb1b10"
+            },
+            "zkey": {
+              "file": "transfer_v2_pk.zkey",
+              "localPath": "keys/transfer_v2_pk.zkey",
+              "bytes": 17248397,
+              "sha256": "9d2173d01bbf40fa54e6fedd0fda9a394a11ad6062587ab0b675847f47823358"
+            },
+            "vk_json": {
+              "file": "verification_key_transfer_v2.json",
+              "localPath": "build/verification_key_transfer_v2.json",
+              "bytes": 4211,
+              "sha256": "2537f430a4d51f29c772f84af095b1aa24345ad50f45847e95a1214c44723bfc"
+            },
+            "ark": {
+              "file": "transfer_v2_pk.ark",
+              "localPath": "keys/transfer_v2_pk.ark",
+              "bytes": 10086148,
+              "sha256": "279ec76bc67525d7e0b3d41ac570843bd143567090011f932ad448f166ed064c"
+            },
+            "r1cs": {
+              "file": "transfer_v2.r1cs",
+              "localPath": "build/transfer_v2.r1cs",
+              "bytes": 5203204,
+              "sha256": "dee0daa1874ff5c75f82241cac16146cb018b40765e1106f841ff6621445feab"
+            }
+          }
         }
       }
     },
     "unshield": {
-      "active_version": 1,
+      "active_version": 2,
       "supported_versions": [
-        1
+        1,
+        2
       ],
       "versions": {
         "1": {
@@ -131,6 +169,42 @@
               "localPath": "build/unshield.r1cs",
               "bytes": 2611520,
               "sha256": "738ed6a634af4ec8c199fab9d568fae6b9c90b06ec28d373f0dd9a2d5d6c0de5"
+            }
+          }
+        },
+        "2": {
+          "version": 2,
+          "vk_hash": "0x729c4cced3306e89d0dd977448768cc9c39cc806a393dea8cd8fe2946eb19bab",
+          "artifacts": {
+            "wasm": {
+              "file": "unshield_v2.wasm",
+              "localPath": "build/unshield_js/unshield_v2.wasm",
+              "bytes": 2503097,
+              "sha256": "57fd55216aa746b81a4a2afafe6f5a332a6335d837f9fb00cb314d5d3b29fb03"
+            },
+            "zkey": {
+              "file": "unshield_v2_pk.zkey",
+              "localPath": "keys/unshield_v2_pk.zkey",
+              "bytes": 8653881,
+              "sha256": "575115df7a11671f2f88eec04d62bd7be50b36fdb60cdba039fb8435a785250c"
+            },
+            "vk_json": {
+              "file": "verification_key_unshield_v2.json",
+              "localPath": "build/verification_key_unshield_v2.json",
+              "bytes": 4204,
+              "sha256": "5594ffb57ffebc5b4e73920ea62aa7883f7068ebf3a4f90f415f6820ea5a2fb8"
+            },
+            "ark": {
+              "file": "unshield_v2_pk.ark",
+              "localPath": "keys/unshield_v2_pk.ark",
+              "bytes": 5061868,
+              "sha256": "00ac791f86c826e030f075b7eda207971ca0bcdbc2653b70a789040a2feabe73"
+            },
+            "r1cs": {
+              "file": "unshield_v2.r1cs",
+              "localPath": "build/unshield_v2.r1cs",
+              "bytes": 2611656,
+              "sha256": "d33da76bc3ce3bd6862eeee3354202f86960f10e5bcef2fb384708b24df92226"
             }
           }
         }

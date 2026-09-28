@@ -10,6 +10,7 @@
   ],
   "asset_id": "0",
   "fee": "10",
+  "memo_hash": "1835363695",
   "input_values": [
     "1000",
     "0"

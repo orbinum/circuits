@@ -21,10 +21,11 @@ template Unshield(tree_depth) {
     signal input merkle_root;
     signal input nullifier;
     signal input amount;             // net withdrawal amount (recipient receives this)
-    signal input recipient;          // recipient address (validated non-zero in runtime)
+    signal input recipient;          // v2: blake2_256(AccountId32) mod r (v1: AccountId32 mod r); non-zero checked in runtime
     signal input asset_id;           // asset being unshielded
     signal input fee;                // gasless fee deducted from note value
     signal input change_commitment;  // 0 if total unshield; NoteCommitment of change otherwise
+    signal input memo_hash;          // blake2_256(SCALE(change memo)) mod r — binds the memo
 
     // ── Private inputs — input note ───────────────────────────────────────────
     signal input note_value;
@@ -117,7 +118,15 @@ template Unshield(tree_depth) {
 
     // 8b: if change_value == 0, the public change_commitment must be 0.
     change_commitment * has_no_change.out === 0;
+
+    // ── Constraint 10: bind the memo ──────────────────────────────────────────
+    // The memo carries the change note's secrets but is not otherwise part of
+    // the statement, so a copier could swap it and leave the change note
+    // unrecoverable. As a public input it is fixed by the proof; the square keeps
+    // the compiler from optimising the unused signal away.
+    signal memo_hash_sq;
+    memo_hash_sq <== memo_hash * memo_hash;
 }
 
 // Tree depth 20 matches pallet MAX_TREE_DEPTH
-component main {public [merkle_root, nullifier, amount, recipient, asset_id, fee, change_commitment]} = Unshield(20);
+component main {public [merkle_root, nullifier, amount, recipient, asset_id, fee, change_commitment, memo_hash]} = Unshield(20);

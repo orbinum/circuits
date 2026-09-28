@@ -62,7 +62,7 @@ A single `manifest.json` can carry **multiple verifying keys per circuit** at on
 
 ```bash
 # Append a new version onto the existing manifest
-ROTATE_CIRCUIT=transfer ROTATE_VERSION=2 pnpm run manifest
+ROTATE_CIRCUIT=transfer,unshield ROTATE_VERSION=2 pnpm run manifest
 ```
 
 - Prior versions are reused verbatim; the new one is appended.
@@ -280,9 +280,9 @@ let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 
 **Statistics:**
 
-- Constraints: 33,687
+- Constraints: 33,688
 - Private inputs: 9 scalars + 40 Merkle path elements (2×20)
-- Public inputs: 7 (`merkle_root`, `nullifiers[2]`, `commitments[2]`, `asset_id`, `fee`)
+- Public inputs: 8 (`merkle_root`, `nullifiers[2]`, `commitments[2]`, `asset_id`, `fee`, `memo_hash`)
 - Tree depth: 20
 
 **Features:**
@@ -296,6 +296,7 @@ let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 - Value conservation: `Σinput = Σoutput + fee` (fee is a public signal, cryptographically bound to the proof)
 - u128 range checks on all input values, output values, and fee
 - Asset ID consistency across all 4 notes; public `asset_id` bound to note asset IDs
+- Memo binding: `memo_hash = blake2_256(SCALE(memos)) mod r` is a public input, so a copy with swapped memos no longer verifies (v2)
 
 ### Unshield Circuit — `circuits/unshield.circom`
 
@@ -303,9 +304,9 @@ let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 
 **Statistics:**
 
-- Constraints: 16,903
+- Constraints: 16,904
 - Private inputs: 8 scalars + 20 Merkle path elements
-- Public inputs: 7 (`merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, `fee`, `change_commitment`)
+- Public inputs: 8 (`merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, `fee`, `change_commitment`, `memo_hash`)
 - Tree depth: 20
 
 **Features:**
@@ -318,6 +319,7 @@ let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 - u128 range checks on `note_value`, `fee`, and `change_value`
 - Asset ID binding: `note_asset_id === asset_id`; change commitment pinned to same asset
 - `recipient` is a public signal (validated non-zero in the pallet)
+- Memo binding: `memo_hash` over the change memo (empty for a total unshield) is a public input (v2)
 
 ### Value Proof Circuit — `circuits/value_proof.circom`
 

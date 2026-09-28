@@ -102,7 +102,7 @@ Generated directories, none of them committed: `build/` (circom output),
 
 `transfer.circom` implements a 2-in/2-out scheme with **dummy input support**: when a user has only one note, the second input slot carries `value = 0` and bypasses Merkle membership and nullifier derivation (Zcash Sapling technique). Ownership is proven via `BabyPbk(spending_key)` — no EdDSA signatures required. The dummy nullifier is forced to zero by the circuit (Constraint 9). The pallet rejects transactions where both nullifiers are zero (anti-spam).
 
-`unshield.circom` supports **partial withdrawal via a change note**: `note_value === amount + fee + change_value`. When `change_value == 0` (total unshield) `change_commitment` must be `0`. When `change_value > 0` (partial unshield) `change_commitment` must equal `NoteCommitment(change_value, asset_id, change_owner_pubkey, change_blinding)` and the pallet inserts it into the Merkle tree. The circuit has 7 public inputs and 16,903 constraints.
+`unshield.circom` supports **partial withdrawal via a change note**: `note_value === amount + fee + change_value`. When `change_value == 0` (total unshield) `change_commitment` must be `0`. When `change_value > 0` (partial unshield) `change_commitment` must equal `NoteCommitment(change_value, asset_id, change_owner_pubkey, change_blinding)` and the pallet inserts it into the Merkle tree. The circuit has 8 public inputs (v2 adds `memo_hash`) and 16,904 constraints.
 
 **Dependencies**:
 
@@ -215,8 +215,8 @@ trap, not documentation.
 | Circuit     | Constraints | Proof Time | Verify Time |
 | ----------- | ----------- | ---------- | ----------- |
 | Value Proof | 1,151       | <50ms      | <5ms        |
-| Transfer    | 33,687      | <3s        | <15ms       |
-| Unshield    | 16,903      | <1s        | <15ms       |
+| Transfer    | 33,688      | <3s        | <15ms       |
+| Unshield    | 16,904      | <1s        | <15ms       |
 
 ## Versioning Strategy
 

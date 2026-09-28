@@ -25,7 +25,7 @@ import path from "path";
 import { expect } from "chai";
 
 import { CIRCUITS, PUBLIC_SIGNALS, SIGNAL_LAYOUT, signalName } from "../scripts/lib/circuits";
-import { ROOT, artifacts } from "../scripts/lib/paths";
+import { ROOT, sourceArtifacts } from "../scripts/lib/paths";
 import { allArtifacts, readManifest } from "../scripts/lib/manifest";
 
 const rel = (f: string) => path.relative(ROOT, f);
@@ -106,7 +106,7 @@ describe("Documentation", function () {
         it("no document states a constraint count that is no longer real", function () {
             const real = new Map<string, number>();
             for (const circuit of CIRCUITS) {
-                const r1cs = artifacts(circuit).r1cs;
+                const r1cs = sourceArtifacts(circuit).r1cs;
                 if (fs.existsSync(r1cs)) real.set(circuit, r1csConstraints(r1cs));
             }
             if (real.size === 0) {
@@ -161,7 +161,7 @@ describe("Documentation", function () {
                 const file = fs.existsSync(doc)
                     ? doc
                     : path.join(ROOT, "docs", "circuits", `${circuit}.md`);
-                const r1cs = artifacts(circuit).r1cs;
+                const r1cs = sourceArtifacts(circuit).r1cs;
                 if (!fs.existsSync(file) || !fs.existsSync(r1cs)) continue;
 
                 const real = r1csConstraints(r1cs);
@@ -181,7 +181,7 @@ describe("Documentation", function () {
     describe("public-signal counts match the verifying keys", () => {
         for (const circuit of CIRCUITS) {
             it(`${circuit}'s declared arity matches its key`, function () {
-                const vkJson = artifacts(circuit).vkJson;
+                const vkJson = sourceArtifacts(circuit).vkJson;
                 if (!fs.existsSync(vkJson)) {
                     if (process.env.CIRCUITS_REQUIRE_ARTIFACTS) {
                         throw new Error(`${circuit} has no verifying key — run 'pnpm build-all'`);

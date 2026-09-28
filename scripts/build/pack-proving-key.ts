@@ -23,7 +23,7 @@
 import fs from "fs";
 import path from "path";
 
-import { ROOT, artifacts, rel } from "../lib/paths";
+import { ROOT, rel, sourceArtifacts } from "../lib/paths";
 import { banner, cli, die, info, ok, step } from "../lib/log";
 import { parseCircuit } from "../lib/circuits";
 import { has, run } from "../lib/run";
@@ -80,7 +80,7 @@ function main(): void {
     if (!name) die("usage: pack-proving-key.ts <circuit>");
 
     const circuit = parseCircuit(name);
-    const { zkey, ark } = artifacts(circuit);
+    const { zkey, ark } = sourceArtifacts(circuit);
 
     if (!fs.existsSync(zkey)) {
         die(`.zkey not found: ${rel(zkey)}\n  Run 'pnpm run setup ${circuit}' first.`);

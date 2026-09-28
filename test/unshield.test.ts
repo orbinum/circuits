@@ -1,11 +1,16 @@
+import fs from "fs";
 import path from "path";
 import { expect } from "chai";
 import { wasm as wasm_tester } from "circom_tester";
 import type { WasmTester } from "circom_tester";
 import { needCircuit, requireArtifact } from "./helpers/artifacts";
 import { NoteCrypto } from "../scripts/lib/note";
+import { sourceArtifacts } from "../scripts/lib/paths";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+/** Any value: the circuit binds `memo_hash` as a public input, nothing more. */
+const MEMO_HASH = 0x6d656d6fn;
 
 interface BuildInputOpts {
     noteValue: bigint;
@@ -27,8 +32,10 @@ describe("Unshield Circuit (gasless)", function () {
     this.timeout(120_000);
 
     const circuitPath = path.join(__dirname, "..", "circuits", "unshield.circom");
-    const outputDir = path.join(__dirname, "..", "build");
-    const precompiledWasm = path.join(outputDir, "unshield_js", "unshield.wasm");
+    // Its own directory: recompiling into build/ would overwrite the published
+    // versions' artifacts, which share the source's base names.
+    const outputDir = path.join(__dirname, "..", "build", "test-circuits");
+    const precompiledWasm = sourceArtifacts("unshield").wasm;
 
     let circuitOrUndefined: WasmTester | undefined;
     let note: NoteCrypto;
@@ -98,6 +105,7 @@ describe("Unshield Circuit (gasless)", function () {
             asset_id: assetId.toString(),
             fee: opts.fee.toString(),
             change_commitment: changeCommitment.toString(),
+            memo_hash: MEMO_HASH.toString(),
             note_value: opts.noteValue.toString(),
             note_asset_id: assetId.toString(),
             note_blinding: blinding.toString(),
@@ -115,6 +123,7 @@ describe("Unshield Circuit (gasless)", function () {
     before(async function () {
         note = await NoteCrypto.build();
         if (!requireArtifact(precompiledWasm, "unshield")) return;
+        fs.mkdirSync(outputDir, { recursive: true });
         circuitOrUndefined = await wasm_tester(circuitPath, { output: outputDir, recompile: true });
     });
 

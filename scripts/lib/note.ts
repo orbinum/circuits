@@ -19,7 +19,7 @@
  * warns you about the one you missed. A proof built against a stale copy is
  * well-formed and fails verification with nothing to explain why.
  */
-import { buildBabyjub, buildPoseidon } from "circomlibjs";
+import { buildBabyjub, buildPoseidon, type BabyJub, type Poseidon } from "circomlibjs";
 
 /** Matches the tree depth every circuit is instantiated with. */
 export const TREE_DEPTH = 20;
@@ -39,9 +39,9 @@ export interface MerkleProof {
  */
 export class NoteCrypto {
     private constructor(
-        private readonly poseidon: any,
-        private readonly babyJub: any,
-        readonly F: any
+        private readonly poseidon: Poseidon,
+        private readonly babyJub: BabyJub,
+        readonly F: Poseidon["F"]
     ) {}
 
     static async build(): Promise<NoteCrypto> {
