@@ -44,7 +44,7 @@ function script(args: string[]): void {
 
 describe("Script determinism", function () {
     // Regenerating a fixture recomputes a witness, which for transfer means
-    // 33,730 field elements.
+    // 33,732 field elements.
     this.timeout(300_000);
 
     describe("make-fixture", () => {

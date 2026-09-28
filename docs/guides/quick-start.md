@@ -157,7 +157,7 @@ npx snarkjs groth16 verify \
 pnpm test
 ```
 
-**Expected**: 129 tests passing in ~27 seconds
+**Expected**: every test passing, none failing
 
 ### Run Specific Tests
 
@@ -171,13 +171,14 @@ pnpm test -- --grep "merkle"
 
 ### Test Coverage
 
-| Test Suite            | Tests | Purpose                                              |
-| --------------------- | ----- | ---------------------------------------------------- |
-| `transfer.test.ts`    | 79    | Private transfer validation                          |
-| `unshield.test.ts`    | 44    | Asset unshielding (total + partial with change note) |
-| `merkle_tree.test.ts` | 15    | Merkle proof verification                            |
-| `note.test.ts`        | 10    | Note commitments                                     |
-| `poseidon_*.test.ts`  | 23    | Hash function tests                                  |
+| Test Suite            | Purpose                                              |
+| --------------------- | ---------------------------------------------------- |
+| `transfer.test.ts`    | Private transfer validation                          |
+| `unshield.test.ts`    | Asset unshielding (total + partial with change note) |
+| `proving.test.ts`     | Real proofs against the published keys               |
+| `merkle_tree.test.ts` | Merkle proof verification                            |
+| `note.test.ts`        | Note commitments                                     |
+| `poseidon_*.test.ts`  | Hash function tests                                  |
 
 ## Benchmarking
 

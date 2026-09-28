@@ -17,7 +17,7 @@ The Transfer circuit enables private token transfers with zero-knowledge proofs.
 
 ## Circuit Statement
 
-> "I own one or two notes in the Merkle tree, and I'm spending them to create two new notes, while conserving the total value (minus an optional gasless fee paid to the block author) and maintaining asset consistency. If I only have one note, the second input slot is a dummy (value = 0) that bypasses membership and ownership checks."
+> "I own one or two notes in the Merkle tree, and I'm spending them to create two new notes, while conserving the total value (minus an optional relay fee) and maintaining asset consistency. If I only have one note, the second input slot is a dummy (value = 0) that bypasses membership and ownership checks."
 
 ## Security Properties
 
@@ -35,14 +35,19 @@ The Transfer circuit enables private token transfers with zero-knowledge proofs.
 
 ## Public Inputs (Visible On-Chain)
 
-| Input            | Type     | Description                                                    |
-| ---------------- | -------- | -------------------------------------------------------------- |
-| `merkle_root`    | Field    | Current Merkle tree root                                       |
-| `nullifiers[2]`  | Field[2] | Nullifiers for the two input notes                             |
-| `commitments[2]` | Field[2] | Commitments for the two output notes                           |
-| `asset_id`       | Field    | Asset being transferred (must match all note asset IDs)        |
-| `fee`            | Field    | Gasless fee deducted from input sum; paid to block author      |
-| `memo_hash`      | Field    | `blake2_256(SCALE(memos)) mod r` — binds the output memos (v2) |
+| Input            | Type     | Description                                             |
+| ---------------- | -------- | ------------------------------------------------------- |
+| `merkle_root`    | Field    | Current Merkle tree root                                |
+| `nullifiers[2]`  | Field[2] | Nullifiers for the two input notes                      |
+| `commitments[2]` | Field[2] | Commitments for the two output notes                    |
+| `asset_id`       | Field    | Asset being transferred (must match all note asset IDs) |
+| `fee`            | Field    | Relay fee deducted from the input sum                   |
+| `memo_hash`      | Field    | Binds the two output memos (v2) — see below             |
+
+`memo_hash` is `blake2_256(SCALE(Vec<memo>))` over `[memo_out0, memo_out1]`, in
+output order, read as a little-endian integer and reduced mod the BN254 order
+`r` — the runtime recomputes it from the memos it stores. The pallet pays the
+fee to the relayer that committed to the spend, else to the block author.
 
 `memo_hash` has no constraint beyond a square that keeps the compiler from
 dropping it: being a public input is what binds it. Without it a copier could
@@ -197,7 +202,7 @@ for (var i = 0; i < 2; i++) {
 
 ### 5. Balance Conservation
 
-Proves that total input value equals total output value plus the fee paid to the block author.
+Proves that total input value equals total output value plus the relay fee.
 
 ```
 input_values[0] + input_values[1] == output_values[0] + output_values[1] + fee
@@ -320,7 +325,7 @@ const input = {
     nullifiers: [nullifier1, nullifier2], // both real, must be distinct
     commitments: [outputCommitment1, outputCommitment2],
     asset_id: 0n, // Native token
-    fee: 1n, // 1 unit fee to block author
+    fee: 1n, // 1 unit relay fee
 
     // Private - Input Notes (Alice owns both)
     input_values: [60n, 41n], // Total: 101 = 100 (outputs) + 1 (fee)

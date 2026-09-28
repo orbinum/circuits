@@ -11,14 +11,14 @@ include "../node_modules/circomlib/circuits/comparators.circom";
 // are skipped for dummy inputs. The dummy nullifier is forced to zero by the circuit.
 // Ownership is proven via BabyPbk(spending_key) → ownerPk (Constraint 3), which replaces
 // EdDSA and saves ~7,000 R1CS constraints.
-// The fee is paid to the block author (validator) by the pallet runtime.
+// The pallet pays the fee to the relayer that committed to the spend, else the block author.
 template Transfer(tree_depth) {
     // Public inputs
     signal input merkle_root;
     signal input nullifiers[2];
     signal input commitments[2];
     signal input asset_id;  // asset being transferred (must match input notes)
-    signal input fee;       // gasless fee deducted from input sum; paid to block author
+    signal input fee;       // relay fee deducted from the input sum
     signal input memo_hash; // blake2_256(SCALE(output memos)) mod r — binds the memos
 
     // Private inputs — input notes (being spent)

@@ -297,7 +297,7 @@ let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 - Value conservation: `Σinput = Σoutput + fee` (fee is a public signal, cryptographically bound to the proof)
 - u128 range checks on all input values, output values, and fee
 - Asset ID consistency across all 4 notes; public `asset_id` bound to note asset IDs
-- Memo binding: `memo_hash = blake2_256(SCALE(memos)) mod r` is a public input, so a copy with swapped memos no longer verifies (v2)
+- Memo binding: `memo_hash = blake2_256(SCALE([memo_out0, memo_out1]))` read little-endian mod r is a public input, so a copy with swapped memos no longer verifies (v2)
 
 ### Unshield Circuit — `circuits/unshield.circom`
 
@@ -345,8 +345,8 @@ The following properties are enforced at the circuit level (R1CS constraints). T
 ```
 circuits/
 ├── circuits/                  # Circom source files
-│   ├── transfer.circom        # 2-in/2-out private transfer (33,687 constraints)
-│   ├── unshield.circom        # Private → public withdrawal (16,903 constraints)
+│   ├── transfer.circom        # 2-in/2-out private transfer (33,688 constraints)
+│   ├── unshield.circom        # Private → public withdrawal (16,904 constraints)
 │   ├── note.circom            # NoteCommitment + Nullifier templates
 │   ├── merkle_tree.circom     # MerkleTreeVerifier template
 │   └── poseidon_wrapper.circom
@@ -357,7 +357,7 @@ circuits/
 ├── keys/                      # Cryptographic keys
 │   ├── *_pk.zkey              # snarkjs proving keys
 │   └── *_pk.ark               # arkworks proving keys (serialized)
-├── test/                      # Test suites (135 tests)
+├── test/                      # Test suites
 ├── scripts/                   # Build scripts
 │   ├── build/                 # Compilation scripts
 │   └── utils/                 # Manifest and lint utilities

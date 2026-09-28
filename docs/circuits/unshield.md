@@ -27,21 +27,26 @@ In both cases the prover proves ownership of a note in the Merkle tree without r
 
 ## Public Inputs (Visible On-Chain)
 
-| Input               | Type  | Description                                                                                    |
-| ------------------- | ----- | ---------------------------------------------------------------------------------------------- |
-| `merkle_root`       | Field | Current Merkle tree root                                                                       |
-| `nullifier`         | Field | Nullifier to prevent double-spend                                                              |
-| `amount`            | Field | Net withdrawal amount (recipient receives this)                                                |
-| `recipient`         | Field | `blake2_256(AccountId32) mod r` from v2 (v1: `AccountId32 mod r`); non-zero checked in runtime |
-| `asset_id`          | Field | Asset ID being unshielded (publicly revealed)                                                  |
-| `fee`               | Field | Gasless fee deducted from note value; paid to block author                                     |
-| `change_commitment` | Field | `0` for total unshield; `NoteCommitment(change_value, ...)` for partial unshield               |
-| `memo_hash`         | Field | `blake2_256(SCALE(change memo)) mod r` — binds the change memo (v2)                            |
+| Input               | Type  | Description                                                                                      |
+| ------------------- | ----- | ------------------------------------------------------------------------------------------------ |
+| `merkle_root`       | Field | Current Merkle tree root                                                                         |
+| `nullifier`         | Field | Nullifier to prevent double-spend                                                                |
+| `amount`            | Field | Net withdrawal amount (recipient receives this)                                                  |
+| `recipient`         | Field | v2: `blake2_256(AccountId32)` LE mod r (v1: `AccountId32` LE mod r); non-zero checked in runtime |
+| `asset_id`          | Field | Asset ID being unshielded (publicly revealed)                                                    |
+| `fee`               | Field | Relay fee deducted from the note value                                                           |
+| `change_commitment` | Field | `0` for total unshield; `NoteCommitment(change_value, ...)` for partial unshield                 |
+| `memo_hash`         | Field | Binds the change memo (v2) — see below                                                           |
+
+`memo_hash` is `blake2_256(SCALE(Vec<memo>))` over `[change_memo]`, read as a
+little-endian integer and reduced mod the BN254 order `r`; a total unshield's
+change memo is empty, so it hashes a list holding one empty memo. The runtime
+recomputes it from the memo it stores. The pallet pays the fee to the relayer
+that committed to the spend, else to the block author.
 
 `memo_hash` has no constraint beyond a square that keeps the compiler from
 dropping it: being a public input is what binds it. It covers the change memo,
-the only copy of the change note's secrets; a total unshield hashes the empty
-memo.
+the only copy of the change note's secrets.
 
 ## Private Inputs (Known Only to Prover)
 
