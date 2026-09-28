@@ -114,10 +114,12 @@ jobs:
             - name: Compile circuits and fixtures
               run: pnpm run build-all --compile-only
 
-            # Only the ceremony outputs: zkey, verifying key and .ark. The wasm and
-            # r1cs stay as this commit compiled them, so a PR that changes a
-            # circuit is testing its own circuit rather than failing on a sha256
-            # mismatch against the published one.
+            # The ceremony outputs (zkey, verifying key, .ark) of every version, and
+            # the wasm and r1cs of the published versions the source no longer
+            # builds. The active version's wasm and r1cs stay as this commit
+            # compiled them, so a PR that changes a circuit is testing its own
+            # circuit rather than failing on a sha256 mismatch against the
+            # published one.
             - name: Restore ceremony artifacts
               run: pnpm run release:restore --keys-only
 
