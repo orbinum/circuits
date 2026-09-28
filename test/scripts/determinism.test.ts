@@ -132,11 +132,11 @@ describe("Script determinism", function () {
         // The .r1cs and .wasm are what every proof is built against, so a
         // recompile producing different bytes would silently invalidate every
         // key derived from the previous ones.
-        it("value_proof: recompiling produces byte-identical artifacts", function () {
-            const a = sourceArtifacts("value_proof");
+        it("unshield: recompiling produces byte-identical artifacts", function () {
+            const a = sourceArtifacts("unshield");
             if (!fs.existsSync(a.r1cs)) {
                 if (process.env.CIRCUITS_REQUIRE_ARTIFACTS) {
-                    throw new Error("value_proof not compiled — run 'pnpm build-all' first");
+                    throw new Error("unshield not compiled — run 'pnpm build-all' first");
                 }
                 return this.skip();
             }
@@ -146,7 +146,7 @@ describe("Script determinism", function () {
                 wasm: fs.readFileSync(a.wasm),
             };
 
-            script(["scripts/build/compile.ts", "value_proof"]);
+            script(["scripts/build/compile.ts", "unshield"]);
 
             expect(fs.readFileSync(a.r1cs).equals(before.r1cs), ".r1cs changed").to.equal(true);
             expect(fs.readFileSync(a.wasm).equals(before.wasm), ".wasm changed").to.equal(true);

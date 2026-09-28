@@ -105,9 +105,7 @@ describe("Circuit metadata", function () {
                 );
 
                 // Circom counts outputs and public inputs separately; a verifier
-                // sees their sum. `value_proof` is the case that matters: it
-                // declares three public inputs and has a fourth signal,
-                // `owner_hash`, which is an output.
+                // sees their sum.
                 expect(
                     publicOutputs + publicInputs,
                     `${circuit}: .r1cs disagrees with the table`

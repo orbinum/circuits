@@ -2,52 +2,8 @@
   "schema_version": "1.0.0",
   "package_name": "orbinum-circuits",
   "package_version": "0.15.0",
-  "generated_at": "2026-09-28T17:06:40.009Z",
+  "generated_at": "2026-09-28T18:09:46.100Z",
   "circuits": {
-    "value_proof": {
-      "active_version": 1,
-      "supported_versions": [
-        1
-      ],
-      "versions": {
-        "1": {
-          "version": 1,
-          "vk_hash": "0x1d9466fcd5d09309174c01ecd76fc79f3ee6d69542a5219a1b46fd8f81acefab",
-          "artifacts": {
-            "wasm": {
-              "file": "value_proof.wasm",
-              "localPath": "build/value_proof_js/value_proof.wasm",
-              "bytes": 2218540,
-              "sha256": "4c90956e63260626f069fbf43dcc08d3220d2b745f6ba10306aec403966e8f37"
-            },
-            "zkey": {
-              "file": "value_proof_pk.zkey",
-              "localPath": "keys/value_proof_pk.zkey",
-              "bytes": 548348,
-              "sha256": "7b64e0e5f4ac50e84d3afc0d2431cec570795d91727f8926d2e204bcf4df7207"
-            },
-            "vk_json": {
-              "file": "verification_key_value_proof.json",
-              "localPath": "build/verification_key_value_proof.json",
-              "bytes": 3473,
-              "sha256": "88071eb7139ef476291312e48a88f9c0e6fe2ff74e1cf2e8dc46556f2bc25463"
-            },
-            "ark": {
-              "file": "value_proof_pk.ark",
-              "localPath": "keys/value_proof_pk.ark",
-              "bytes": 310580,
-              "sha256": "8d13dbbcf8edaf1008bb89434c80f4b9cb660edde97a1a8203471ceded0f8e9c"
-            },
-            "r1cs": {
-              "file": "value_proof.r1cs",
-              "localPath": "build/value_proof.r1cs",
-              "bytes": 157776,
-              "sha256": "07673eac319aa6fe620a58338d33bbf2f53f99b9e0deb906727c5f82aa790654"
-            }
-          }
-        }
-      }
-    },
     "transfer": {
       "active_version": 2,
       "supported_versions": [

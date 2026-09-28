@@ -77,11 +77,6 @@ export class NoteCrypto {
         return this.F.toObject(point[0]);
     }
 
-    /** Poseidon(owner_pubkey) — `value_proof`'s `owner_hash` output. */
-    ownerHash(ownerPubkey: bigint): bigint {
-        return this.hash([ownerPubkey]);
-    }
-
     /**
      * A Merkle proof for one leaf in a sparse tree.
      *

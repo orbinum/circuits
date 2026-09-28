@@ -24,7 +24,7 @@ import path from "path";
 
 import { expect } from "chai";
 
-import { CIRCUITS, PUBLIC_SIGNALS, SIGNAL_LAYOUT, signalName } from "../scripts/lib/circuits";
+import { CIRCUITS, PUBLIC_SIGNALS } from "../scripts/lib/circuits";
 import { ROOT, sourceArtifacts } from "../scripts/lib/paths";
 import { allArtifacts, readManifest } from "../scripts/lib/manifest";
 
@@ -120,7 +120,7 @@ describe("Documentation", function () {
             // changed. Each maps to the circuit it used to describe, so the
             // failure message can say what to write instead.
             const superseded: Record<string, string> = {
-                "300": "value_proof",
+                "300": "(the removed value_proof circuit)",
                 "16,033": "unshield",
                 "16033": "unshield",
                 "12,000": "unshield",
@@ -192,40 +192,6 @@ describe("Documentation", function () {
                 expect(PUBLIC_SIGNALS[circuit]).to.equal(vk.nPublic);
             });
         }
-
-        it("no document puts value_proof's owner_hash last", function () {
-            // Circom places `signal output` before public inputs in the witness,
-            // so `owner_hash` is signal 0. Documenting it last is not a cosmetic
-            // error: a verifier built from that ordering produces proofs that
-            // fail with nothing in the output to explain why.
-            const order = SIGNAL_LAYOUT.value_proof.map(signalName);
-            expect(order[0], "the layout itself changed").to.equal("owner_hash");
-
-            // The byte layout the pallet packs genuinely does put owner_hash
-            // last, so the ordering alone is not the error — presenting it as
-            // the *witness* order is. A line that says which one it means is
-            // fine; one that leaves it ambiguous is the trap.
-            // A byte-offset layout, which is the shape the confusion takes:
-            // four names with ranges, owner_hash last.
-            const byteLayout =
-                /commitment\[[^\]]*\][^\n]*value\[[^\]]*\][^\n]*asset_id\[[^\]]*\][^\n]*owner_hash\[/;
-            const disambiguated = /byte layout|on-chain|\bpallet\b/i;
-
-            for (const doc of docs) {
-                const lines = doc.text.split("\n");
-                for (const [i, line] of lines.entries()) {
-                    if (!byteLayout.test(line)) continue;
-                    // The label usually sits a line or two above, outside the
-                    // code fence the layout is written in.
-                    const context = lines.slice(Math.max(0, i - 4), i + 1).join(" ");
-                    if (disambiguated.test(context)) continue;
-                    expect.fail(
-                        `${doc.name}:${i + 1} orders owner_hash last without saying it is the ` +
-                            `on-chain byte layout; in the witness it is signal 0\n    ${line.trim()}`
-                    );
-                }
-            }
-        });
     });
 
     describe("every documented command exists", () => {
