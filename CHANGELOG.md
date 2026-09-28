@@ -27,6 +27,14 @@ chain activates v2 in the runtime spec 16 upgrade.
   the active one by default, and the `version` they belong to. It read the
   unsuffixed (v1) names before, which would have handed v2 consumers v1 keys.
 
+### Removed
+
+- **`value_proof` circuit.** Relay fees are claimed publicly since runtime spec
+  16 (`claim_relay_fees`, no note, no proof), so circuit id 6 has no caller; no
+  node or client ever proved it. Its source, tests, fixture, manifest entry and
+  docs are gone, and `getCircuitPaths` / `CircuitType` accept only `transfer`
+  and `unshield`. Packages up to 0.14.0 keep its artifacts.
+
 ### Fixed
 
 - **A rotated circuit builds beside its published versions.** The source builds

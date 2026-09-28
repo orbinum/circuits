@@ -39,7 +39,6 @@ Fixes #(issue number)
 
 **Affected Circuits:**
 
-- [ ] Value Proof
 - [ ] Transfer
 - [ ] Unshield
 - [ ] Core components

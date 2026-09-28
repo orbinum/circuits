@@ -17,7 +17,6 @@ circuits/
 │   ├── poseidon_wrapper.circom  # Poseidon2 / Poseidon4 — the primitive layer
 │   ├── note.circom              # NoteCommitment, Nullifier
 │   ├── merkle_tree.circom       # Selector, MerkleTreeVerifier
-│   ├── value_proof.circom       # Note formation proof (relay-fee claiming)
 │   ├── transfer.circom          # Private transfer, 2-in/2-out, dummy inputs
 │   └── unshield.circom          # Asset unshielding
 │
@@ -52,8 +51,7 @@ circuits/
 │   ├── note.test.ts
 │   ├── merkle_tree.test.ts
 │   ├── poseidon_compat.test.ts  # Cross-implementation Poseidon vectors
-│   ├── value_proof.test.ts      # Circuit tests (need the compiled wasm)
-│   ├── transfer.test.ts
+│   ├── transfer.test.ts         # Circuit tests (need the compiled wasm)
 │   ├── unshield.test.ts
 │   ├── metadata.test.ts         # Arity and constraint counts, three sources
 │   ├── manifest_schema.test.ts  # The committed manifest's shape
@@ -61,8 +59,7 @@ circuits/
 │
 ├── fixtures/                    # Deterministic inputs; witnesses are generated
 │   ├── unshield.input.json
-│   ├── transfer.input.json
-│   └── value_proof.input.json
+│   └── transfer.input.json
 │
 ├── docs/
 │   ├── ARCHITECTURE.md
@@ -98,7 +95,7 @@ Generated directories, none of them committed: `build/` (circom output),
 **Organization** (flat — all `.circom` files at root level):
 
 - `merkle_tree.circom`, `note.circom`, `poseidon_wrapper.circom`: Reusable components
-- `value_proof.circom`, `transfer.circom`, `unshield.circom`: Application circuits
+- `transfer.circom`, `unshield.circom`: Application circuits
 
 `transfer.circom` implements a 2-in/2-out scheme with **dummy input support**: when a user has only one note, the second input slot carries `value = 0` and bypasses Merkle membership and nullifier derivation (Zcash Sapling technique). Ownership is proven via `BabyPbk(spending_key)` — no EdDSA signatures required. The dummy nullifier is forced to zero by the circuit (Constraint 9). The pallet rejects transactions where both nullifiers are zero (anti-spam).
 
@@ -132,7 +129,7 @@ Generated directories, none of them committed: `build/` (circom output),
 
 **Test files** (flat structure):
 
-- `value_proof.test.ts`, `transfer.test.ts`, `unshield.test.ts`: Application circuit tests
+- `transfer.test.ts`, `unshield.test.ts`: Application circuit tests
 - `merkle_tree.test.ts`, `note.test.ts`, `poseidon_wrapper.test.ts`, `poseidon_compat.test.ts`: Component tests
 - `metadata.test.ts`: Public-signal arity and constraint counts, checked against three independent sources
 - `manifest_schema.test.ts`, `manifest_vk_hash.test.ts`: The committed manifest and its canonical `vk_hash`
@@ -195,9 +192,8 @@ count above all — live in `scripts/lib/circuits.ts`:
 
 ```ts
 export const PUBLIC_SIGNALS: Record<CircuitName, number> = {
-    value_proof: 4,
-    transfer: 7,
-    unshield: 7,
+    transfer: 8,
+    unshield: 8,
 };
 ```
 
@@ -206,17 +202,16 @@ the compiled `.r1cs` to agree. Three independent sources, so none can drift
 alone.
 
 This replaced `config/circuits.config.json`, which no code read. It claimed 300
-constraints for `value_proof`, which has 1151 — an error that survived because
+constraints for a circuit that had 1151 — an error that survived because
 nothing checked it and nothing depended on it. A metadata file nobody reads is a
 trap, not documentation.
 
 ## Performance Targets
 
-| Circuit     | Constraints | Proof Time | Verify Time |
-| ----------- | ----------- | ---------- | ----------- |
-| Value Proof | 1,151       | <50ms      | <5ms        |
-| Transfer    | 33,688      | <3s        | <15ms       |
-| Unshield    | 16,904      | <1s        | <15ms       |
+| Circuit  | Constraints | Proof Time | Verify Time |
+| -------- | ----------- | ---------- | ----------- |
+| Transfer | 33,688      | <3s        | <15ms       |
+| Unshield | 16,904      | <1s        | <15ms       |
 
 ## Versioning Strategy
 

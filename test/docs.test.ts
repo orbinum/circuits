@@ -1,7 +1,7 @@
 /**
  * The numbers, commands and links the documentation states.
  *
- * Documentation drifts, and this repository has the receipts: `value_proof`'s
+ * Documentation drifts, and this repository has the receipts: a circuit's
  * constraint count was documented as `~300` against a real 1151 — a figure that
  * survived being called out as wrong in three separate places, including nine
  * lines above one of the tables that still printed it. Three different test
@@ -120,7 +120,7 @@ describe("Documentation", function () {
             // changed. Each maps to the circuit it used to describe, so the
             // failure message can say what to write instead.
             const superseded: Record<string, string> = {
-                "300": "(the removed value_proof circuit)",
+                "300": "(a removed circuit)",
                 "16,033": "unshield",
                 "16033": "unshield",
                 "12,000": "unshield",

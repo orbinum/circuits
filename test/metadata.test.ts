@@ -5,7 +5,7 @@
  * recorded in several places: the compiled `.r1cs`, the verifying key's
  * `nPublic`, the manifest, and a table in `scripts/lib/circuits.ts`. Nothing
  * compared them, and they drifted: `config/circuits.config.json` claimed 300
- * constraints for `value_proof` where the real circuit has 1151, a factor of
+ * constraints for a circuit that had 1151, a factor of
  * 3.8 out, sitting unnoticed because no code read the file and no test checked
  * it.
  *
