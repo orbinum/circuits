@@ -188,9 +188,36 @@ async function buildTransferInput(): Promise<Built> {
     };
 }
 
-const BUILDERS: Record<string, () => Promise<Built>> = {
+/** The defaults from `test/shield.test.ts`. */
+const SHIELD_DEFAULTS = {
+    value: 1000n,
+    assetId: 0n,
+    spendingKey: 0xdeadbeefcafebaben,
+    blinding: 0xfedcba0987654321n,
+};
+
+async function buildShieldInput(): Promise<Built> {
+    const note = await NoteCrypto.build();
+    const d = SHIELD_DEFAULTS;
+    const owner = note.ownerPubkey(d.spendingKey);
+
+    return {
+        input: {
+            // public
+            commitment: note.commitment(d.value, d.assetId, owner, d.blinding).toString(),
+            value: d.value.toString(),
+            asset_id: d.assetId.toString(),
+            // private
+            owner_pubkey: owner.toString(),
+            blinding: d.blinding.toString(),
+        },
+    };
+}
+
+const BUILDERS: Record<CircuitName, () => Promise<Built>> = {
     unshield: buildUnshieldInput,
     transfer: buildTransferInput,
+    shield: buildShieldInput,
 };
 
 async function main() {

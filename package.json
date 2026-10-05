@@ -1,6 +1,6 @@
 {
     "name": "orbinum-circuits",
-    "version": "0.15.0",
+    "version": "0.16.0",
     "description": "Zero-Knowledge circuits for Orbinum privacy blockchain",
     "scripts": {
         "compile": "ts-node scripts/build/compile.ts",
@@ -58,7 +58,7 @@
         "overrides": {
             "js-yaml": "^4.3.1",
             "serialize-javascript": "^7.0.5",
-            "brace-expansion": "^2.1.4",
+            "brace-expansion": "^2.1.7",
             "underscore": "^1.13.8",
             "tmp": "^0.2.6",
             "ws": "^8.21.0"

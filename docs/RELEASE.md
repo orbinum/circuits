@@ -83,13 +83,14 @@ overwrite.**
       the manifest, wasm and r1cs included, so it fails on any commit that
       legitimately changes a circuit. It stays a pre-publish gate — step 5.
 
-    **Rotation release:** the new ceremony keys exist only on the release
-    machine until published, and CI restores keys from npm `latest`. So on the
-    release PR the `Build & Test` and `Canonical vk_hash` jobs fail with a 404
-    for the new version. Publish from the PR branch (clean tree; steps 7–8),
+    **Rotation or new-circuit release:** the new ceremony keys exist only on the
+    release machine until published, and CI restores keys from npm `latest`. So
+    on the release PR the `Build & Test` and `Canonical vk_hash` jobs fail with a
+    404 for the new version or circuit. Publish from the PR branch (clean tree; steps 7–8),
     re-run CI — it now restores the new keys — and merge without squashing, so
-    the tag stays on a commit of `main`. Back up `keys/*_v{n}_pk.*` and
-    `build/verification_key_*_v{n}.json` until then.
+    the tag stays on a commit of `main`. Back up the new keys until then:
+    `keys/*_v{n}_pk.*` and `build/verification_key_*_v{n}.json` for a rotation,
+    `keys/<name>_pk.*` and `build/verification_key_<name>.json` for a new circuit.
 
 7. **Dry-run** from a clean `main` checkout:
 

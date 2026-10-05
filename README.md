@@ -7,7 +7,7 @@ Zero-Knowledge circuits for Orbinum privacy blockchain.
 
 **Stack**: Circom 2.0 · Groth16 · BN254 · Poseidon (circomlib) · BabyPbk key derivation (BabyJubJub) · snarkjs + arkworks
 
-**Privacy model**: UTXO-based note scheme, 2-in / 2-out with dummy input support (Zcash Sapling technique). Partial unshield with change note (returns unspent value to the pool without a prior Transfer step). Multi-asset (`asset_id` per note). Gasless fee embedded in the circuit proof. Merkle tree depth 20 (up to 1,048,576 notes). All value ranges enforced as u128 (matches Substrate `Balance`).
+**Privacy model**: UTXO-based note scheme, 2-in / 2-out with dummy input support (Zcash Sapling technique). Partial unshield with change note (returns unspent value to the pool without a prior Transfer step). Multi-asset (`asset_id` per note). Gasless fee embedded in the circuit proof. Merkle tree depth 20 (up to 1,048,576 notes). All value ranges enforced as u128 (matches Substrate `Balance`). Deposits are bound to their value and asset by a shield proof.
 
 ## Installation
 
@@ -38,7 +38,7 @@ pnpm run build-all
 This automatically:
 
 - Installs dependencies
-- Compiles circuits (transfer, unshield → R1CS + WASM)
+- Compiles circuits (transfer, unshield, shield → R1CS + WASM)
 - Downloads Powers of Tau (72MB, one-time)
 - Generates cryptographic keys (proving + verifying keys)
 - Converts to compatible formats
@@ -80,7 +80,7 @@ Defaults reproduce the original v1 setup byte-for-byte.
 
 **Output:**
 
-Per circuit, under the active version's names (`_v2` for transfer and unshield):
+Per circuit, under the active version's names (`_v2` for transfer and unshield, none for shield):
 
 - `build/unshield_js/unshield_v2.wasm` - Witness calculator
 - `keys/unshield_v2_pk.zkey` - Proving key
@@ -203,6 +203,7 @@ pnpm test
 
 - `transfer.test.ts` - Private transfer logic
 - `unshield.test.ts` - Multi-asset support
+- `shield.test.ts` - Deposit value and asset binding
 - `merkle_tree.test.ts` - Merkle proof verification
 - `note.test.ts` - Note commitment schemes
 - `poseidon_*.test.ts` - Hash function compatibility

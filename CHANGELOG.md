@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-05
+
+Adds the **`shield`** circuit (id 3, v1): a deposit's commitment must open to the
+deposited value and asset. Until the chain verifies it, a shield can insert a note
+worth more than it paid for.
+
+### Ceremony (shield v1)
+
+- Single-contributor development ceremony on `pot16_final.ptau` (Hermez), fresh
+  random entropy, final beacon = Orbinum testnet finalized block #1118341
+  `0x4a194296be34a87bdb073fa8f678380d3e45c790ffca9fc0ce94de2ec0568ed8`,
+  2^10 iterations.
+- `vk_hash` — shield `0x4835d34f3bb5972c13c2995249bcb0dd8b82b01841d7432b92c96a810f435cb7`.
+  transfer and unshield are unchanged.
+
+### Added
+
+- **`circuits/shield.circom`**: public `commitment, value, asset_id`; private
+  `owner_pubkey, blinding`. One constraint, the note commitment, 736 R1CS
+  constraints. No range check on `value`: the pallet sets it from a `u128`.
+- `getCircuitPaths("shield")` and `CircuitType` `"shield"`. `CIRCUITS` is now read
+  from the manifest instead of repeated by hand.
+- Shield tests, fixture (`fixtures/shield.input.json`) and docs
+  (`docs/circuits/shield.md`).
+
+### Fixed
+
+- The package README linked a `docs/INTEGRATION.md` that does not exist; it now
+  links the quick-start and arkworks guides.
+
 ## [0.15.0] - 2026-09-28
 
 Ships `transfer` and `unshield` **v2** beside the published v1 (active: v2). The

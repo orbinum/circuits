@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0.0",
   "package_name": "orbinum-circuits",
-  "package_version": "0.15.0",
-  "generated_at": "2026-09-28T18:09:46.100Z",
+  "package_version": "0.16.0",
+  "generated_at": "2026-10-05T15:19:30.116Z",
   "circuits": {
     "transfer": {
       "active_version": 2,
@@ -161,6 +161,50 @@
               "localPath": "build/unshield_v2.r1cs",
               "bytes": 2611656,
               "sha256": "d33da76bc3ce3bd6862eeee3354202f86960f10e5bcef2fb384708b24df92226"
+            }
+          }
+        }
+      }
+    },
+    "shield": {
+      "active_version": 1,
+      "supported_versions": [
+        1
+      ],
+      "versions": {
+        "1": {
+          "version": 1,
+          "vk_hash": "0x4835d34f3bb5972c13c2995249bcb0dd8b82b01841d7432b92c96a810f435cb7",
+          "artifacts": {
+            "wasm": {
+              "file": "shield.wasm",
+              "localPath": "build/shield_js/shield.wasm",
+              "bytes": 2003255,
+              "sha256": "c5f1db2bd8ab53047144a92a5f155f40559a0807b4fb8f8bf8936eeb4acbb973"
+            },
+            "zkey": {
+              "file": "shield_pk.zkey",
+              "localPath": "keys/shield_pk.zkey",
+              "bytes": 330961,
+              "sha256": "b02109c22d4329f93f8b6569f04878b08bcdbe81b382f7a617a4535f9b282a7a"
+            },
+            "vk_json": {
+              "file": "verification_key_shield.json",
+              "localPath": "build/verification_key_shield.json",
+              "bytes": 3292,
+              "sha256": "0d543b0fcc2729517338d93b96edc5abc86d2cb8122e331cde4f78bee3446c37"
+            },
+            "ark": {
+              "file": "shield_pk.ark",
+              "localPath": "keys/shield_pk.ark",
+              "bytes": 187492,
+              "sha256": "a26c2a55717a2d649a4a9e11acda052091f4a80c4db0d148f95e23fc6e1dd70d"
+            },
+            "r1cs": {
+              "file": "shield.r1cs",
+              "localPath": "build/shield.r1cs",
+              "bytes": 104692,
+              "sha256": "b77bd2fc364dd3fb65a70b43d384ea903ac9509600d199811c157b677618ccf9"
             }
           }
         }
