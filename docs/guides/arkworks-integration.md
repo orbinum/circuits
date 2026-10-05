@@ -57,6 +57,9 @@ pnpm run convert unshield
 # Transfer circuit
 pnpm run convert transfer
 
+# Shield circuit
+pnpm run convert shield
+
 # Or use the script directly
 pnpm run convert unshield
 ```

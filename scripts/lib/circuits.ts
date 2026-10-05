@@ -9,10 +9,10 @@
  */
 
 /** A circuit's canonical name — the one used on disk and in the manifest. */
-export type CircuitName = "transfer" | "unshield";
+export type CircuitName = "transfer" | "unshield" | "shield";
 
 /** Every circuit, in manifest order. */
-export const CIRCUITS: readonly CircuitName[] = ["transfer", "unshield"] as const;
+export const CIRCUITS: readonly CircuitName[] = ["transfer", "unshield", "shield"] as const;
 
 /** The pnpm-script spelling: underscores become hyphens. */
 export function scriptName(circuit: CircuitName): string {
@@ -79,6 +79,7 @@ export const SIGNAL_LAYOUT: Record<CircuitName, readonly Signal[]> = {
         input("change_commitment"),
         input("memo_hash"),
     ],
+    shield: [input("commitment"), input("value"), input("asset_id")],
 };
 
 /**

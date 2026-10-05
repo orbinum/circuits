@@ -7,11 +7,12 @@
 const { join } = require("path");
 const manifest = require("./manifest.json");
 
-const CIRCUITS = ["transfer", "unshield"];
+// The circuits this package ships are exactly the ones its manifest lists.
+const CIRCUITS = Object.keys(manifest.circuits);
 
 /**
  * Get paths to all files of one version of a circuit
- * @param {string} circuit - Circuit name: 'transfer' or 'unshield'
+ * @param {string} circuit - Circuit name: 'transfer', 'unshield' or 'shield'
  * @param {number} [version] - Circuit version; defaults to the active one
  * @returns {Object} Paths to circuit files, and the version they belong to
  */

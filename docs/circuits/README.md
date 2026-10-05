@@ -8,6 +8,7 @@ This directory contains detailed technical documentation for each zero-knowledge
 
 - **[Transfer](transfer.md)** - Private token transfers with BabyPbk ownership verification (discrete log proof)
 - **[Unshield](unshield.md)** - Convert private notes to public tokens (withdrawal)
+- **[Shield](shield.md)** - Bind a deposit's commitment to the deposited value and asset
 
 ### Supporting Components
 
@@ -35,7 +36,7 @@ All circuits use the **Groth16** proving system and are compiled with **Circom 2
     nullifier = Poseidon(commitment, spending_key)
     ```
 
-4. **Range Checks**: All value fields are constrained to 128-bit unsigned integers (u128, matching the runtime `Balance` type)
+4. **Range Checks**: Every value a prover chooses is constrained to 128-bit unsigned integers (u128, matching the runtime `Balance` type). Shield's `value` is set by the pallet from a `u128`, so it needs none
 
 5. **Merkle Tree**: 20-level binary Merkle tree for commitment storage
 
@@ -65,6 +66,7 @@ Each circuit document includes:
 | -------- | ----------- | ------------- | ------------------- | ---------- |
 | Transfer | 33,688      | 8             | 9 (+40 Merkle path) | 20         |
 | Unshield | 16,904      | 8             | 7 (+40 Merkle path) | 20         |
+| Shield   | 736         | 3             | 2                   | —          |
 
 ## Build Artifacts
 

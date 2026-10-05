@@ -18,7 +18,8 @@ circuits/
 │   ├── note.circom              # NoteCommitment, Nullifier
 │   ├── merkle_tree.circom       # Selector, MerkleTreeVerifier
 │   ├── transfer.circom          # Private transfer, 2-in/2-out, dummy inputs
-│   └── unshield.circom          # Asset unshielding
+│   ├── unshield.circom          # Asset unshielding
+│   └── shield.circom            # Deposit bound to its value and asset
 │
 ├── scripts/
 │   ├── lib/                     # Shared by every script
@@ -53,13 +54,15 @@ circuits/
 │   ├── poseidon_compat.test.ts  # Cross-implementation Poseidon vectors
 │   ├── transfer.test.ts         # Circuit tests (need the compiled wasm)
 │   ├── unshield.test.ts
+│   ├── shield.test.ts
 │   ├── metadata.test.ts         # Arity and constraint counts, three sources
 │   ├── manifest_schema.test.ts  # The committed manifest's shape
 │   └── manifest_vk_hash.test.ts # vk_hash == blake2_256(packed VK)
 │
 ├── fixtures/                    # Deterministic inputs; witnesses are generated
 │   ├── unshield.input.json
-│   └── transfer.input.json
+│   ├── transfer.input.json
+│   └── shield.input.json
 │
 ├── docs/
 │   ├── ARCHITECTURE.md
@@ -95,11 +98,13 @@ Generated directories, none of them committed: `build/` (circom output),
 **Organization** (flat — all `.circom` files at root level):
 
 - `merkle_tree.circom`, `note.circom`, `poseidon_wrapper.circom`: Reusable components
-- `transfer.circom`, `unshield.circom`: Application circuits
+- `transfer.circom`, `unshield.circom`, `shield.circom`: Application circuits
 
 `transfer.circom` implements a 2-in/2-out scheme with **dummy input support**: when a user has only one note, the second input slot carries `value = 0` and bypasses Merkle membership and nullifier derivation (Zcash Sapling technique). Ownership is proven via `BabyPbk(spending_key)` — no EdDSA signatures required. The dummy nullifier is forced to zero by the circuit (Constraint 9). The pallet rejects transactions where both nullifiers are zero (anti-spam).
 
 `unshield.circom` supports **partial withdrawal via a change note**: `note_value === amount + fee + change_value`. When `change_value == 0` (total unshield) `change_commitment` must be `0`. When `change_value > 0` (partial unshield) `change_commitment` must equal `NoteCommitment(change_value, asset_id, change_owner_pubkey, change_blinding)` and the pallet inserts it into the Merkle tree. The circuit has 8 public inputs (v2 adds `memo_hash`) and 16,904 constraints.
+
+`shield.circom` proves a deposit's commitment opens to the deposited `value` and `asset_id`, both supplied by the pallet from the call. It has 3 public inputs (`commitment, value, asset_id`), no outputs and 736 constraints. See [Shield](circuits/shield.md).
 
 **Dependencies**:
 
@@ -129,7 +134,7 @@ Generated directories, none of them committed: `build/` (circom output),
 
 **Test files** (flat structure):
 
-- `transfer.test.ts`, `unshield.test.ts`: Application circuit tests
+- `transfer.test.ts`, `unshield.test.ts`, `shield.test.ts`: Application circuit tests
 - `merkle_tree.test.ts`, `note.test.ts`, `poseidon_wrapper.test.ts`, `poseidon_compat.test.ts`: Component tests
 - `metadata.test.ts`: Public-signal arity and constraint counts, checked against three independent sources
 - `manifest_schema.test.ts`, `manifest_vk_hash.test.ts`: The committed manifest and its canonical `vk_hash`
@@ -194,6 +199,7 @@ count above all — live in `scripts/lib/circuits.ts`:
 export const PUBLIC_SIGNALS: Record<CircuitName, number> = {
     transfer: 8,
     unshield: 8,
+    shield: 3,
 };
 ```
 
@@ -212,6 +218,7 @@ trap, not documentation.
 | -------- | ----------- | ---------- | ----------- |
 | Transfer | 33,688      | <3s        | <15ms       |
 | Unshield | 16,904      | <1s        | <15ms       |
+| Shield   | 736         | <100ms     | <15ms       |
 
 ## Versioning Strategy
 

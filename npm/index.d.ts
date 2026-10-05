@@ -17,11 +17,11 @@ export interface CircuitPaths {
 /**
  * Get paths to all files of one version of a circuit (default: the active one)
  */
-export function getCircuitPaths(circuit: "transfer" | "unshield", version?: number): CircuitPaths;
+export function getCircuitPaths(circuit: CircuitType, version?: number): CircuitPaths;
 
 /**
  * Available circuits
  */
-export type CircuitType = "transfer" | "unshield";
+export type CircuitType = "transfer" | "unshield" | "shield";
 
 export const CIRCUITS: CircuitType[];

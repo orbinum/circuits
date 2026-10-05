@@ -13,9 +13,9 @@ npm install @orbinum/circuits
 
 ## 📦 Package Contents
 
-This package includes the artifacts for 2 circuits (transfer, unshield), every published version of each (`manifest.json` lists them):
+This package includes the artifacts for 3 circuits (transfer, unshield, shield), every published version of each (`manifest.json` lists them):
 
-### For Each Circuit Version (`{name}` = `transfer`, `unshield`, or `transfer_v2`, `unshield_v2`, …):
+### For Each Circuit Version (`{name}` = `transfer`, `unshield`, `shield`, or `transfer_v2`, `unshield_v2`, …):
 
 1. **`{name}.wasm`** - Witness calculator
 2. **`{name}.r1cs`** - R1CS constraint system — for custom provers / verification
@@ -33,7 +33,7 @@ import { readFileSync } from "fs";
 import { getCircuitPaths } from "@orbinum/circuits";
 
 // Get all paths for a circuit's active version
-const paths = getCircuitPaths("transfer"); // 'transfer' | 'unshield'
+const paths = getCircuitPaths("transfer"); // 'transfer' | 'unshield' | 'shield'
 
 // Or for a specific published version (see manifest.json `supported_versions`)
 const v1 = getCircuitPaths("transfer", 1);
@@ -84,6 +84,10 @@ Private token transfer circuit with 2 inputs and 2 outputs.
 
 Withdrawal circuit from private pool to public account.
 
+### 3. **Shield** (`shield_*`)
+
+Deposit circuit: proves a new note's commitment encodes exactly the deposited value and asset.
+
 ## 🔗 Related Packages
 
 - [@orbinum/proof-generator](https://www.npmjs.com/package/@orbinum/proof-generator) - High-level proof orchestrator
@@ -122,7 +126,8 @@ For production deployment, a **multi-party trusted setup ceremony** is required 
 For detailed circuit specifications, constraints, and integration guides:
 
 - [Circuit Documentation](https://github.com/orbinum/circuits/tree/main/docs)
-- [Integration Guide](https://github.com/orbinum/circuits/blob/main/docs/INTEGRATION.md)
+- [Quick Start](https://github.com/orbinum/circuits/blob/main/docs/guides/quick-start.md)
+- [Arkworks Integration](https://github.com/orbinum/circuits/blob/main/docs/guides/arkworks-integration.md)
 
 ## 🐛 Issues
 
