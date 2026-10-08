@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-10-08
+
+Re-runs the transfer v3 and unshield v3 setup as a release ceremony. 0.17.0
+shipped development-ceremony keys (default beacon): do not register them.
+
+### Ceremony (transfer v3, unshield v3)
+
+- Single-contributor ceremony on `pot16_final.ptau` (Hermez, blake2b-512
+  verified), fresh random entropy, final beacon = Orbinum testnet finalized
+  block #1190708
+  `0x63dca3b61d162679b1acad67bbd7276bfb235a40972792e377fe1ba62910f81f`, 2^10
+  iterations.
+- `vk_hash` v3 — transfer
+  `0x04e05d74b320601fe1630ffa5b07c617117340c71d9f8d7b639a479f621a769a`,
+  unshield `0x24fb6a97b53300b2cf2effa83547ac5a913c0b83f99788dd428ce54498f4e9f8`.
+- Only the ceremony outputs of v3 change (zkey, verifying key, `.ark`); wasm,
+  r1cs and every v1, v2 and shield artifact are byte-identical to 0.17.0.
+
 ## [0.17.0] - 2026-10-08
 
 Rotates **`transfer` to v3** (spends across trees) and **`unshield` to v3**
@@ -16,9 +34,8 @@ must be retired on-chain as soon as v3 is active.
 
 ### Ceremony (transfer v3, unshield v3)
 
-- Pending: run with `SETUP_CEREMONY=release`, a fresh `SETUP_ENTROPY` and a
-  finalized testnet block hash as `SETUP_BEACON` before publishing, then record
-  the beacon and both `vk_hash` values here.
+- Development-ceremony keys (default beacon), superseded by 0.17.1. Do not
+  register them.
 
 ### Added
 
