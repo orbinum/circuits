@@ -1,20 +1,13 @@
 #!/usr/bin/env ts-node
 /**
- * Static checks over the circom sources, then a real compile of each circuit.
+ * Static checks over the circom sources, then a real compile of each circuit
+ * with `--inspect`.
  *
- * Ported from `lint-circom.sh`, which carried two defects that the shell made
- * easy to miss:
- *
- * 1. The warning counter never incremented. `warnings=$((warnings + 1))` sat
- *    after a `echo "$x" | while read` pipeline, and the pipeline's body runs in
- *    a subshell — so the count was lost and the summary always reported zero
- *    warnings, no matter how many it printed.
- *
- * 2. An unconstrained assignment (`<--`) was a warning forever. `<--` assigns a
- *    signal without constraining it, which is the classic way to write a circuit
- *    that proves nothing: the prover can put any value there. It is an error
- *    here, and `--allow-unconstrained` is the escape hatch for the rare case
- *    where it is deliberate.
+ * `<--` assigns a signal without constraining it — the classic way to write a
+ * circuit that proves nothing — so it is an error, with `--allow-unconstrained`
+ * as the escape hatch for a deliberate use. `--inspect` reports signals that no
+ * constraint touches; the ones circomlib leaves unused by design are listed in
+ * `INSPECT_ALLOWED`, anything else fails.
  *
  * Usage:
  *   ts-node scripts/utils/lint-circom.ts [--allow-unconstrained] [files...]
@@ -79,8 +72,24 @@ function staticChecks(file: string, allowUnconstrained: boolean): Finding[] {
 }
 
 /**
- * Compile each top-level circuit, which is the only check that catches a real
- * syntax or semantic error.
+ * `--inspect` warnings that are expected: internal signals of circomlib
+ * templates, and the bit outputs of range checks, whose only job is to exist.
+ * Matched against the warning text with the ANSI colour stripped.
+ */
+const INSPECT_ALLOWED: readonly RegExp[] = [
+    /In template "EscalarMulFix\(.*\)": .*segments\[\d+\]\.dbl/,
+    /In template "LessThan\(252\)": .*n2b\.out/,
+    /In template "SpendingKeyOwner\(\)": .*pbk\.Ay/,
+    /In template "(Transfer|Unshield)\(\d+\)": .*_range_checks?(\[\d+\])?\.out/,
+];
+
+// Built from a string: an escape character in a regex literal trips `no-control-regex`.
+const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
+const stripAnsi = (s: string): string => s.replace(ANSI, "");
+
+/**
+ * Compile each top-level circuit, the only check that catches a real syntax or
+ * semantic error, and read what `--inspect` says about unconstrained signals.
  *
  * Runs from the repository root: circomlib is included by the relative path
  * `../node_modules/circomlib/...`, so it resolves from nowhere else.
@@ -105,21 +114,34 @@ function compileChecks(files: string[]): Finding[] {
             if (!source.includes("component main")) continue;
 
             const name = path.basename(file);
-            const result = tryRun("circom", [rel(file), "--r1cs", "--O1", "-o", tmp]);
-            if (result.ok) {
-                ok(name);
+            const result = tryRun("circom", [rel(file), "--r1cs", "--O1", "--inspect", "-o", tmp]);
+            const output = stripAnsi(`${result.stdout}${result.stderr}`);
+            if (!result.ok) {
+                const detail = output
+                    .split("\n")
+                    .filter((l) => /error/i.test(l))
+                    .slice(0, 15)
+                    .join("\n       ");
+                found.push({
+                    file: name,
+                    message: `does not compile:\n       ${detail}`,
+                    severity: "error",
+                });
                 continue;
             }
-            const detail = `${result.stdout}${result.stderr}`
+            const unexpected = output
                 .split("\n")
-                .filter((l) => /error/i.test(l))
-                .slice(0, 15)
-                .join("\n       ");
-            found.push({
-                file: name,
-                message: `does not compile:\n       ${detail}`,
-                severity: "error",
-            });
+                .filter((l) => /warning\[CA\d+\]/.test(l))
+                .map((l) => l.replace(/^.*warning\[(CA\d+)\]:\s*/, "$1 "))
+                .filter((l) => !INSPECT_ALLOWED.some((re) => re.test(l)));
+            for (const line of unexpected) {
+                found.push({
+                    file: name,
+                    message: `unconstrained signal: ${line}`,
+                    severity: "error",
+                });
+            }
+            if (unexpected.length === 0) ok(name);
         }
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
@@ -146,7 +168,7 @@ function main(): void {
     }
 
     info("");
-    info(yellow("Compiler syntax check"));
+    info(yellow("Compiler check (--inspect)"));
     findings.push(...compileChecks(files));
 
     const errors = findings.filter((f) => f.severity === "error");
