@@ -23,6 +23,7 @@ import {
     scriptName,
 } from "../../scripts/lib/circuits";
 import { ROOT, artifacts, circuitSource, fixtures, rel } from "../../scripts/lib/paths";
+import { rotatedVersion, rotation } from "../../scripts/lib/rotation";
 import {
     allArtifacts,
     checkArtifact,
@@ -215,6 +216,37 @@ describe("scripts/lib/manifest", () => {
                 "means a .circom changed without the manifest being regenerated — run " +
                 "'pnpm run manifest'. A zkey, vk_json or ark mismatch means a ceremony " +
                 "artifact drifted, which 'pnpm run release:restore' pulls back."
+        );
+    });
+});
+
+describe("scripts/lib/rotation", () => {
+    it("no env: nothing rotates", () => {
+        const r = rotation({});
+        expect(r.circuits).to.deep.equal([]);
+        expect(rotatedVersion(r, "transfer")).to.equal(undefined);
+    });
+
+    it("a comma-separated list, spaces tolerated, each at the version", () => {
+        const r = rotation({ ROTATE_CIRCUIT: " transfer, unshield ", ROTATE_VERSION: "3" });
+        expect(r.circuits).to.deep.equal(["transfer", "unshield"]);
+        expect(rotatedVersion(r, "unshield")).to.equal(3);
+        expect(rotatedVersion(r, "shield")).to.equal(undefined);
+    });
+
+    it("a misspelled circuit fails rather than silently not rotating", () => {
+        expect(() => rotation({ ROTATE_CIRCUIT: "trasnfer", ROTATE_VERSION: "3" })).to.throw(
+            /unknown circuit/
+        );
+    });
+
+    it("a missing or non-positive version fails", () => {
+        expect(() => rotation({ ROTATE_CIRCUIT: "transfer" })).to.throw(/ROTATE_VERSION/);
+        expect(() => rotation({ ROTATE_CIRCUIT: "transfer", ROTATE_VERSION: "0" })).to.throw(
+            /ROTATE_VERSION/
+        );
+        expect(() => rotation({ ROTATE_CIRCUIT: "transfer", ROTATE_VERSION: "x" })).to.throw(
+            /ROTATE_VERSION/
         );
     });
 });
