@@ -282,14 +282,14 @@ let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 
 **Statistics:**
 
-- Constraints: 33,688
+- Constraints: 34,200
 - Private inputs: 9 scalars + 40 Merkle path elements (2×20)
-- Public inputs: 8 (`merkle_root`, `nullifiers[2]`, `commitments[2]`, `asset_id`, `fee`, `memo_hash`)
+- Public inputs: 9 (`merkle_roots[2]`, `nullifiers[2]`, `commitments[2]`, `asset_id`, `fee`, `memo_hash`)
 - Tree depth: 20
 
 **Features:**
 
-- Merkle membership proof (real inputs only; dummy inputs exempt via `IsZero`)
+- Merkle membership proof per input against its own root, so the two notes may come from different trees of the forest (real inputs only; dummy inputs exempt via `IsZero`)
 - BabyPbk key derivation: `BabyPbk(spending_key)` derives `ownerPk (Ax)` inside the circuit, proving discrete log ownership — replaces EdDSA, saves ~6,000 constraints (Constraint 3)
 - Nullifier derivation: `Poseidon(commitment, spending_key)` (real inputs only)
 - Dummy input support: `input_values[i] == 0` bypasses Merkle, nullifier, and ownership checks
@@ -306,7 +306,7 @@ let witness = calculate_witness_wasm(&wasm_bytes, &inputs, &signals)?;
 
 **Statistics:**
 
-- Constraints: 16,904
+- Constraints: 17,290
 - Private inputs: 8 scalars + 20 Merkle path elements
 - Public inputs: 8 (`merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, `fee`, `change_commitment`, `memo_hash`)
 - Tree depth: 20
@@ -346,8 +346,8 @@ The following properties are enforced at the circuit level (R1CS constraints). T
 ```
 circuits/
 ├── circuits/                  # Circom source files
-│   ├── transfer.circom        # 2-in/2-out private transfer (33,688 constraints)
-│   ├── unshield.circom        # Private → public withdrawal (16,904 constraints)
+│   ├── transfer.circom        # 2-in/2-out private transfer (34,200 constraints)
+│   ├── unshield.circom        # Private → public withdrawal (17,290 constraints)
 │   ├── note.circom            # NoteCommitment + Nullifier templates
 │   ├── merkle_tree.circom     # MerkleTreeVerifier template
 │   └── poseidon_wrapper.circom

@@ -4,6 +4,7 @@ import { expect } from "chai";
 import { wasm as wasm_tester } from "circom_tester";
 import type { WasmTester } from "circom_tester";
 import { needCircuit, requireArtifact } from "./helpers/artifacts";
+import { describeFreedom, scanFreedom } from "./helpers/freedom";
 import { NoteCrypto } from "../scripts/lib/note";
 import { sourceArtifacts } from "../scripts/lib/paths";
 
@@ -101,6 +102,37 @@ describe("Shield Circuit", function () {
             const circuit = needCircuit(circuitOrUndefined, "shield", this);
             const w = await circuit.calculateWitness(buildInput({ noteAssetId: 5n }));
             await circuit.checkConstraints(w);
+        });
+    });
+
+    describe("binds", () => {
+        it("every private input: owner and blinding cannot change under a fixed commitment", async function () {
+            this.timeout(300_000);
+            const circuit = needCircuit(circuitOrUndefined, "shield", this);
+            const free = await scanFreedom(circuit, buildInput(), [
+                "commitment",
+                "value",
+                "asset_id",
+            ]);
+            expect(describeFreedom(free)).to.equal("");
+        });
+    });
+
+    // The circuit only ties the commitment to the deposit; the pallet bounds the
+    // deposit itself (non-zero amount, registered asset). These are documented
+    // acceptances, not findings.
+    describe("leaves to the pallet", () => {
+        it("a zero-valued or zero-owner note, and an asset id past u32", async function () {
+            const circuit = needCircuit(circuitOrUndefined, "shield", this);
+            for (const opts of [
+                { noteValue: 0n },
+                { owner: 0n },
+                { blinding: 0n },
+                { noteAssetId: 1n << 32n },
+            ]) {
+                const w = await circuit.calculateWitness(buildInput(opts));
+                await circuit.checkConstraints(w);
+            }
         });
     });
 
