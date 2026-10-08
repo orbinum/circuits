@@ -66,6 +66,14 @@ commitments[0], commitments[1], asset_id, fee, memo_hash`. A dummy input's root
   circuit, owner-key uniqueness and spending-key boundaries, the ptau and
   ceremony guards, the linter, the shared rotation.
 
+### Fixed
+
+- `release:restore` takes the artifacts from the package tarball (`npm pack`,
+  integrity-checked by npm) instead of fetching each file from unpkg, whose
+  intermittent 5xx failed CI. It refuses any manifest path that would read
+  outside the package or write outside the repository, and is now covered by
+  tests (match, tampered, missing, canonical, drifted, path escape).
+
 ### Notes
 
 - Built with `ROTATE_CIRCUIT=transfer,unshield ROTATE_VERSION=3`; v1 and v2
@@ -162,9 +170,9 @@ chain activates v2 in the runtime spec 16 upgrade.
 
 - **The `.ark` artifacts are now usable for proving.** 0.13.0 shipped them for the first time, but a `.ark` v1 holds only the proving key — proving a Circom circuit also needs the constraint matrices, which `read_zkey` returns alongside the key and the old converter discarded. Every `.ark` this package has published, including 0.13.0's, could be downloaded and verified and still not produce a proof.
 
-    The new `.ark` v2 carries both, behind an `ORBARKV2` magic so a v1 file is rejected by name rather than failing deep in deserialization. Only the A and B matrices are stored: `CircomReduction` derives C from their evaluations. Sizes are ~58% of the corresponding `.zkey` — unshield 4.83 MB against 8.25 MB — so the arkworks path still downloads a third less than the snarkjs one.
+  The new `.ark` v2 carries both, behind an `ORBARKV2` magic so a v1 file is rejected by name rather than failing deep in deserialization. Only the A and B matrices are stored: `CircomReduction` derives C from their evaluations. Sizes are ~58% of the corresponding `.zkey` — unshield 4.83 MB against 8.25 MB — so the arkworks path still downloads a third less than the snarkjs one.
 
-    **`vk_hash` values are unchanged — nothing to re-register on chain.**
+  **`vk_hash` values are unchanged — nothing to re-register on chain.**
 
 ### Changed
 
@@ -231,10 +239,10 @@ chain activates v2 in the runtime spec 16 upgrade.
 ### Changed
 
 - **`manifest.json` `vk_hash` is now the canonical on-chain hash** — `blake2_256` of the arkworks-compressed verifying key, byte-for-byte identical to what the chain stores (`sp_io::hashing::blake2_256(vk.key_data)`). Previously it was `sha256` of the snarkjs `verification_key_<circuit>.json`, a different hash over different bytes that could never match the chain. This is what lets the SDK's per-note circuit-version resolver cross-check the prover's VK against the chain's VK before spending a note; with the old value the cross-check could never pass on a real rotation.
-    - `generate-manifest` runs the same `convert-vk` (JSON → arkworks binary) the node's VK registration uses, then `blake2_256` of the resulting binary (via `@noble/hashes`, which matches `sp_io::blake2_256`).
-    - Requires the `convert-vk` binary at build time (defaults to the sibling `groth16-proofs` release build; override with `CONVERT_VK_BIN`). Fail-closed: manifest generation throws if it is missing rather than falling back to a non-matching hash.
-    - The per-artifact `sha256` (download integrity) is unchanged — it and `vk_hash` serve different roles.
-    - **Breaking for consumers that read `vk_hash`**: the published value changes format and content.
+  - `generate-manifest` runs the same `convert-vk` (JSON → arkworks binary) the node's VK registration uses, then `blake2_256` of the resulting binary (via `@noble/hashes`, which matches `sp_io::blake2_256`).
+  - Requires the `convert-vk` binary at build time (defaults to the sibling `groth16-proofs` release build; override with `CONVERT_VK_BIN`). Fail-closed: manifest generation throws if it is missing rather than falling back to a non-matching hash.
+  - The per-artifact `sha256` (download integrity) is unchanged — it and `vk_hash` serve different roles.
+  - **Breaking for consumers that read `vk_hash`**: the published value changes format and content.
 
 ### Added
 
@@ -314,22 +322,22 @@ chain activates v2 in the runtime spec 16 upgrade.
 - **`change_commitment` public input** (7th public signal): `0` for total unshield; `NoteCommitment(change_value, asset_id, change_owner_pubkey, change_blinding)` for partial unshield.
 - **`change_value`, `change_blinding`, `change_owner_pubkey` private inputs**: define the change note. Ignored by the circuit when `change_value == 0`.
 - **Constraint 8 — conditional change commitment enforcement** using `IsZero(change_value)`:
-    - **8a** (partial): `change_commitment_computer.commitment === change_commitment` when `change_value > 0`.
-    - **8b** (total): `change_commitment === 0` when `change_value == 0`.
+  - **8a** (partial): `change_commitment_computer.commitment === change_commitment` when `change_value > 0`.
+  - **8b** (total): `change_commitment === 0` when `change_value == 0`.
 - **Constraint 9 — `change_value` range check**: `Num2Bits(128)` on `change_value`, consistent with `note_value` and `fee`.
 - **New test section 8 "Change note commitment"** (12 tests, `test/unshield.test.ts`):
-    - Accepts `change_commitment = 0` for total unshield.
-    - Rejects non-zero `change_commitment` when `change_value = 0` (Constraint 8b).
-    - Accepts correct `change_commitment` for partial unshield (Constraint 8a).
-    - Rejects tampered `change_commitment` (Constraint 8a).
-    - Rejects `change_commitment = 0` when `change_value > 0` (Constraint 8a).
-    - Rejects wrong `change_blinding` (Constraint 8a).
-    - Rejects wrong `change_owner_pubkey` (Constraint 8a).
-    - Rejects `change_commitment` forged with a different `asset_id` (Constraint 8a — circuit pins change commitment to `note_asset_id`).
-    - Accepts change note to same owner (self-change).
-    - Accepts change note to different owner.
-    - Accepts `change_value = 2^128 - 1` (max u128, Constraint 9).
-    - Rejects `change_value = 2^128` (Constraint 9).
+  - Accepts `change_commitment = 0` for total unshield.
+  - Rejects non-zero `change_commitment` when `change_value = 0` (Constraint 8b).
+  - Accepts correct `change_commitment` for partial unshield (Constraint 8a).
+  - Rejects tampered `change_commitment` (Constraint 8a).
+  - Rejects `change_commitment = 0` when `change_value > 0` (Constraint 8a).
+  - Rejects wrong `change_blinding` (Constraint 8a).
+  - Rejects wrong `change_owner_pubkey` (Constraint 8a).
+  - Rejects `change_commitment` forged with a different `asset_id` (Constraint 8a — circuit pins change commitment to `note_asset_id`).
+  - Accepts change note to same owner (self-change).
+  - Accepts change note to different owner.
+  - Accepts `change_value = 2^128 - 1` (max u128, Constraint 9).
+  - Rejects `change_value = 2^128` (Constraint 9).
 - **New test section 9 "Public signals"** (2 tests): verifies `change_commitment` is exposed correctly as the 7th public signal in both modes.
 
 ### Changed
@@ -358,41 +366,41 @@ chain activates v2 in the runtime spec 16 upgrade.
 - **Constraint 9 (`nullifiers[i] * is_dummy[i].out === 0`)**: forces the dummy nullifier to zero. A prover cannot supply a real nullifier in the dummy slot while bypassing Merkle checks.
 - **`buildDummyInput()` test helper** (`test/transfer.test.ts`): constructs a valid 1-real + 1-dummy input with all-zero Merkle path for the dummy slot.
 - **New test section 10 "Dummy note (Constraints 9 & 10)"** (7 tests):
-    - Accepts 1 real note + dummy (value=0, nullifier=0).
-    - Accepts corrupted Merkle path on dummy slot (path is ignored by the circuit).
-    - Rejects dummy with non-zero nullifier (Constraint 9).
-    - Accepts different fee values with dummy input.
-    - Rejects wrong spending key for the real note in a 1-real+dummy scenario (Constraint 2 remains active for real inputs).
-    - Rejects tampered Merkle root for the real note in a 1-real+dummy scenario (Constraint 1 remains active for real inputs).
-    - Accepts dummy as `input[0]`, real as `input[1]` (symmetric position coverage).
+  - Accepts 1 real note + dummy (value=0, nullifier=0).
+  - Accepts corrupted Merkle path on dummy slot (path is ignored by the circuit).
+  - Rejects dummy with non-zero nullifier (Constraint 9).
+  - Accepts different fee values with dummy input.
+  - Rejects wrong spending key for the real note in a 1-real+dummy scenario (Constraint 2 remains active for real inputs).
+  - Rejects tampered Merkle root for the real note in a 1-real+dummy scenario (Constraint 1 remains active for real inputs).
+  - Accepts dummy as `input[0]`, real as `input[1]` (symmetric position coverage).
 - **`scripts/utils/lint-circom.sh`** (extended): two-phase linter for `.circom` files. Phase 1 — static checks: `pragma circom` presence, non-empty file, unconstrained assignments (`<--`). Phase 2 — compiler validation: invokes `circom 2.2.3` on all top-level circuits (`component main`) to validate syntax and semantics; skipped gracefully when `circom` is not in `PATH`.
 
 ### Changed
 
 - **`transfer.circom` — EdDSA replaced by BabyPbk (net −~6,000 constraints)**:
-    - Removed: `include "eddsaposeidon.circom"`, 10 private input signals (`input_owner_Ax[2]`, `input_owner_Ay[2]`, `input_sig_R8x[2]`, `input_sig_R8y[2]`, `input_sig_S[2]`), and 2× `EdDSAPoseidonVerifier` components (~6,000 constraints).
-    - Added: `include "babyjub.circom"`, 2× `BabyPbk(spending_keys[i])` components (~5,000 constraints). The derived `Ax` is used in `NoteCommitment` (Constraint 1). Ownership proof is now the discrete log relation: the prover knows `sk` such that `BabyPbk(sk).Ax == ownerPk`.
-    - **Constraint count**: 33,687.
-    - **API change**: 10 fewer private inputs. Callers no longer provide EdDSA keypairs or signatures.
+  - Removed: `include "eddsaposeidon.circom"`, 10 private input signals (`input_owner_Ax[2]`, `input_owner_Ay[2]`, `input_sig_R8x[2]`, `input_sig_R8y[2]`, `input_sig_S[2]`), and 2× `EdDSAPoseidonVerifier` components (~6,000 constraints).
+  - Added: `include "babyjub.circom"`, 2× `BabyPbk(spending_keys[i])` components (~5,000 constraints). The derived `Ax` is used in `NoteCommitment` (Constraint 1). Ownership proof is now the discrete log relation: the prover knows `sk` such that `BabyPbk(sk).Ax == ownerPk`.
+  - **Constraint count**: 33,687.
+  - **API change**: 10 fewer private inputs. Callers no longer provide EdDSA keypairs or signatures.
 - **`unshield.circom` — `note_owner` removed, derived from `spending_key`**:
-    - Removed: `signal input note_owner` (was the raw `ownerPk` x-coordinate, unconstrained relative to `spending_key`).
-    - Added: `BabyPbk(spending_key)` component (Constraint 0); `key_derivation.Ax` is used in `NoteCommitment` instead of `note_owner`.
-    - **Constraint count**: 16,033.
-    - **API change**: 1 fewer private input (`note_owner`).
+  - Removed: `signal input note_owner` (was the raw `ownerPk` x-coordinate, unconstrained relative to `spending_key`).
+  - Added: `BabyPbk(spending_key)` component (Constraint 0); `key_derivation.Ax` is used in `NoteCommitment` instead of `note_owner`.
+  - **Constraint count**: 16,033.
+  - **API change**: 1 fewer private input (`note_owner`).
 - **`test/transfer.test.ts`**:
-    - Import: `buildEddsa` → `buildBabyjub`.
-    - `alice`/`bob` keypairs: no longer derived from EdDSA key buffers; `Ax` now comes from `babyJub.mulPointEscalar(Base8, SK_DEFAULT)`.
-    - Added `computeOwnerAx(sk)` helper.
-    - Removed `sign()` helper.
-    - `buildInput` and `buildDummyInput`: removed EdDSA fields; input note commitments computed with `computeOwnerAx(sk)`.
-    - Section 3 renamed "Key derivation: BabyPbk(spending_key) → ownerPk (Constraint 3)"; tests updated to verify wrong spending_key causes Merkle failure (wrong Ax → wrong commitment → proof fails).
-    - "Symmetric positions" test (section 10) updated to remove EdDSA fields.
+  - Import: `buildEddsa` → `buildBabyjub`.
+  - `alice`/`bob` keypairs: no longer derived from EdDSA key buffers; `Ax` now comes from `babyJub.mulPointEscalar(Base8, SK_DEFAULT)`.
+  - Added `computeOwnerAx(sk)` helper.
+  - Removed `sign()` helper.
+  - `buildInput` and `buildDummyInput`: removed EdDSA fields; input note commitments computed with `computeOwnerAx(sk)`.
+  - Section 3 renamed "Key derivation: BabyPbk(spending_key) → ownerPk (Constraint 3)"; tests updated to verify wrong spending_key causes Merkle failure (wrong Ax → wrong commitment → proof fails).
+  - "Symmetric positions" test (section 10) updated to remove EdDSA fields.
 - **`test/unshield.test.ts`**:
-    - Import: added `buildBabyjub`.
-    - Added `computeOwnerAx(sk)` helper.
-    - `buildInput`: removed `owner` parameter; `owner` now derived from `spendingKey` via `computeOwnerAx`. Removed `note_owner` from returned object.
-    - `recompile: false` → `recompile: true` (circuit changed).
-    - "Tampered owner" test → "tampered spending_key → wrong Ax → commitment mismatch" (same coverage, correct for new API).
+  - Import: added `buildBabyjub`.
+  - Added `computeOwnerAx(sk)` helper.
+  - `buildInput`: removed `owner` parameter; `owner` now derived from `spendingKey` via `computeOwnerAx`. Removed `note_owner` from returned object.
+  - `recompile: false` → `recompile: true` (circuit changed).
+  - "Tampered owner" test → "tampered spending_key → wrong Ax → commitment mismatch" (same coverage, correct for new API).
 - **Constraint 1** (Merkle membership): changed from `merkle_verifiers[i].root === merkle_root` to `merkle_diffs[i] * (1 - is_dummy[i].out) === 0`. Dummy inputs are now exempt from Merkle membership.
 - **Constraint 2** (Nullifier derivation): changed from `nullifier_computers[i].nullifier === nullifiers[i]` to `nullifier_diffs[i] * (1 - is_dummy[i].out) === 0`. Dummy inputs are now exempt from nullifier correctness check.
 - **Constraint 10** (formerly Constraint 9 — distinct nullifiers): conditioned on both inputs being real: `IsZero(n0 - n1) * both_real === 0` where `both_real = (1 - is_dummy[0].out) * (1 - is_dummy[1].out)`. Correctly handles 1-real+1-dummy without false rejections.
@@ -428,50 +436,50 @@ chain activates v2 in the runtime spec 16 upgrade.
 ### Changed
 
 - **Package manager migrated from npm to pnpm**:
-    - `package.json`: added `packageManager` field (`pnpm@10.32.1`); replaced `npm run` with `pnpm run` in composite scripts (`compile`, `setup`, `build-all:manifest`); `clean` script now removes `pnpm-lock.yaml` instead of `package-lock.json`.
-    - `pnpm-lock.yaml` added; `package-lock.json` removed.
+  - `package.json`: added `packageManager` field (`pnpm@10.32.1`); replaced `npm run` with `pnpm run` in composite scripts (`compile`, `setup`, `build-all:manifest`); `clean` script now removes `pnpm-lock.yaml` instead of `package-lock.json`.
+  - `pnpm-lock.yaml` added; `package-lock.json` removed.
 - **CI pipeline** (`.github/workflows/ci.yml`):
-    - Added `pnpm/action-setup@v4` step (no explicit `version`; resolved from `packageManager` in `package.json`) in both `build` and `security` jobs, before the Node.js setup step.
-    - Changed `cache: 'npm'` → `cache: 'pnpm'` in `actions/setup-node`.
-    - `npm ci` → `pnpm install --frozen-lockfile`.
-    - All `npm run <script>` invocations → `pnpm run <script>`.
-    - `npm audit` → `pnpm audit`.
+  - Added `pnpm/action-setup@v4` step (no explicit `version`; resolved from `packageManager` in `package.json`) in both `build` and `security` jobs, before the Node.js setup step.
+  - Changed `cache: 'npm'` → `cache: 'pnpm'` in `actions/setup-node`.
+  - `npm ci` → `pnpm install --frozen-lockfile`.
+  - All `npm run <script>` invocations → `pnpm run <script>`.
+  - `npm audit` → `pnpm audit`.
 - **Release pipeline** (`.github/workflows/release.yml`):
-    - Added `pnpm/action-setup@v4` step (no explicit `version`; resolved from `packageManager` in `package.json`) before the Node.js setup step.
-    - Changed `cache: "npm"` → `cache: "pnpm"` in `actions/setup-node`.
-    - `npm ci` → `pnpm install --frozen-lockfile`.
-    - All `npm run <script>` invocations → `pnpm run <script>`.
-    - `npm publish` → `pnpm publish --no-git-checks`.
+  - Added `pnpm/action-setup@v4` step (no explicit `version`; resolved from `packageManager` in `package.json`) before the Node.js setup step.
+  - Changed `cache: "npm"` → `cache: "pnpm"` in `actions/setup-node`.
+  - `npm ci` → `pnpm install --frozen-lockfile`.
+  - All `npm run <script>` invocations → `pnpm run <script>`.
+  - `npm publish` → `pnpm publish --no-git-checks`.
 - **Dev dependency updates** (`package.json`):
-    - `@types/chai`: `^4.3.11` → `^4.3.20`
-    - `@types/mocha`: `^10.0.6` → `^10.0.10`
-    - `@types/node`: `^20.10.0` → `^20.19.39`
-    - `chai`: `^4.3.10` → `^4.5.0`
-    - `ffjavascript`: `^0.2.60` → `^0.2.63`
-    - `husky`: `^9.0.11` → `^9.1.7`
-    - `lint-staged`: `^15.2.0` → `^15.5.2`
-    - `mocha`: `^10.2.0` → `^10.8.2`
-    - `prettier`: `^3.2.4` → `^3.8.3`
-    - `snarkjs`: `^0.7.0` → `^0.7.6`
-    - `typescript`: `^5.3.3` → `^5.9.3`
+  - `@types/chai`: `^4.3.11` → `^4.3.20`
+  - `@types/mocha`: `^10.0.6` → `^10.0.10`
+  - `@types/node`: `^20.10.0` → `^20.19.39`
+  - `chai`: `^4.3.10` → `^4.5.0`
+  - `ffjavascript`: `^0.2.60` → `^0.2.63`
+  - `husky`: `^9.0.11` → `^9.1.7`
+  - `lint-staged`: `^15.2.0` → `^15.5.2`
+  - `mocha`: `^10.2.0` → `^10.8.2`
+  - `prettier`: `^3.2.4` → `^3.8.3`
+  - `snarkjs`: `^0.7.0` → `^0.7.6`
+  - `typescript`: `^5.3.3` → `^5.9.3`
 
 ## [0.5.0] - 2026-04-12
 
 ### Added
 
 - **Gasless fee signal in `unshield` and `transfer` circuits**:
-    - `circuits/unshield.circom`: new public input `fee`. Constraint 1 changed from `note_value === amount` to `note_value === amount + fee`, allowing the validator (block author) to collect a fee from the note value without requiring a signed extrinsic.
-    - `circuits/transfer.circom`: new public input `fee`. Conservation constraint changed from `input_sum === output_sum` to `input_sum === output_sum + fee`.
-    - Both circuits expose `fee` in their `main` component public signals.
+  - `circuits/unshield.circom`: new public input `fee`. Constraint 1 changed from `note_value === amount` to `note_value === amount + fee`, allowing the validator (block author) to collect a fee from the note value without requiring a signed extrinsic.
+  - `circuits/transfer.circom`: new public input `fee`. Conservation constraint changed from `input_sum === output_sum` to `input_sum === output_sum + fee`.
+  - Both circuits expose `fee` in their `main` component public signals.
 - **Fee range checks (defense-in-depth)**:
-    - `circuits/unshield.circom` (Constraint 3): `Num2Bits(128)` on `fee` prevents field-wraparound attacks where an out-of-range fee could satisfy conservation while output values stay in u128.
-    - `circuits/transfer.circom` (Constraint 6b): same `Num2Bits(128)` guard on `fee`.
+  - `circuits/unshield.circom` (Constraint 3): `Num2Bits(128)` on `fee` prevents field-wraparound attacks where an out-of-range fee could satisfy conservation while output values stay in u128.
+  - `circuits/transfer.circom` (Constraint 6b): same `Num2Bits(128)` guard on `fee`.
 - **Distinct nullifiers check in `transfer`** (Constraint 9):
-    - Added `IsZero(nullifiers[0] - nullifiers[1]).out === 0` to prevent a prover from spending the same note twice in a single transaction. Without this constraint, setting `input[0] = input[1]` satisfies conservation and both pallet `Nullifiers::contains_key` checks pass before the first insert.
-    - Added `comparators.circom` include.
+  - Added `IsZero(nullifiers[0] - nullifiers[1]).out === 0` to prevent a prover from spending the same note twice in a single transaction. Without this constraint, setting `input[0] = input[1]` satisfies conservation and both pallet `Nullifiers::contains_key` checks pass before the first insert.
+  - Added `comparators.circom` include.
 - **New tests** (`test/unshield.test.ts`, `test/transfer.test.ts`):
-    - `unshield`: fee = 0, fee > 0, realistic 0.001 ORB fee, fee = full note value, rejects old pre-gasless witness, rejects amount + fee > note_value, accepts/rejects u128 max fee, rejects fee = 2^128.
-    - `transfer`: fee = 0, fee > 0, full-fee edge case, rejects pre-gasless balance, accepts/rejects u128 max fee, rejects fee = 2^128, accepts/rejects duplicate nullifiers.
+  - `unshield`: fee = 0, fee > 0, realistic 0.001 ORB fee, fee = full note value, rejects old pre-gasless witness, rejects amount + fee > note_value, accepts/rejects u128 max fee, rejects fee = 2^128.
+  - `transfer`: fee = 0, fee > 0, full-fee edge case, rejects pre-gasless balance, accepts/rejects u128 max fee, rejects fee = 2^128, accepts/rejects duplicate nullifiers.
 
 ### Changed
 
@@ -489,14 +497,14 @@ chain activates v2 in the runtime spec 16 upgrade.
 ### Added
 
 - **R1CS artifacts published to CDN**:
-    - `release.yml`: copies `build/{circuit}.r1cs` files into `pkg/` before the Cloudflare R2 sync, making them available at `https://circuits.orbinum.io/v1/{circuit}.r1cs`.
-    - `release.yml`: includes `{circuit}.r1cs` SHA-256 checksums in `release/checksums-{version}.txt`.
-    - `scripts/utils/generate-manifest.ts`: added `r1cs` as a new `ArtifactKind`; reads `build/{circuit}.r1cs` and includes size + SHA-256 in the manifest when the file exists.
+  - `release.yml`: copies `build/{circuit}.r1cs` files into `pkg/` before the Cloudflare R2 sync, making them available at `https://circuits.orbinum.io/v1/{circuit}.r1cs`.
+  - `release.yml`: includes `{circuit}.r1cs` SHA-256 checksums in `release/checksums-{version}.txt`.
+  - `scripts/utils/generate-manifest.ts`: added `r1cs` as a new `ArtifactKind`; reads `build/{circuit}.r1cs` and includes size + SHA-256 in the manifest when the file exists.
 - **`private_link` circuit added to npm package** (`npm/`):
-    - `npm/index.js`: `private_link` added to `CIRCUITS` array; `getCircuitPaths` now returns a `r1cs` path alongside `wasm`, `zkey`, `ark`, `verificationKey`.
-    - `npm/index.d.ts`: `CircuitType` and `getCircuitPaths` signature extended with `"private_link"`; `CircuitPaths` interface includes new `r1cs: string` field.
-    - `npm/package.json.template`: `*.r1cs` added to the `files` array so R1CS files are included in the published npm package.
-    - `npm/README.md`: updated to document 4 circuits (20 artifacts total), `r1cs` artifact, corrected file sizes, and updated usage example to use `getCircuitPaths`.
+  - `npm/index.js`: `private_link` added to `CIRCUITS` array; `getCircuitPaths` now returns a `r1cs` path alongside `wasm`, `zkey`, `ark`, `verificationKey`.
+  - `npm/index.d.ts`: `CircuitType` and `getCircuitPaths` signature extended with `"private_link"`; `CircuitPaths` interface includes new `r1cs: string` field.
+  - `npm/package.json.template`: `*.r1cs` added to the `files` array so R1CS files are included in the published npm package.
+  - `npm/README.md`: updated to document 4 circuits (20 artifacts total), `r1cs` artifact, corrected file sizes, and updated usage example to use `getCircuitPaths`.
 - **`package.json`**: version bump `0.4.3` → `0.4.4`.
 
 ## [0.4.3] - 2026-03-08
@@ -504,30 +512,30 @@ chain activates v2 in the runtime spec 16 upgrade.
 ### Added
 
 - **`scripts/utils/generate-manifest.ts`**: canonical artifact manifest generator.
-    - Generates `manifest.json` with per-circuit metadata.
-    - Includes `active_version`, `supported_versions`, `vk_hash`, artifact size, and SHA-256.
-    - Supports strict mode with `MANIFEST_REQUIRE_ALL=true` (fails if any required circuit artifact is missing).
+  - Generates `manifest.json` with per-circuit metadata.
+  - Includes `active_version`, `supported_versions`, `vk_hash`, artifact size, and SHA-256.
+  - Supports strict mode with `MANIFEST_REQUIRE_ALL=true` (fails if any required circuit artifact is missing).
 - **`package.json` scripts**:
-    - `manifest`: generates `manifest.json`.
-    - `build-all:manifest`: runs full build then manifest generation.
+  - `manifest`: generates `manifest.json`.
+  - `build-all:manifest`: runs full build then manifest generation.
 
 ### Changed
 
 - **CI pipeline** (`.github/workflows/ci.yml`):
-    - Enforces strict manifest generation after `build-all`.
-    - Uploads `manifest.json` as CI artifact.
+  - Enforces strict manifest generation after `build-all`.
+  - Uploads `manifest.json` as CI artifact.
 - **Release pipeline** (`.github/workflows/release.yml`):
-    - Enforces strict manifest generation before packaging/publishing.
-    - Includes `manifest.json` in checksum generation.
-    - Copies `manifest.json` into npm package payload (`pkg/`) so CDN sync includes manifest.
+  - Enforces strict manifest generation before packaging/publishing.
+  - Includes `manifest.json` in checksum generation.
+  - Copies `manifest.json` into npm package payload (`pkg/`) so CDN sync includes manifest.
 - **`scripts/build/convert-to-ark.sh`**:
-    - Fixed broken control flow / silent failure path.
-    - Added strict shell mode (`set -euo pipefail`).
-    - Added `rustup`/nightly checks with auto-install for nightly when missing.
-    - Corrected usage output to display dynamic circuit names.
+  - Fixed broken control flow / silent failure path.
+  - Added strict shell mode (`set -euo pipefail`).
+  - Added `rustup`/nightly checks with auto-install for nightly when missing.
+  - Corrected usage output to display dynamic circuit names.
 - **Documentation**:
-    - Updated `README.md` with manifest generation section.
-    - Added `docs/guides/pre-push-check-rapido.md` (quick pre-push checklist).
+  - Updated `README.md` with manifest generation section.
+  - Added `docs/guides/pre-push-check-rapido.md` (quick pre-push checklist).
 - **`package.json`**: version bump `0.4.2` → `0.4.3`.
 
 ## [0.4.2] - 2026-03-08
@@ -549,12 +557,12 @@ chain activates v2 in the runtime spec 16 upgrade.
 ### Added
 
 - **`scripts/utils/check-artifacts.ts`** — herramienta de comparación de artifacts:
-    - Compara SHA-256 de los artifacts locales contra CDN (`circuits.orbinum.io/v1`) y npm (`@orbinum/circuits`)
-    - Detecta qué circuitos están desactualizados en cada fuente remota
-    - Flag `--build` para compilar todo antes de comparar
-    - Flags `--cdn-only` / `--npm-only` para consultas parciales
-    - Exit code 1 si hay desactualizados (útil en CI)
-    - Comandos: `npm run check-artifacts`, `check-artifacts:build`, `check-artifacts:cdn`, `check-artifacts:npm`
+  - Compara SHA-256 de los artifacts locales contra CDN (`circuits.orbinum.io/v1`) y npm (`@orbinum/circuits`)
+  - Detecta qué circuitos están desactualizados en cada fuente remota
+  - Flag `--build` para compilar todo antes de comparar
+  - Flags `--cdn-only` / `--npm-only` para consultas parciales
+  - Exit code 1 si hay desactualizados (útil en CI)
+  - Comandos: `npm run check-artifacts`, `check-artifacts:build`, `check-artifacts:cdn`, `check-artifacts:npm`
 
 ### Changed
 
@@ -565,28 +573,28 @@ chain activates v2 in the runtime spec 16 upgrade.
 ### Added
 
 - **Circuit**: `private_link.circom` — nuevo circuito `PrivateLinkDispatch` para la operación `dispatch_as_private_link` en `pallet-account-mapping`.
-    - 487 restricciones no lineales (dos llamadas Poseidon(2) + constraint cuadrático de call_hash)
-    - 2 inputs públicos: `commitment` y `call_hash_fe`
-    - 3 inputs privados: `chain_id_fe`, `address_fe`, `blinding_fe`
-    - Esquema de commitment: `Poseidon2(Poseidon2(chain_id_fe, address_fe), blinding_fe)`
-    - Fix de seguridad crítico: constraint cuadrático `call_hash_sq <== call_hash_fe * call_hash_fe` para sobrevivir a la simplificación lineal `--O1` y prevenir ataques de replay.
+  - 487 restricciones no lineales (dos llamadas Poseidon(2) + constraint cuadrático de call_hash)
+  - 2 inputs públicos: `commitment` y `call_hash_fe`
+  - 3 inputs privados: `chain_id_fe`, `address_fe`, `blinding_fe`
+  - Esquema de commitment: `Poseidon2(Poseidon2(chain_id_fe, address_fe), blinding_fe)`
+  - Fix de seguridad crítico: constraint cuadrático `call_hash_sq <== call_hash_fe * call_hash_fe` para sobrevivir a la simplificación lineal `--O1` y prevenir ataques de replay.
 - **Scripts CI**: `compile:private-link`, `setup:private-link`, `full-build:private-link`, `convert:private-link` en `package.json`.
 - **build-all.sh**: `private_link` añadido al array `CIRCUITS` — incluido en `npm run build-all`.
 - **CI/CD** (`release.yml`): `private_link` incluido en todas las fases del pipeline de release:
-    - Conversión `.zkey` → `.ark`
-    - Generación de checksums
-    - Empaquetado en los tres archivos tar (arkworks, snarkjs, verification-keys)
-    - Paquete npm (`pkg/`)
+  - Conversión `.zkey` → `.ark`
+  - Generación de checksums
+  - Empaquetado en los tres archivos tar (arkworks, snarkjs, verification-keys)
+  - Paquete npm (`pkg/`)
 - **Tests de circuito** (`test/private_link.test.ts`): 15 tests — validación del esquema Poseidon y restricciones R1CS.
 - **VK embebida en runtime** (`primitives/zk-verifier/src/infrastructure/storage/verification_keys/private_link.rs`): VK Groth16/BN254 generada con el trusted setup de desarrollo, cargada en genesis.
 - **Tests Rust de VK** (`orbinum-zk-verifier`): 5 tests que validan estructura de la VK (puntos en curva, round-trip de serialización, conteo de IC points).
 - **`scripts/utils/check-artifacts.ts`** — herramienta de comparación de artifacts:
-    - Compara SHA-256 de los artifacts locales contra CDN (`circuits.orbinum.io/v1`) y npm (`@orbinum/circuits`)
-    - Detecta qué circuitos están desactualizados en cada fuente
-    - Flag `--build` para compilar todo antes de comparar
-    - Flags `--cdn-only` / `--npm-only` para consultas parciales
-    - Exit code 1 si hay desactualizados (útil en CI)
-    - Comandos: `npm run check-artifacts`, `check-artifacts:build`, `check-artifacts:cdn`, `check-artifacts:npm`
+  - Compara SHA-256 de los artifacts locales contra CDN (`circuits.orbinum.io/v1`) y npm (`@orbinum/circuits`)
+  - Detecta qué circuitos están desactualizados en cada fuente
+  - Flag `--build` para compilar todo antes de comparar
+  - Flags `--cdn-only` / `--npm-only` para consultas parciales
+  - Exit code 1 si hay desactualizados (útil en CI)
+  - Comandos: `npm run check-artifacts`, `check-artifacts:build`, `check-artifacts:cdn`, `check-artifacts:npm`
 
 ### Changed
 
@@ -608,10 +616,10 @@ chain activates v2 in the runtime spec 16 upgrade.
 ### Added
 
 - **npm package distribution**: Added npm packaging assets under `npm/`:
-    - `npm/package.json.template`
-    - `npm/index.js`
-    - `npm/index.d.ts`
-    - `npm/README.md`
+  - `npm/package.json.template`
+  - `npm/index.js`
+  - `npm/index.d.ts`
+  - `npm/README.md`
 - **Release automation for npm**: Added release workflow steps to assemble `pkg/` and publish `@orbinum/circuits` to npm from CI.
 - **Local package preparation target**: Added `make prepare-npm` to build a local `pkg/` package structure for validation before release.
 
@@ -629,9 +637,9 @@ chain activates v2 in the runtime spec 16 upgrade.
 ### Changed
 
 - **Release Format**: Restructured release assets into 3 separate archives for better usability
-    - `orbinum-circuits-{version}.tar.gz`: Arkworks files (.wasm + .ark) for Rust/Substrate (~22 MB)
-    - `orbinum-circuits-snarkjs-{version}.tar.gz`: snarkjs files (.zkey) for JavaScript/TypeScript (~24 MB)
-    - `orbinum-verification-keys-{version}.tar.gz`: Verification keys (.json) for on-chain validation (~10 KB)
+  - `orbinum-circuits-{version}.tar.gz`: Arkworks files (.wasm + .ark) for Rust/Substrate (~22 MB)
+  - `orbinum-circuits-snarkjs-{version}.tar.gz`: snarkjs files (.zkey) for JavaScript/TypeScript (~24 MB)
+  - `orbinum-verification-keys-{version}.tar.gz`: Verification keys (.json) for on-chain validation (~10 KB)
 - All files are now extracted to the root directory (no nested folders) for easier integration
 - Improved CI/CD workflow for reliable .ark file generation
 
@@ -640,12 +648,12 @@ chain activates v2 in the runtime spec 16 upgrade.
 ### Fixed
 
 - **CRITICAL**: Increased value range check from u64 to u128 in `unshield.circom` and `transfer.circom`
-    - Changed `Num2Bits(64)` to `Num2Bits(128)` to match runtime Balance type
-    - Previous limit: ~18.4 ORB maximum per transaction
-    - New limit: ~340 undecillion ORB (full u128 range)
-    - Affects: Unshield and Private Transfer operations
-    - Impact: Users can now transact with realistic amounts without artificial circuit limitations
-    - **BREAKING CHANGE**: Requires recompilation of all circuits and regeneration of artifacts
+  - Changed `Num2Bits(64)` to `Num2Bits(128)` to match runtime Balance type
+  - Previous limit: ~18.4 ORB maximum per transaction
+  - New limit: ~340 undecillion ORB (full u128 range)
+  - Affects: Unshield and Private Transfer operations
+  - Impact: Users can now transact with realistic amounts without artificial circuit limitations
+  - **BREAKING CHANGE**: Requires recompilation of all circuits and regeneration of artifacts
 
 ## [0.1.0] - 2026-01-28
 
