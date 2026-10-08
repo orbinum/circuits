@@ -2,7 +2,7 @@
   "schema_version": "1.0.0",
   "package_name": "orbinum-circuits",
   "package_version": "0.17.0",
-  "generated_at": "2026-10-08T18:08:44.241Z",
+  "generated_at": "2026-10-08T18:55:24.910Z",
   "circuits": {
     "transfer": {
       "active_version": 3,
@@ -91,8 +91,8 @@
             "wasm": {
               "file": "transfer_v3.wasm",
               "localPath": "build/transfer_js/transfer_v3.wasm",
-              "bytes": 2577101,
-              "sha256": "82983b4ebc841fa7312f45efb2b17eb4c810c32d096582fbd18bf6ef4be572b7"
+              "bytes": 2577095,
+              "sha256": "4b76abf58a53a182dcf5501a14aaa1609ed8bee06a5324a05194d3603c14a349"
             },
             "zkey": {
               "file": "transfer_v3_pk.zkey",
@@ -209,8 +209,8 @@
             "wasm": {
               "file": "unshield_v3.wasm",
               "localPath": "build/unshield_js/unshield_v3.wasm",
-              "bytes": 2507572,
-              "sha256": "cc8f701f8fd540c9d315fececae355b2125d5cd8e74113d3298d237659d62e60"
+              "bytes": 2507566,
+              "sha256": "afdc0232473134c11ce3d3d380b4d0a1584593fa59f71f4404bf31f9beded420"
             },
             "zkey": {
               "file": "unshield_v3_pk.zkey",

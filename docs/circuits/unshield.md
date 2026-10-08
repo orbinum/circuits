@@ -70,7 +70,7 @@ the only copy of the change note's secrets.
 Derives the owner public key from the spending key inside the circuit. The prover must know `spending_key` such that `BabyPbk(spending_key).Ax == ownerPk`. This is the discrete log relation on BabyJubJub.
 
 ```circom
-// Inside SpentNote (note.circom): BabyPbk + spending_key < l
+// Inside SpentNote (spend.circom): BabyPbk + spending_key < l
 component owner = SpendingKeyOwner();
 owner.spending_key <== spending_key;
 // owner.owner_pubkey is the owner pubkey used in NoteCommitment (Constraint 3)
@@ -80,7 +80,7 @@ owner.spending_key <== spending_key;
 subgroup of order `l ≈ 2^251.6`, so `k, k + l, …, k + 5l` all derive the same
 `ownerPk` — the same note — while the nullifier `Poseidon(commitment, key)` differs
 for each. Without a bound, one note could be withdrawn up to six times.
-`SpendingKeyOwner` (`note.circom`) therefore also requires `spending_key < l`
+`SpendingKeyOwner` (`spend.circom`) therefore also requires `spending_key < l`
 (`LessThan(252)`, ~256 constraints per key). Wallets derive keys in `[1, l)`, so no
 honest note is affected. Introduced in transfer v3 and unshield v3; transfer v1/v2
 and unshield v1/v2 lack it and must be retired.
@@ -123,7 +123,7 @@ commitment = Poseidon(note_value, note_asset_id, BabyPbk(spending_key).Ax, note_
 **Circuit Logic**:
 
 ```circom
-// Inside SpentNote (note.circom)
+// Inside SpentNote (spend.circom)
 component note = NoteCommitment();
 note.value <== value;
 note.asset_id <== asset_id;
@@ -136,7 +136,7 @@ note.blinding <== blinding;
 Prove the commitment exists in the Merkle tree.
 
 ```circom
-// Inside SpentNote (note.circom) …
+// Inside SpentNote (spend.circom) …
 component membership = MerkleTreeVerifier(tree_depth);
 membership.leaf <== note.commitment;
 for (var i = 0; i < tree_depth; i++) {

@@ -157,7 +157,7 @@ commitment[i] = Poseidon(input_values[i], input_asset_ids[i], ownerPk[i], input_
 **Circuit Logic**:
 
 ```circom
-// Inside SpentNote (note.circom), once per input: BabyPbk + spending_key < l
+// Inside SpentNote (spend.circom), once per input: BabyPbk + spending_key < l
 component owner = SpendingKeyOwner();
 owner.spending_key <== spending_key;
 // owner.owner_pubkey is the owner pubkey used in NoteCommitment
@@ -167,7 +167,7 @@ owner.spending_key <== spending_key;
 subgroup of order `l ≈ 2^251.6`, so `k, k + l, …, k + 5l` all derive the same
 `ownerPk` — the same note — while the nullifier `Poseidon(commitment, key)` differs
 for each. Without a bound, one note could be spent up to six times.
-`SpendingKeyOwner` (`note.circom`) therefore also requires `spending_key < l`
+`SpendingKeyOwner` (`spend.circom`) therefore also requires `spending_key < l`
 (`LessThan(252)`, ~256 constraints per key). Wallets derive keys in `[1, l)`, so no
 honest note is affected. Introduced in transfer v3 and unshield v3; transfer v1/v2
 and unshield v1/v2 lack it and must be retired.
