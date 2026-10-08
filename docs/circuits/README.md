@@ -64,8 +64,8 @@ Each circuit document includes:
 
 | Circuit  | Constraints | Public Inputs | Private Inputs      | Tree Depth |
 | -------- | ----------- | ------------- | ------------------- | ---------- |
-| Transfer | 33,688      | 8             | 9 (+40 Merkle path) | 20         |
-| Unshield | 16,904      | 8             | 7 (+40 Merkle path) | 20         |
+| Transfer | 34,200      | 9             | 9 (+40 Merkle path) | 20         |
+| Unshield | 17,290      | 8             | 7 (+40 Merkle path) | 20         |
 | Shield   | 736         | 3             | 2                   | —          |
 
 ## Build Artifacts

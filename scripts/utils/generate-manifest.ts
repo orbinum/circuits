@@ -3,7 +3,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { CIRCUITS, parseCircuit, type CircuitName } from "../lib/circuits";
+import { CIRCUITS, type CircuitName } from "../lib/circuits";
+import { rotation } from "../lib/rotation";
 import { MANIFEST_PATH, ROOT, rel, versionSuffix } from "../lib/paths";
 import { ok } from "../lib/log";
 import {
@@ -96,29 +97,11 @@ function buildVersionEntry(
     };
 }
 
-// Rotation controls: to add a version, set ROTATE_CIRCUIT (one circuit or a
-// comma-separated list) + ROTATE_VERSION. The prior manifest's versions are
-// reused verbatim (their published bytes are canonical) and the new one is
-// appended. Circuits NOT being rotated keep their prior entry as is: rebuilding
-// them from the base artifacts would drop a version rotated in an earlier run —
-// running once per circuit used to erase the first circuit's new version.
-// Validated rather than compared raw: `circuit === rotateCircuit` against an
-// unchecked string means a typo — ROTATE_CIRCUIT=trasnfer — never matches, so
-// rotation silently falls through to the default path and emits a
-// single-version manifest with no error. A rotation that quietly does not
-// happen is worse than one that fails.
-const rotateCircuits: readonly CircuitName[] = (process.env.ROTATE_CIRCUIT ?? "")
-    .split(",")
-    .map((c) => c.trim())
-    .filter(Boolean)
-    .map(parseCircuit);
-const rotateVersion = Number(process.env.ROTATE_VERSION ?? "0");
-if (rotateCircuits.length > 0 && (!Number.isInteger(rotateVersion) || rotateVersion < 1)) {
-    throw new Error(
-        `ROTATE_CIRCUIT=${rotateCircuits.join(",")} needs ROTATE_VERSION set to a positive integer, ` +
-            `got ${process.env.ROTATE_VERSION ?? "(unset)"}`
-    );
-}
+// Rotation: the rotated circuits get `ROTATE_VERSION` appended to their prior
+// versions, reused verbatim (their published bytes are canonical). Circuits not
+// being rotated keep their prior entry as is: rebuilding them from the base
+// artifacts would drop a version rotated in an earlier run.
+const { circuits: rotateCircuits, version: rotateVersion } = rotation();
 const priorManifest: Manifest | null = fs.existsSync(MANIFEST_PATH)
     ? (JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")) as Manifest)
     : null;

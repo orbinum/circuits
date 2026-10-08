@@ -18,6 +18,7 @@ In both cases the prover proves ownership of a note in the Merkle tree without r
 ## Security Properties
 
 - **Ownership Proof**: `BabyPbk(spending_key)` derives `ownerPk (Ax)` inside the circuit, proving knowledge of the discrete logarithm of the `ownerPk` embedded in the note commitment.
+- **One Nullifier per Note** (v3): `spending_key < l` (the Baby JubJub subgroup order), so a note has exactly one valid key and therefore one nullifier.
 - **Double-Spend Prevention**: Nullifier ensures the note can only be unshielded once.
 - **Merkle Membership**: Note must exist in the commitment tree.
 - **Conservation of Value**: `note_value === amount + fee + change_value`. Neither inflation nor loss of funds is possible.
@@ -69,10 +70,20 @@ the only copy of the change note's secrets.
 Derives the owner public key from the spending key inside the circuit. The prover must know `spending_key` such that `BabyPbk(spending_key).Ax == ownerPk`. This is the discrete log relation on BabyJubJub.
 
 ```circom
-component key_derivation = BabyPbk();
-key_derivation.in <== spending_key;
-// key_derivation.Ax is the owner pubkey used in NoteCommitment (Constraint 3)
+// Inside SpentNote (spend.circom): BabyPbk + spending_key < l
+component owner = SpendingKeyOwner();
+owner.spending_key <== spending_key;
+// owner.owner_pubkey is the owner pubkey used in NoteCommitment (Constraint 3)
 ```
+
+**Canonical key.** `BabyPbk` accepts any key below 2^253, but `Base8` generates a
+subgroup of order `l ≈ 2^251.6`, so `k, k + l, …, k + 5l` all derive the same
+`ownerPk` — the same note — while the nullifier `Poseidon(commitment, key)` differs
+for each. Without a bound, one note could be withdrawn up to six times.
+`SpendingKeyOwner` (`spend.circom`) therefore also requires `spending_key < l`
+(`LessThan(252)`, ~256 constraints per key). Wallets derive keys in `[1, l)`, so no
+honest note is affected. Introduced in transfer v3 and unshield v3; transfer v1/v2
+and unshield v1/v2 lack it and must be retired.
 
 ### 1. Amount + Fee Matches Note Value
 
@@ -86,7 +97,7 @@ note_value === amount + fee;
 
 ### 2. Range Checks
 
-Ensure `note_value` and `fee` are within u128 range (matches runtime `Balance` type).
+Ensure `note_value`, `fee`, `amount` (v3) and `change_value` are within u128 range (matches runtime `Balance` type).
 
 ```circom
 component value_range_check = Num2Bits(128);
@@ -94,6 +105,9 @@ value_range_check.in <== note_value;
 
 component fee_range_check = Num2Bits(128);
 fee_range_check.in <== fee;
+
+component amount_range_check = Num2Bits(128);
+amount_range_check.in <== amount;
 ```
 
 **Purpose**: Prevents overflow attacks and ensures values match the runtime `Balance` type.
@@ -109,14 +123,12 @@ commitment = Poseidon(note_value, note_asset_id, BabyPbk(spending_key).Ax, note_
 **Circuit Logic**:
 
 ```circom
-component commitment_computer = NoteCommitment();
-commitment_computer.value <== note_value;
-commitment_computer.asset_id <== note_asset_id;
-commitment_computer.owner_pubkey <== key_derivation.Ax;  // derived, not a private input
-commitment_computer.blinding <== note_blinding;
-
-signal computed_commitment;
-computed_commitment <== commitment_computer.commitment;
+// Inside SpentNote (spend.circom)
+component note = NoteCommitment();
+note.value <== value;
+note.asset_id <== asset_id;
+note.owner_pubkey <== owner.owner_pubkey;  // derived, not a private input
+note.blinding <== blinding;
 ```
 
 ### 4. Merkle Membership Verification
@@ -124,15 +136,17 @@ computed_commitment <== commitment_computer.commitment;
 Prove the commitment exists in the Merkle tree.
 
 ```circom
-component merkle_verifier = MerkleTreeVerifier(tree_depth);
-merkle_verifier.leaf <== computed_commitment;
-
+// Inside SpentNote (spend.circom) …
+component membership = MerkleTreeVerifier(tree_depth);
+membership.leaf <== note.commitment;
 for (var i = 0; i < tree_depth; i++) {
-    merkle_verifier.path_elements[i] <== path_elements[i];
-    merkle_verifier.path_index[i] <== path_indices[i];
+    membership.path_elements[i] <== path_elements[i];
+    membership.path_index[i] <== path_index[i];
 }
+root <== membership.root;
 
-merkle_verifier.root === merkle_root;
+// … and in Unshield
+spent.root === merkle_root;
 ```
 
 **Purpose**: Proves the note exists and hasn't been tampered with.
@@ -170,7 +184,7 @@ note_asset_id === asset_id;
 ## Circuit Parameters
 
 - **Tree Depth**: 20 levels (supports up to 2^20 = 1,048,576 notes)
-- **Constraints**: 16,904
+- **Constraints**: 17,290
 - **Public Inputs**: 8 (`merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, `fee`, `change_commitment`, `memo_hash`)
 - **Private Inputs**: 9 signals (+ 40 for Merkle proof path)
 - **Proving Time**: ~750ms (local machine)
@@ -402,20 +416,20 @@ this way because they can be re-derived from the compiled circuit rather than
 maintained by hand:
 
 ```sh
-cut -d, -f4 build/unshield.sym | grep -oE 'main\.[a-z_]+' | sort | uniq -c | sort -rn
+cut -d, -f4 build/unshield_v3.sym | grep -oE 'main\.[a-z_]+(\.[a-z_]+)?' | sort | uniq -c | sort -rn
 ```
 
-| Component                     | Signals |
-| ----------------------------- | ------- |
-| `merkle_verifier` (20 levels) | 15,543  |
-| `key_derivation` (BabyPbk)    | 10,114  |
-| `commitment_computer`         | 1,177   |
-| `change_commitment_computer`  | 1,177   |
-| `nullifier_computer`          | 773     |
-| range checks (3 × Num2Bits)   | 387     |
-| memo binding (`memo_hash²`)   | 1       |
+| Component                               | Signals |
+| --------------------------------------- | ------- |
+| `spent.membership` (20 levels)          | 15,543  |
+| `spent.owner` (BabyPbk + canonical key) | 10,373  |
+| `spent.note` (NoteCommitment)           | 1,177   |
+| `change` (NoteCommitment)               | 1,177   |
+| `spent.revealed` (Nullifier)            | 773     |
+| range checks (4 × Num2Bits)             | 516     |
+| memo and recipient binding (squares)    | 2       |
 
-Total constraints: **16,904** (`snarkjs r1cs info build/unshield.r1cs`).
+Total constraints: **17,290** (`snarkjs r1cs info build/unshield_v3.r1cs`).
 
 The Merkle verification dominates: twenty levels of Poseidon2 is most of the
 circuit, and it is where a depth change is felt. The range checks are the
@@ -556,7 +570,7 @@ assert(circuitInput.asset_id === circuitInput.note_asset_id, "Asset IDs must mat
 | **Outputs**         | Public balance   | 2 notes            |
 | **Amount Revealed** | Yes (public)     | No (hidden)        |
 | **Recipient Type**  | Public address   | Private note owner |
-| **Constraints**     | 16,904           | 33,688             |
+| **Constraints**     | 17,290           | 34,200             |
 | **Proving Time**    | ~800ms           | ~2.5s              |
 
 ## Future Improvements

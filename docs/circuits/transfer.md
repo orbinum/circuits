@@ -26,8 +26,9 @@ The Transfer circuit enables private token transfers with zero-knowledge proofs.
 - **Dummy Input Soundness**: `IsZero(value)` is deterministic — a prover cannot claim `is_dummy = 1` for a note with `value > 0` (technique from Zcash Sapling)
 - **Dummy Nullifier Binding**: Circuit enforces `nullifier[i] * is_dummy[i].out === 0`, so a dummy slot cannot carry a real nullifier while bypassing Merkle and ownership checks
 - **Ownership Proof**: `BabyPbk(spending_key)` derives `ownerPk (Ax)` deterministically inside the circuit, proving the prover knows the discrete logarithm of the `ownerPk` embedded in the note commitment. Disabled for dummy slots.
+- **One Nullifier per Note** (v3): `spending_key < l` (the Baby JubJub subgroup order), so a note has exactly one valid key and therefore one nullifier.
 - **Value Conservation**: Total input value equals total output value plus fee (dummy input contributes 0)
-- **Merkle Membership**: Real input notes must exist in the commitment tree; dummy inputs are exempt
+- **Merkle Membership**: Each real input note must exist in the tree whose root its slot names, so the two notes may come from different trees of the forest (v3); dummy inputs are exempt
 - **Range Safety**: All values and the fee are constrained to u128 range (no overflow; matches the runtime `Balance` type)
 - **Asset Consistency**: All notes in a transaction must use the same asset
 - **Public Asset Binding**: The public `asset_id` signal is constrained to equal the asset used in all notes
@@ -35,14 +36,14 @@ The Transfer circuit enables private token transfers with zero-knowledge proofs.
 
 ## Public Inputs (Visible On-Chain)
 
-| Input            | Type     | Description                                             |
-| ---------------- | -------- | ------------------------------------------------------- |
-| `merkle_root`    | Field    | Current Merkle tree root                                |
-| `nullifiers[2]`  | Field[2] | Nullifiers for the two input notes                      |
-| `commitments[2]` | Field[2] | Commitments for the two output notes                    |
-| `asset_id`       | Field    | Asset being transferred (must match all note asset IDs) |
-| `fee`            | Field    | Relay fee deducted from the input sum                   |
-| `memo_hash`      | Field    | Binds the two output memos (v2) — see below             |
+| Input             | Type     | Description                                             |
+| ----------------- | -------- | ------------------------------------------------------- |
+| `merkle_roots[2]` | Field[2] | Root each input note is proven against (one per input)  |
+| `nullifiers[2]`   | Field[2] | Nullifiers for the two input notes                      |
+| `commitments[2]`  | Field[2] | Commitments for the two output notes                    |
+| `asset_id`        | Field    | Asset being transferred (must match all note asset IDs) |
+| `fee`             | Field    | Relay fee deducted from the input sum                   |
+| `memo_hash`       | Field    | Binds the two output memos (v2) — see below             |
 
 `memo_hash` is `blake2_256(SCALE(Vec<memo>))` over `[memo_out0, memo_out1]`, in
 output order, read as a little-endian integer and reduced mod the BN254 order
@@ -100,13 +101,13 @@ for (var i = 0; i < 2; i++) {
 
 ### 1. Merkle Membership Verification
 
-Proves each **real** input note exists in the commitment tree. Dummy inputs (value = 0) are exempt.
+Proves each **real** input note exists in the tree named by its own root, `merkle_roots[i]`. The two notes may sit in different trees of the forest (v1 and v2 took one shared `merkle_root`). Dummy inputs (value = 0) are exempt, and their root is unconstrained.
 
 **For each input note i**:
 
 ```
 input_commitment[i] = Poseidon(input_values[i], input_asset_ids[i], input_owner_Ax[i], input_blindings[i])
-merkle_diff[i] = MerkleTreeVerifier(input_commitment[i], path).root - merkle_root
+merkle_diff[i] = MerkleTreeVerifier(input_commitment[i], path).root - merkle_roots[i]
 merkle_diff[i] * (1 - is_dummy[i].out) === 0
 ```
 
@@ -114,15 +115,12 @@ merkle_diff[i] * (1 - is_dummy[i].out) === 0
 
 ```circom
 for (var i = 0; i < 2; i++) {
-    input_commitments[i] = NoteCommitment();
+    spent[i] = SpentNote(tree_depth); // owner, commitment, membership, nullifier
     // ... field assignments ...
 
-    merkle_verifiers[i] = MerkleTreeVerifier(tree_depth);
-    merkle_verifiers[i].leaf <== input_commitments[i].commitment;
-
-    // Real inputs must be in the tree; dummy inputs (value == 0) are exempt
-    merkle_diffs[i] <== merkle_verifiers[i].root - merkle_root;
-    merkle_diffs[i] * (1 - is_dummy[i].out) === 0;
+    // Real inputs must be in their tree; a dummy input's root is unconstrained
+    root_diffs[i] <== spent[i].root - merkle_roots[i];
+    root_diffs[i] * (1 - is_dummy[i].out) === 0;
 }
 ```
 
@@ -138,12 +136,9 @@ nullifier[i] = Poseidon(commitment[i], spending_key[i])
 
 ```circom
 for (var i = 0; i < 2; i++) {
-    nullifier_computers[i] = Nullifier();
-    nullifier_computers[i].commitment <== input_commitments[i].commitment;
-    nullifier_computers[i].spending_key <== spending_keys[i];
-
+    // spent[i].nullifier = Poseidon(commitment, spending_keys[i]) (SpentNote)
     // Only enforce for real (non-dummy) inputs
-    nullifier_diffs[i] <== nullifier_computers[i].nullifier - nullifiers[i];
+    nullifier_diffs[i] <== spent[i].nullifier - nullifiers[i];
     nullifier_diffs[i] * (1 - is_dummy[i].out) === 0;
 }
 ```
@@ -162,12 +157,20 @@ commitment[i] = Poseidon(input_values[i], input_asset_ids[i], ownerPk[i], input_
 **Circuit Logic**:
 
 ```circom
-for (var i = 0; i < 2; i++) {
-    key_derivation[i] = BabyPbk();
-    key_derivation[i].in <== spending_keys[i];
-    // key_derivation[i].Ax is the owner pubkey used in NoteCommitment
-}
+// Inside SpentNote (spend.circom), once per input: BabyPbk + spending_key < l
+component owner = SpendingKeyOwner();
+owner.spending_key <== spending_key;
+// owner.owner_pubkey is the owner pubkey used in NoteCommitment
 ```
+
+**Canonical key.** `BabyPbk` accepts any key below 2^253, but `Base8` generates a
+subgroup of order `l ≈ 2^251.6`, so `k, k + l, …, k + 5l` all derive the same
+`ownerPk` — the same note — while the nullifier `Poseidon(commitment, key)` differs
+for each. Without a bound, one note could be spent up to six times.
+`SpendingKeyOwner` (`spend.circom`) therefore also requires `spending_key < l`
+(`LessThan(252)`, ~256 constraints per key). Wallets derive keys in `[1, l)`, so no
+honest note is affected. Introduced in transfer v3 and unshield v3; transfer v1/v2
+and unshield v1/v2 lack it and must be retired.
 
 **Why BabyPbk instead of EdDSA?**
 
@@ -306,8 +309,8 @@ must_be_distinct === 0;
 ## Circuit Parameters
 
 - **Tree Depth**: 20 levels (supports up to 2^20 = 1,048,576 notes)
-- **Constraints**: 33,688 (includes BabyPbk ×2 + dummy-input gates: 2×IsZero + conditional signals)
-- **Public Inputs**: 8 (`merkle_root` + 2 `nullifiers` + 2 `commitments` + `asset_id` + `fee` + `memo_hash`)
+- **Constraints**: 34,200 (includes BabyPbk ×2, the canonical-key check ×2, and dummy-input gates: 2×IsZero + conditional signals)
+- **Public Inputs**: 9 (2 `merkle_roots` + 2 `nullifiers` + 2 `commitments` + `asset_id` + `fee` + `memo_hash`)
 - **Private Inputs**: 9 scalars + 40 Merkle path elements (2×20)
 - **Proving Time**: ~2-3 seconds (local machine)
 - **Verification Time**: ~15ms
@@ -321,7 +324,7 @@ Alice transfers 100 tokens to Bob using two of her notes:
 ```typescript
 const input = {
     // Public
-    merkle_root: currentRoot,
+    merkle_roots: [rootOfNote1, rootOfNote2], // each note's own tree; equal when both share one
     nullifiers: [nullifier1, nullifier2], // both real, must be distinct
     commitments: [outputCommitment1, outputCommitment2],
     asset_id: 0n, // Native token
@@ -354,7 +357,7 @@ const ZERO_SIBLINGS = Array(20).fill("0");
 
 const input = {
     // Public
-    merkle_root: aliceNoteRoot,
+    merkle_roots: [aliceNoteRoot, aliceNoteRoot], // the dummy slot repeats the real root
     nullifiers: [nullifier1, "0"], // dummy nullifier MUST be '0' (Constraint 9)
     commitments: [outputCommitment1, outputCommitment2],
     asset_id: 0n,
@@ -387,7 +390,7 @@ Alice transfers 30 tokens to Bob, gets 70 as change:
 ```typescript
 const input = {
     // Public
-    merkle_root: currentRoot,
+    merkle_roots: [rootOfNote1, rootOfNote2],
     nullifiers: [nullifier1, nullifier2],
     commitments: [outputCommitment1, outputCommitment2],
     asset_id: 0n,
@@ -409,7 +412,7 @@ Alice splits one large note into two smaller notes (self-transfer):
 ```typescript
 const input = {
     // Public
-    merkle_root: currentRoot,
+    merkle_roots: [rootOfNote1, rootOfNote1],
     nullifiers: [nullifier1, dummyNullifier],
     commitments: [outputCommitment1, outputCommitment2],
     asset_id: 0n,
@@ -440,16 +443,23 @@ nullifier_set.insert(nullifier);
 
 ### Merkle Root Validation
 
-The runtime should validate the merkle_root against:
+The runtime validates **every** root in `merkle_roots`, the dummy slot's included, against:
 
-1. **Current root**: Most recent state
-2. **Historic roots**: Recent past roots (prevents front-running)
+1. **Current root**: the active tree's most recent state
+2. **Historic roots**: recent past roots of the active tree (prevents front-running)
+3. **Sealed roots**: final roots of full trees in the forest
 
 ```rust
-if !is_valid_root(merkle_root) {
-    return Err("Invalid merkle root");
+for root in merkle_roots {
+    if !is_known_root(root) {
+        return Err("Unknown merkle root");
+    }
 }
 ```
+
+The circuit leaves a dummy slot's root free, so the runtime's check is what keeps
+it honest; clients repeat the real note's root there. Spending across trees reveals
+which two trees the notes came from, so clients prefer a same-tree pair.
 
 ### Spending Key Management
 
@@ -518,6 +528,7 @@ const ownerPubkey = F.toObject(ownerAx); // Ax coordinate used in commitments
 | Section                     | Constraints |
 | --------------------------- | ----------- |
 | BabyPbk Key Derivation (×2) | ~5,000      |
+| Canonical key check (×2)    | ~512        |
 | Merkle Verification (×2)    | ~8,000      |
 | Nullifier Computation (×2)  | ~4,000      |
 | Output Commitments (×2)     | ~4,000      |
@@ -525,7 +536,7 @@ const ownerPubkey = F.toObject(ownerAx); // Ax coordinate used in commitments
 | Range Checks (×4+fee)       | ~12,500     |
 | Asset Consistency           | ~100        |
 | Memo binding (`memo_hash²`) | 1           |
-| **Total**                   | **33,688**  |
+| **Total**                   | **34,200**  |
 
 ### Trusted Setup
 

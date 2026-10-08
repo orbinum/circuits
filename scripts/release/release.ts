@@ -2,30 +2,14 @@
 /**
  * Publish a release: npm package, tarballs, git tag, GitHub release.
  *
- * Manual and deliberate. CI never runs this — zkey and VK generation is
- * nondeterministic, so a CI rebuild would mint verifying keys that do not match
- * what is published and registered on-chain.
+ * Manual and deliberate. CI never runs this: zkey and VK generation is
+ * nondeterministic, so a CI rebuild would mint verifying keys that match
+ * nothing registered on-chain.
  *
- * The manifest is the packing list. Every artifact that ships is one the
- * manifest names, with the sha256 it records, verified before anything is
- * copied — published artifacts are immutable, so what reaches npm must match.
- *
- * Ported from `release.sh`. Three things the shell did that this does not:
- *
- * 1. **A guard that failed open.** `git ls-remote --exit-code && die` treated
- *    "tag does not exist" and "could not reach the remote" identically, because
- *    both are non-zero. Measured: a missing tag exits **2**, an unreachable
- *    remote exits **128**. So a network blip read as "the tag is free" and the
- *    release proceeded. In a script where every other guard fails closed, that
- *    one shipped.
- *
- * 2. **Re-implementing what already existed.** The version check ran twice per
- *    release — once in bash via two `node -p` subprocesses, once inside
- *    `verify-artifacts.ts` — and the manifest was walked by an inline `node -e`
- *    that duplicated `allArtifacts()`.
- *
- * 3. **`release/artifacts.tsv`**, a file that existed only to carry data
- *    between two `while read` loops in the same script.
+ * The manifest is the packing list: every artifact that ships is one it names,
+ * with the sha256 it records, verified before anything is copied. Every guard
+ * fails closed — in particular "tag exists" and "remote unreachable" are told
+ * apart by exit code (2 vs 128), so a network blip never reads as a free tag.
  *
  * Usage:
  *   ts-node scripts/release/release.ts [--dry-run]

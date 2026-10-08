@@ -1,11 +1,7 @@
 /**
- * The circuits this package builds, and the two names each one has.
- *
- * A circuit named `a_b` on disk is `a-b` in a pnpm script, and
- * the two were bridged ad hoc: `build-all.sh:42` did `${CIRCUIT//_/-}`, the
- * package.json spelled out all fifteen combinations by hand, and the list of
- * circuit names itself appeared in five places. Adding a fourth circuit meant
- * finding all of them.
+ * The circuits this package builds, and the two names each one has: `a_b` on
+ * disk and in the manifest, `a-b` in a pnpm script. This is the one list;
+ * every script derives from it.
  */
 
 /** A circuit's canonical name — the one used on disk and in the manifest. */
@@ -52,15 +48,16 @@ const element = (name: string, index: number): Signal => ({ kind: "element", nam
  * produces a proof that is well-formed, is exactly 128 bytes, and fails
  * verification with nothing in the output to say why.
  *
- * **`transfer`** declares six names but has eight signals: `nullifiers` and
- * `commitments` are arrays of two, flattened one after the other rather than
- * interleaved. A `signal output` would come before every public input — Circom
+ * **`transfer`** declares six names but has nine signals: `merkle_roots`,
+ * `nullifiers` and `commitments` are arrays of two, flattened one after the
+ * other rather than interleaved. A `signal output` would come before every public input — Circom
  * places outputs first in the witness. `scripts/utils/make-fixture.ts` asserts
  * each layout against the real witness every time a fixture is generated.
  */
 export const SIGNAL_LAYOUT: Record<CircuitName, readonly Signal[]> = {
     transfer: [
-        input("merkle_root"),
+        element("merkle_roots", 0),
+        element("merkle_roots", 1),
         element("nullifiers", 0),
         element("nullifiers", 1),
         element("commitments", 0),

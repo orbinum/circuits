@@ -18,9 +18,9 @@
  * Each circuit's entry in `PUBLIC_SIGNALS` is the layout a verifier must use,
  * and it is not always the `public [...]` list read left to right:
  *
- *   - `transfer` declares six names, two of which are arrays of two, so the
- *     eight signals are `merkle_root, nullifiers[0], nullifiers[1],
- *     commitments[0], commitments[1], asset_id, fee, memo_hash`.
+ *   - `transfer` declares six names, three of which are arrays of two, so the
+ *     nine signals are `merkle_roots[0], merkle_roots[1], nullifiers[0],
+ *     nullifiers[1], commitments[0], commitments[1], asset_id, fee, memo_hash`.
  *
  * It is asserted below against the real witness rather than trusted, which is
  * the only way to know rather than believe.
@@ -165,8 +165,8 @@ async function buildTransferInput(): Promise<Built> {
 
     return {
         input: {
-            // public
-            merkle_root: root.toString(),
+            // public — the dummy slot repeats the real root, as clients send it
+            merkle_roots: [root.toString(), root.toString()],
             nullifiers: [nullifier.toString(), "0"],
             commitments: commitments.map(String),
             asset_id: d.assetId.toString(),

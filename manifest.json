@@ -1,14 +1,15 @@
 {
   "schema_version": "1.0.0",
   "package_name": "orbinum-circuits",
-  "package_version": "0.16.0",
-  "generated_at": "2026-10-05T15:19:30.116Z",
+  "package_version": "0.17.0",
+  "generated_at": "2026-10-08T18:55:24.910Z",
   "circuits": {
     "transfer": {
-      "active_version": 2,
+      "active_version": 3,
       "supported_versions": [
         1,
-        2
+        2,
+        3
       ],
       "versions": {
         "1": {
@@ -82,14 +83,51 @@
               "sha256": "dee0daa1874ff5c75f82241cac16146cb018b40765e1106f841ff6621445feab"
             }
           }
+        },
+        "3": {
+          "version": 3,
+          "vk_hash": "0x169385209b112d65b8bacdd451442e4cccef514d9458aa16a8e7bb454a282cae",
+          "artifacts": {
+            "wasm": {
+              "file": "transfer_v3.wasm",
+              "localPath": "build/transfer_js/transfer_v3.wasm",
+              "bytes": 2577095,
+              "sha256": "4b76abf58a53a182dcf5501a14aaa1609ed8bee06a5324a05194d3603c14a349"
+            },
+            "zkey": {
+              "file": "transfer_v3_pk.zkey",
+              "localPath": "keys/transfer_v3_pk.zkey",
+              "bytes": 17478112,
+              "sha256": "3ee54376ccb32a27568ef58acbb4aaba25a077a488c3379ff9ee441582a5c0ad"
+            },
+            "vk_json": {
+              "file": "verification_key_transfer_v3.json",
+              "localPath": "build/verification_key_transfer_v3.json",
+              "bytes": 4385,
+              "sha256": "c3925660c4b5108fc55cd451872d84b2f5d7c03622cf519de96433d00272fc14"
+            },
+            "ark": {
+              "file": "transfer_v3_pk.ark",
+              "localPath": "keys/transfer_v3_pk.ark",
+              "bytes": 10236500,
+              "sha256": "cec5cf8152508d81fcc5b20caf36af246f0217b74dc265f33eb3ad4c433bfb95"
+            },
+            "r1cs": {
+              "file": "transfer_v3.r1cs",
+              "localPath": "build/transfer_v3.r1cs",
+              "bytes": 5286644,
+              "sha256": "963b8bf20363225d53569bfaaf985ef953d571d38a43e0f110338483dda3765d"
+            }
+          }
         }
       }
     },
     "unshield": {
-      "active_version": 2,
+      "active_version": 3,
       "supported_versions": [
         1,
-        2
+        2,
+        3
       ],
       "versions": {
         "1": {
@@ -161,6 +199,42 @@
               "localPath": "build/unshield_v2.r1cs",
               "bytes": 2611656,
               "sha256": "d33da76bc3ce3bd6862eeee3354202f86960f10e5bcef2fb384708b24df92226"
+            }
+          }
+        },
+        "3": {
+          "version": 3,
+          "vk_hash": "0x2a550d89f344e4d21596ab0a3e0670221696264b3d86111b81ca66f061677f10",
+          "artifacts": {
+            "wasm": {
+              "file": "unshield_v3.wasm",
+              "localPath": "build/unshield_js/unshield_v3.wasm",
+              "bytes": 2507566,
+              "sha256": "afdc0232473134c11ce3d3d380b4d0a1584593fa59f71f4404bf31f9beded420"
+            },
+            "zkey": {
+              "file": "unshield_v3_pk.zkey",
+              "localPath": "keys/unshield_v3_pk.zkey",
+              "bytes": 8826820,
+              "sha256": "71913246a4068f09b0629e0df594ed376a680abf30cc3c08726ec07c9255786e"
+            },
+            "vk_json": {
+              "file": "verification_key_unshield_v3.json",
+              "localPath": "build/verification_key_unshield_v3.json",
+              "bytes": 4210,
+              "sha256": "ff8848486836bc432d126151e16fe953f4a45898593241916f9afaf585be2f9c"
+            },
+            "ark": {
+              "file": "unshield_v3_pk.ark",
+              "localPath": "keys/unshield_v3_pk.ark",
+              "bytes": 5175124,
+              "sha256": "d0fdee49f3d80f9c3e1407957828cb50d15b3a45414e7beccaf336770825afbf"
+            },
+            "r1cs": {
+              "file": "unshield_v3.r1cs",
+              "localPath": "build/unshield_v3.r1cs",
+              "bytes": 2674540,
+              "sha256": "6e0f3692ee37dc28fcffd31f99b468a0b01112ff45c501e346596db4c961922f"
             }
           }
         }

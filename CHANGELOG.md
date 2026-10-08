@@ -7,6 +7,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-08
+
+Rotates **`transfer` to v3** (spends across trees) and **`unshield` to v3**
+(canonical spending key). Both fix a critical flaw in every earlier spend
+circuit — one note admitted several nullifiers — so transfer v2 and unshield v2
+must be retired on-chain as soon as v3 is active.
+
+### Ceremony (transfer v3, unshield v3)
+
+- Pending: run with `SETUP_CEREMONY=release`, a fresh `SETUP_ENTROPY` and a
+  finalized testnet block hash as `SETUP_BEACON` before publishing, then record
+  the beacon and both `vk_hash` values here.
+
+### Added
+
+- **`transfer` v3: spends across trees of the forest.** Each input is proven
+  against its own root, `merkle_roots[i]`, so two notes from different trees can
+  be spent together instead of being consolidated first. 9 public inputs:
+  `merkle_roots[0], merkle_roots[1], nullifiers[0], nullifiers[1],
+commitments[0], commitments[1], asset_id, fee, memo_hash`. A dummy input's root
+  is unconstrained (the runtime requires a dummy's root to repeat the real one).
+  34,200 constraints.
+- **`unshield` v3**: the canonical spending key below, plus a u128 range check on
+  `amount` and a constraint of its own on `recipient` (bound until now only by
+  the setup's input constraints). Same 8 public inputs as v2. 17,290 constraints.
+- Tests: notes from two trees, a wrong root on input 1 alone, swapped roots, and a
+  free root in the dummy slot; non-canonical spending keys refused by transfer and
+  unshield.
+
+### Security
+
+- **Critical — one note spendable up to six times (transfer v1/v2, unshield
+  v1/v2).** `BabyPbk` takes any key below 2^253, but `Base8`'s subgroup has order
+  `l ≈ 2^251.6`: `k, k + l, …, k + 5l` derive the same owner key, hence the same
+  note, yet each gives a different nullifier `Poseidon(commitment, key)`. Each
+  verifies, so the pool accepts every one. transfer v3 and unshield v3 constrain
+  `spending_key < l` (`SpendingKeyOwner` in `note.circom`). Wallets already derive
+  keys in `[1, l)`, so no honest note changes. Retire transfer v2 and unshield v2
+  as soon as v3 is active.
+
+### Changed
+
+- `SpentNote(tree_depth)` in `note.circom`: ownership, commitment, membership
+  and nullifier of one spent note, used by transfer (twice) and unshield (once)
+  instead of each repeating the chain. Same components, same constraint counts
+  (34,200 / 17,290); constraints renumbered in reading order, stale EdDSA notes
+  and unused includes dropped.
+- `setup.ts` verifies the ptau against the published blake2b-512 of
+  `powersOfTau28_hez_final_16.ptau`, on download and when cached. With the
+  development defaults it says so loudly; `SETUP_CEREMONY=release` requires
+  `SETUP_ENTROPY` and a 32-byte hex `SETUP_BEACON`.
+- `lint:circom` runs `circom --inspect` and fails on any unconstrained signal
+  outside the circomlib internals it lists.
+- `lib/rotation.ts`: one reader for `ROTATE_CIRCUIT` / `ROTATE_VERSION`, shared
+  by the build, the manifest and the fixtures.
+- Tests: private-input freedom scan (`test/helpers/freedom.ts`) over every
+  circuit, owner-key uniqueness and spending-key boundaries, the ptau and
+  ceremony guards, the linter, the shared rotation.
+
+### Fixed
+
+- `shield` v1's wasm compiles to its published bytes. Adding the spending
+  templates to `note.circom`, which shield includes, changed shield's wasm (circom records
+  every included function and each source line number in it) though not its
+  r1cs, and CI's determinism check failed. `SpendingKeyOwner` and
+  `SpentNote` move to `spend.circom` (transfer and unshield only) and
+  `note.circom` is back to its 0.16.0 bytes. transfer v3 and unshield v3 keep
+  their r1cs; only their wasm moves, recorded in the manifest.
+- `release:restore` takes the artifacts from the package tarball (`npm pack`,
+  integrity-checked by npm) instead of fetching each file from unpkg, whose
+  intermittent 5xx failed CI. It refuses any manifest path that would read
+  outside the package or write outside the repository, and is now covered by
+  tests (match, tampered, missing, canonical, drifted, path escape).
+
+### Notes
+
+- Built with `ROTATE_CIRCUIT=transfer,unshield ROTATE_VERSION=3`; v1 and v2
+  artifacts are unchanged. The release still needs the ceremony with a testnet beacon (the local
+  keys are a development ceremony).
+
 ## [0.16.0] - 2026-10-05
 
 Adds the **`shield`** circuit (id 3, v1): a deposit's commitment must open to the

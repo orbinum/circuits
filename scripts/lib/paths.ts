@@ -11,6 +11,9 @@
 import fs from "fs";
 import path from "path";
 
+import { parseCircuit } from "./circuits";
+import { rotatedVersion, rotation } from "./rotation";
+
 /** The repository root, regardless of where a script was invoked from. */
 export const ROOT = path.resolve(__dirname, "..", "..");
 
@@ -57,11 +60,8 @@ export const versionSuffix = (version: number): string => (version === 1 ? "" : 
  * before it keep their own names, so building the source never overwrites them.
  */
 export function sourceVersion(circuit: string): number {
-    const rotating = (process.env.ROTATE_CIRCUIT ?? "").split(",").map((c) => c.trim());
-    const rotateVersion = Number(process.env.ROTATE_VERSION ?? "0");
-    if (rotating.includes(circuit) && Number.isInteger(rotateVersion) && rotateVersion >= 1) {
-        return rotateVersion;
-    }
+    const rotated = rotatedVersion(rotation(), parseCircuit(circuit));
+    if (rotated !== undefined) return rotated;
     if (!fs.existsSync(MANIFEST_PATH)) return 1;
     const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
     return manifest.circuits?.[circuit]?.active_version ?? 1;

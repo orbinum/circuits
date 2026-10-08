@@ -125,6 +125,10 @@ describe("Documentation", function () {
                 "16033": "unshield",
                 "12,000": "unshield",
                 "32,000": "transfer",
+                "33,688": "transfer",
+                "33688": "transfer",
+                "16,904": "unshield",
+                "16904": "unshield",
                 "487": "(the removed private_link circuit)",
             };
 

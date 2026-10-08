@@ -29,6 +29,7 @@
  *   SETUP_BEACON        final beacon value, hex
  *   SETUP_BEACON_ITERS  beacon iterations
  */
+import crypto from "crypto";
 import fs from "fs";
 
 import { BUILD_DIR, KEYS_DIR, PTAU_DIR, rel, sourceArtifacts } from "../lib/paths";
@@ -45,28 +46,71 @@ const PTAU_SOURCES = [
     "https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_16.ptau",
 ];
 
-/** A ptau smaller than this is an error page, not a ceremony file. */
-const PTAU_MIN_BYTES = 70_000_000;
+/**
+ * blake2b-512 of `powersOfTau28_hez_final_16.ptau`, as published in the snarkjs
+ * README. A ceremony file that does not hash to this is not the Hermez
+ * ceremony, whatever its size or where it came from.
+ */
+const PTAU_BLAKE2B =
+    "6a6277a2f74e1073601b4f9fed6e1e55226917efb0f0db8a07d98ab01df1ccf43eb0e8c3159432acd4960e2f29fe84a4198501fa54c8dad9e43297453efec125";
 
-const config = () => ({
-    entropy: process.env.SETUP_ENTROPY ?? "orbinum-dev-contribution",
-    beacon:
-        process.env.SETUP_BEACON ??
-        "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
-    beaconIters: process.env.SETUP_BEACON_ITERS ?? "10",
-});
+const DEV_ENTROPY = "orbinum-dev-contribution";
+const DEV_BEACON = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+
+export interface CeremonyConfig {
+    entropy: string;
+    beacon: string;
+    beaconIters: string;
+    /** Whether any value is a development default. */
+    dev: boolean;
+}
 
 /**
- * Fetch the ptau file if it is not already present.
+ * The ceremony's inputs. Development defaults fill what is unset; with
+ * `SETUP_CEREMONY=release` every value must be explicit, and the beacon must be
+ * a 32-byte hex (a finalized block hash), or the setup refuses to run.
+ */
+export function ceremonyConfig(env: NodeJS.ProcessEnv = process.env): CeremonyConfig {
+    const entropy = env.SETUP_ENTROPY;
+    const beacon = env.SETUP_BEACON;
+    const beaconIters = env.SETUP_BEACON_ITERS ?? "10";
+    const dev = entropy === undefined || beacon === undefined;
+    if (env.SETUP_CEREMONY === "release") {
+        if (!entropy) throw new Error("SETUP_CEREMONY=release needs SETUP_ENTROPY");
+        if (!beacon || !/^(0x)?[0-9a-fA-F]{64}$/.test(beacon)) {
+            throw new Error(
+                "SETUP_CEREMONY=release needs SETUP_BEACON as a 32-byte hex (a finalized block hash)"
+            );
+        }
+    }
+    return {
+        entropy: entropy ?? DEV_ENTROPY,
+        beacon: (beacon ?? DEV_BEACON).replace(/^0x/, ""),
+        beaconIters,
+        dev,
+    };
+}
+
+/** Whether `file` is the Hermez ceremony file, byte for byte. */
+export function isHermezPtau(file: string, expected = PTAU_BLAKE2B): boolean {
+    const hash = crypto.createHash("blake2b512");
+    hash.update(fs.readFileSync(file));
+    return hash.digest("hex") === expected;
+}
+
+/**
+ * Fetch the ptau file if it is not already present, and verify it either way.
  *
- * Downloads to a temporary name and only moves it into place once it looks
- * real. `curl` without `-f` exits 0 on an HTTP error and writes the error body
- * to the output file, which then passes an `existsSync` check forever — that is
- * how a 182-byte XML document once became a cached ceremony file.
+ * Downloads to a temporary name and only moves it into place once its hash
+ * matches: `curl` without `-f` exits 0 on an HTTP error and writes the error
+ * body to the output file, and a mirror could serve anything.
  */
 function ensurePtau(): void {
     if (fs.existsSync(PTAU)) {
-        ok("using cached ptau");
+        if (!isHermezPtau(PTAU)) {
+            die(`cached ptau ${rel(PTAU)} is not the Hermez ceremony file: delete it and rerun`);
+        }
+        ok("using cached ptau (hash verified)");
         return;
     }
 
@@ -89,17 +133,13 @@ function ensurePtau(): void {
         die("could not download the ptau file from any source");
     }
 
-    const bytes = fs.statSync(partial).size;
-    if (bytes < PTAU_MIN_BYTES) {
+    if (!isHermezPtau(partial)) {
         fs.rmSync(partial, { force: true });
-        die(
-            `downloaded ptau is ${bytes} bytes, expected ~72 MB — ` +
-                `the download was truncated or the server returned an error page`
-        );
+        die("downloaded ptau does not hash to the Hermez ceremony file: truncated, an error page, or tampered");
     }
 
     fs.renameSync(partial, PTAU);
-    ok(`ptau downloaded (${bytes} bytes)`);
+    ok(`ptau downloaded (${fs.statSync(PTAU).size} bytes, hash verified)`);
 }
 
 /** Run snarkjs, surfacing its output only when it fails. */
@@ -114,7 +154,7 @@ function main(): void {
     }
     const circuit = parseCircuit(name);
     const { r1cs, zkey, vkJson } = sourceArtifacts(circuit);
-    const { entropy, beacon, beaconIters } = config();
+    const { entropy, beacon, beaconIters, dev } = ceremonyConfig();
 
     if (!fs.existsSync(r1cs)) {
         die(`R1CS not found: ${rel(r1cs)}\n  Run 'pnpm run compile ${circuit}' first.`);
@@ -122,7 +162,10 @@ function main(): void {
     requireTool("npx", "Node.js ships it; snarkjs is a devDependency of this package");
 
     banner(`Trusted setup: ${circuit}`);
-    warn("development ceremony — production requires many independent contributors");
+    if (dev) {
+        warn("DEVELOPMENT CEREMONY: default entropy or beacon. Keys from this run must never be registered on a live chain.");
+        warn("A release runs with SETUP_CEREMONY=release, SETUP_ENTROPY and a block-hash SETUP_BEACON.");
+    }
 
     fs.mkdirSync(KEYS_DIR, { recursive: true });
     fs.mkdirSync(BUILD_DIR, { recursive: true });
@@ -193,4 +236,4 @@ function main(): void {
     info(`  next: ${yellow(`pnpm run convert ${circuit}`)}, then ${yellow("pnpm run manifest")}`);
 }
 
-cli(main);
+if (require.main === module) cli(main);

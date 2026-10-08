@@ -2,21 +2,10 @@
 /**
  * Compile → trusted setup → pack the proving key, for one circuit.
  *
- * Ported from `full-pipeline.sh`, which swallowed the failure of its own last
- * phase:
- *
- * ```sh
- * bash scripts/build/pack-proving-key.sh "$CIRCUIT" || echo "⚠ Conversion skipped (non-critical)"
- * ```
- *
- * It was not non-critical. That line — combined with a guard that tested for a
- * binary which never existed — meant every build silently skipped `.ark`
- * generation for a month, which is how the checked-in keys drifted behind their
- * `.zkey` and how `manifest.json` ended up with no `ark` entries at all. The
- * file's own header comment documents the incident.
- *
- * So a failed conversion fails the build. `--allow-skip-ark` is the explicit
- * opt-out, for a machine without Rust that only needs the snarkjs artifacts.
+ * A failed `.ark` conversion fails the build: the shell version swallowed it,
+ * which left the checked-in keys drifting behind their `.zkey` for a month.
+ * `--allow-skip-ark` is the explicit opt-out for a machine without Rust that
+ * only needs the snarkjs artifacts.
  *
  * Usage:
  *   ts-node scripts/build/full-pipeline.ts <circuit> [--allow-skip-ark]
